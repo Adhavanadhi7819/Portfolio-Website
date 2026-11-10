@@ -16,19 +16,35 @@ import {
 } from 'lucide-react';
 import { DesignerInfo } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
 
 interface ProficiencySectionProps {
   designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onEditSkills?: () => void;
   onContactClick?: () => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
   designerInfo = DESIGNER_INFO,
   isOwnerMode = false,
   onEditSkills,
-  onContactClick
+  onContactClick,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const skills = info.skills || [];
@@ -62,7 +78,23 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
   ];
 
   return (
-    <section id="proficiency" className="py-24 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="proficiency" className="py-10 sm:py-12 md:py-14 relative bg-[#09090c] border-t border-zinc-800/80">
+      
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="proficiency"
+          sectionTitle="Proficiency & Toolbelt"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onEditSkills}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       {/* Background glow accents */}
       <div className="absolute top-1/4 left-10 w-96 h-96 bg-amber-500/5 blur-[120px] rounded-full pointer-events-none"></div>
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-amber-600/5 blur-[100px] rounded-full pointer-events-none"></div>
@@ -70,20 +102,30 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
           <div className="max-w-3xl">
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Sliders className="w-3.5 h-3.5 text-amber-400" />
               <span>Skills & Competencies</span>
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              {info.proficiencyHeading ? info.proficiencyHeading : (
-                <>TECHNICAL <span className="text-amber-500">PROFICIENCY</span></>
-              )}
+              <InlineEdit
+                value={info.proficiencyHeading || 'TECHNICAL PROFICIENCY'}
+                onSave={(val) => onUpdateDesignerInfo?.({ proficiencyHeading: val })}
+                isOwnerMode={isOwnerMode}
+                label="Proficiency Heading"
+              />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2">
-              {info.proficiencySubheading || 'Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.'}
-            </p>
+            <div className="text-zinc-400 text-sm sm:text-base mt-2">
+              <InlineEdit
+                value={info.proficiencySubheading || 'Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.'}
+                onSave={(val) => onUpdateDesignerInfo?.({ proficiencySubheading: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                label="Proficiency Subtitle"
+                as="p"
+              />
+            </div>
           </div>
 
           {isOwnerMode && (
@@ -101,11 +143,11 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
         </div>
 
         {/* Top Grid: Core Skill Meters + Software Toolbelt */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-14">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start mb-6 sm:mb-8">
           
           {/* Left Column: Skill Percentage Gauges */}
-          <div className="lg:col-span-7 p-6 sm:p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-6">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+          <div className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-amber-400" />
                 <h3 className="text-sm font-mono uppercase tracking-widest text-white font-bold">
@@ -115,7 +157,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
               <span className="text-[11px] font-mono text-zinc-500">Production Calibrated</span>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-4">
               {skills.map((skill, idx) => (
                 <div key={idx} className="space-y-2 group">
                   <div className="flex items-center justify-between text-xs sm:text-sm">
@@ -199,11 +241,23 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                   <span>Studio Ready Mindset</span>
                 </div>
                 <h4 className="text-sm font-bold text-white">
-                  {info.proficiencyCalloutTitle || 'Seeking Junior Game Designer Roles'}
+                  <InlineEdit
+                    value={info.proficiencyCalloutTitle || 'Seeking Junior Game Designer Roles'}
+                    onSave={(val) => onUpdateDesignerInfo?.({ proficiencyCalloutTitle: val })}
+                    isOwnerMode={isOwnerMode}
+                    label="Callout Title"
+                  />
                 </h4>
-                <p className="text-xs text-zinc-400">
-                  {info.proficiencyCalloutText || 'Ready to assist lead level designers, white-box test environments, and construct interactive blueprint mechanics.'}
-                </p>
+                <div className="text-xs text-zinc-400">
+                  <InlineEdit
+                    value={info.proficiencyCalloutText || 'Ready to assist lead level designers, white-box test environments, and construct interactive blueprint mechanics.'}
+                    onSave={(val) => onUpdateDesignerInfo?.({ proficiencyCalloutText: val })}
+                    isOwnerMode={isOwnerMode}
+                    multiline={true}
+                    label="Callout Subtitle"
+                    as="p"
+                  />
+                </div>
               </div>
 
               {onContactClick && (

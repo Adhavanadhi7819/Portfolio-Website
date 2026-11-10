@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { ProjectItem, DesignerInfo } from '../types/portfolio';
 import { PORTFOLIO_PROJECTS } from '../data/portfolioData';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface FlagshipGameFeatureProps {
   flagshipProject?: ProjectItem;
@@ -23,6 +26,13 @@ interface FlagshipGameFeatureProps {
   onEditFlagshipDetails?: () => void;
   onPlayWalkthrough: (timestamp: number) => void;
   onOpenProjectModal: (projectId: string) => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
@@ -32,7 +42,14 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
   onEditFlagship,
   onEditFlagshipDetails,
   onPlayWalkthrough,
-  onOpenProjectModal
+  onOpenProjectModal,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   const flagshipProject = customFlagship || PORTFOLIO_PROJECTS.find(p => p.isFlagship) || PORTFOLIO_PROJECTS[0];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -70,7 +87,23 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
       ];
 
   return (
-    <section id="flagship" className="py-24 relative overflow-hidden bg-gradient-to-b from-[#09090c] via-[#0d0d12] to-[#070709]">
+    <section id="flagship" className="py-10 sm:py-12 md:py-14 relative overflow-hidden bg-gradient-to-b from-[#09090c] via-[#0d0d12] to-[#070709]">
+      
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="flagship"
+          sectionTitle="Flagship Game Spotlight"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onEditFlagshipDetails}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       {/* Background glow */}
       <div className="absolute top-1/2 left-0 w-96 h-96 bg-amber-500/10 blur-[130px] rounded-full pointer-events-none"></div>
       <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-orange-600/10 blur-[150px] rounded-full pointer-events-none"></div>
@@ -78,7 +111,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Kicker */}
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
             <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
             <span>Featured In-Development Game</span>
@@ -87,18 +120,26 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
         </div>
 
         {/* Section Header */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12 items-end">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 sm:mb-7 items-end">
           <div className="lg:col-span-8">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black text-white uppercase tracking-tight">
-              {designerInfo?.flagshipHeading ? (
-                designerInfo.flagshipHeading
-              ) : (
-                <>MY LATEST <span className="text-amber-500">PROJECT</span></>
-              )}
+              <InlineEdit
+                value={designerInfo?.flagshipHeading || 'MY LATEST PROJECT'}
+                onSave={(val) => onUpdateDesignerInfo?.({ flagshipHeading: val })}
+                isOwnerMode={isOwnerMode}
+                label="Flagship Heading"
+              />
             </h2>
-            <p className="text-zinc-300 text-base sm:text-lg mt-3 max-w-3xl leading-relaxed">
-              {designerInfo?.flagshipQuote || '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”'}
-            </p>
+            <div className="text-zinc-300 text-base sm:text-lg mt-3 max-w-3xl leading-relaxed">
+              <InlineEdit
+                value={designerInfo?.flagshipQuote || '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”'}
+                onSave={(val) => onUpdateDesignerInfo?.({ flagshipQuote: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                label="Flagship Project Quote"
+                as="p"
+              />
+            </div>
           </div>
 
           <div className="lg:col-span-4 flex flex-wrap lg:justify-end gap-3">
@@ -151,6 +192,25 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
               >
                 <Play className="w-7 h-7 fill-black text-black ml-0.5" />
               </button>
+
+              {/* Direct In-place Screenshot Upload for Owner */}
+              <MediaUploadOverlay
+                currentUrl={images[activeImageIndex]}
+                mediaType="image"
+                isOwnerMode={isOwnerMode}
+                onMediaUploaded={(newUrl) => {
+                  const updatedShots = [...customScreenshots];
+                  if (updatedShots[activeImageIndex]) {
+                    updatedShots[activeImageIndex] = {
+                      ...updatedShots[activeImageIndex],
+                      image: newUrl
+                    };
+                    onUpdateDesignerInfo?.({ flagshipScreenshots: updatedShots });
+                  }
+                }}
+                label="Upload Screenshot"
+                position="top-right"
+              />
 
               {/* Bottom Caption */}
               <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
@@ -233,7 +293,13 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
               {/* Status Notice */}
               <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-zinc-300">
                 <span className="text-amber-400 font-bold block mb-1">Production Roadmap Notice</span>
-                {designerInfo?.flagshipRoadmapQuote || '“Soon Final out of the game will be posted.” Core level blockout and movement mechanics complete; currently tuning quest triggers and sound design.'}
+                <InlineEdit
+                  value={designerInfo?.flagshipRoadmapQuote || '“Soon Final out of the game will be posted.” Core level blockout and movement mechanics complete; currently tuning quest triggers and sound design.'}
+                  onSave={(val) => onUpdateDesignerInfo?.({ flagshipRoadmapQuote: val })}
+                  isOwnerMode={isOwnerMode}
+                  multiline={true}
+                  label="Roadmap Notice"
+                />
               </div>
 
               {/* Action Buttons */}

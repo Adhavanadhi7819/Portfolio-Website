@@ -15,17 +15,34 @@ import {
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
 import { ContactFormData, ContactFormErrors, DesignerInfo } from '../types/portfolio';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface ContactSectionProps {
   designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onEditContact?: () => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const ContactSection: React.FC<ContactSectionProps> = ({
   designerInfo = DESIGNER_INFO,
   isOwnerMode = false,
-  onEditContact
+  onEditContact,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const [formData, setFormData] = useState<ContactFormData>({
@@ -81,30 +98,57 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   };
 
   return (
-    <section id="contact" className="py-24 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="contact" className="py-10 sm:py-12 md:py-14 relative bg-[#09090c] border-t border-zinc-800/80">
       
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="contact"
+          sectionTitle="Contact & Inquiry Section"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onEditContact}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       {/* Background glow */}
       <div className="absolute bottom-0 left-1/3 w-[600px] h-[400px] bg-amber-500/10 blur-[150px] rounded-full pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
           <div className="max-w-3xl">
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Mail className="w-3.5 h-3.5 text-amber-400" />
-              <span>{info.contactBadge || 'Connect & Collaborate'}</span>
+              <InlineEdit
+                value={info.contactBadge || 'Connect & Collaborate'}
+                onSave={(val) => onUpdateDesignerInfo?.({ contactBadge: val })}
+                isOwnerMode={isOwnerMode}
+                className="text-amber-500 font-mono font-bold"
+              />
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              {info.contactHeading ? (
-                info.contactHeading
-              ) : (
-                <>GET IN <span className="text-amber-500">TOUCH</span></>
-              )}
+              <InlineEdit
+                value={info.contactHeading || 'GET IN TOUCH'}
+                onSave={(val) => onUpdateDesignerInfo?.({ contactHeading: val })}
+                isOwnerMode={isOwnerMode}
+                className="text-white font-black"
+              />
             </h2>
             <div className="flex items-start gap-2 mt-2">
-              <p className="text-zinc-400 text-sm sm:text-base">
-                {info.contactSubheading || 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.'}
+              <p className="text-zinc-400 text-sm sm:text-base leading-relaxed">
+                <InlineEdit
+                  value={info.contactSubheading || 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.'}
+                  onSave={(val) => onUpdateDesignerInfo?.({ contactSubheading: val })}
+                  isOwnerMode={isOwnerMode}
+                  multiline={true}
+                  className="text-zinc-400"
+                />
               </p>
               {isOwnerMode && (
                 <button
@@ -256,6 +300,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   src={info.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
                   alt="Get In Touch Slide Showcase"
                   className="w-full h-full object-cover"
+                />
+
+                {/* Direct In-place Slide Photo Upload for Owner */}
+                <MediaUploadOverlay
+                  currentUrl={info.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
+                  mediaType="image"
+                  isOwnerMode={isOwnerMode}
+                  onMediaUploaded={(newUrl) => onUpdateDesignerInfo?.({ contactSlidePhotoUrl: newUrl })}
+                  label="Upload Slide Photo"
+                  position="top-right"
                 />
               </div>
             </div>

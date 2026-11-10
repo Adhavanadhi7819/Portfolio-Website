@@ -10,7 +10,8 @@ import {
   Film, 
   Layers,
   Gamepad2,
-  FileCode
+  FileCode,
+  Briefcase
 } from 'lucide-react';
 
 import { EditModalMode } from './OwnerEditModal';
@@ -20,6 +21,9 @@ interface OwnerAdminBarProps {
   onAddChapter: () => void;
   onEditBio: () => void;
   onOpenSection?: (mode: EditModalMode) => void;
+  onOpenSectionManager?: () => void;
+  activePortfolioName?: string;
+  onOpenPortfolioManager?: () => void;
   onExportJson: () => void;
   onImportJson: () => void;
   onResetDefaults: () => void;
@@ -31,6 +35,9 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onAddChapter,
   onEditBio,
   onOpenSection,
+  onOpenSectionManager,
+  activePortfolioName,
+  onOpenPortfolioManager,
   onExportJson,
   onImportJson,
   onResetDefaults,
@@ -74,6 +81,28 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
             <Film className="w-3.5 h-3.5" />
             <span>New Chapter</span>
           </button>
+
+          {onOpenSectionManager && (
+            <button
+              onClick={onOpenSectionManager}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+              title="Add, remove, reorder, or hide sections on the website"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Sections (Add/Remove)</span>
+            </button>
+          )}
+
+          {onOpenPortfolioManager && (
+            <button
+              onClick={onOpenPortfolioManager}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+              title="Create new portfolios or switch between different portfolios"
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Portfolios ({activePortfolioName || 'Main'})</span>
+            </button>
+          )}
 
           {onOpenSection && (
             <select

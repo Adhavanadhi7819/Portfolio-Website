@@ -146,12 +146,50 @@ export const DESIGNER_INFO: DesignerInfo = {
     {
       title: 'Robot Rig Study',
       label: 'Unreal & Maya',
-      image: '/showcase/slide-robot.jpg'
+      image: '/showcase/intro-robot.jpg'
     },
     {
       title: 'UE5 Lighting Staging',
       label: 'Porsche GT3 RS Dual Car Render',
-      image: '/showcase/slide-porsche.jpg'
+      image: '/showcase/about-porsche.jpg'
+    }
+  ],
+  careerTimeline: [
+    {
+      id: 'timeline_1',
+      phase: 'PHASE 01',
+      title: 'Autodesk Maya 3D Hard-Surface Foundations',
+      period: '2021 - 2022',
+      description: 'Mastered clean subdivision quad modeling, topology optimization, prop kit creation, and turntable rendering for real-time engines.',
+      status: 'completed',
+      highlights: ['Sub-D Quad Modeling', 'Prop & Instrument Art', 'Modular Interior Assets', 'UV Mapping']
+    },
+    {
+      id: 'timeline_2',
+      phase: 'PHASE 02',
+      title: 'Unreal Engine 5 Environments & Lighting Duality',
+      period: '2023 - 2024',
+      description: 'Designed atmospheric 3D environments, tuning Post-Process Volumes, screen-space reflections, volumetric fog, and day vs night lighting dualities.',
+      status: 'completed',
+      highlights: ['Lumen & Nanite Workflows', 'Volumetric Fog', 'Post-Process Color Grading', 'Level Composition']
+    },
+    {
+      id: 'timeline_3',
+      phase: 'PHASE 03 // ACTIVE',
+      title: 'Flagship Pirate RPG & Vehicle Rigging Mechanics',
+      period: '2024 - PRESENT',
+      description: 'Developing full third-person character locomotion, sprint/jump arcs, obstacle-aware chase camera, Chaos vehicle physics, and stylized maritime hub layout.',
+      status: 'current',
+      highlights: ['Locomotion Physics', 'Chaos Vehicle Tuning', 'Flagship Port Hub', 'Blueprint Logic']
+    },
+    {
+      id: 'timeline_4',
+      phase: 'PHASE 04 // TARGET',
+      title: 'Studio Objective: Junior Game & Level Designer',
+      period: '2025 & BEYOND',
+      description: 'Seeking an opportunity to apply skills in a professional game studio environment—ready to white-box levels, balance gameplay traversal, and contribute creatively under lead design guidance.',
+      status: 'target',
+      highlights: ['Level White-Boxing', 'Player Pacing & Guidance', 'Studio Teamwork', 'Fast Creative Learning']
     }
   ],
   aboutCalloutTitle: 'Looking for a Dedicated Game Designer?',
@@ -165,22 +203,22 @@ export const DESIGNER_INFO: DesignerInfo = {
     {
       title: 'Vibrant Town Square Hub',
       subtitle: 'Overhead third-person perspective showing stone pavers, market canopies, and level pathing.',
-      image: '/showcase/shot-town-01.jpg'
+      image: '/showcase/pirate-village-hero.jpg'
     },
     {
       title: 'Harbor Docks & Pier Walkway',
       subtitle: 'Waterfront boardwalk featuring moored boats, fish racks, barrel clusters, and ocean sightlines.',
-      image: '/showcase/shot-dock-02.jpg'
+      image: '/showcase/pirate-deck.jpg'
     },
     {
       title: 'Marketplace Stalls & Castle Overlook',
       subtitle: 'Lush village green surrounded by multi-tier timber houses, windmill landmarks, and hilltop citadel walls.',
-      image: '/showcase/shot-market-03.jpg'
+      image: '/showcase/pirate-pumpkin-square.jpg'
     },
     {
       title: 'Canopy Alley & Stone Staircases',
       subtitle: 'Narrow cobblestone street navigation testing vertical elevation, market canopies, and ambient lighting.',
-      image: '/showcase/shot-tavern-04.jpg'
+      image: '/showcase/pirate-bridge-action.jpg'
     }
   ],
   flagshipFeatureCards: [

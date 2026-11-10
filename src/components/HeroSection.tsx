@@ -2,26 +2,43 @@ import React from 'react';
 import { Play, Sparkles, ChevronDown, Compass, Box, Flame, ArrowUpRight, Edit3 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { DesignerInfo } from '../types/portfolio';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface HeroSectionProps {
   designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onEditHero?: () => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
   onPlayReel: () => void;
   onExploreProjects: () => void;
   onJumpToChapter: (chapterId: string) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   designerInfo = DESIGNER_INFO,
   isOwnerMode = false,
   onEditHero,
+  onUpdateDesignerInfo,
   onPlayReel,
   onExploreProjects,
-  onJumpToChapter
+  onJumpToChapter,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   return (
-    <section id="hero" className="relative min-h-[92vh] pt-28 pb-16 flex flex-col justify-center overflow-hidden">
+    <section id="hero" className="relative pt-20 sm:pt-24 pb-8 sm:pb-10 flex flex-col justify-center overflow-hidden">
       {/* Background radial gradient & ambient glow */}
       <div className="absolute inset-0 bg-radial-vignette pointer-events-none"></div>
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-amber-500/10 blur-[140px] rounded-full pointer-events-none"></div>
@@ -36,11 +53,26 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         }}
       ></div>
 
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="hero"
+          sectionTitle="Hero & Introduction"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onEditHero}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
           
           {/* Left Column: Bio & Title */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className="lg:col-span-7 space-y-4">
             
             {/* Main Title Styled faithfully to the user's video title card */}
             <div className="space-y-1">
@@ -51,20 +83,39 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 DESIGNER
               </h1>
               <div className="pt-2 flex items-center gap-3">
-                <span className="text-xl sm:text-2xl font-mono tracking-widest text-zinc-300 font-semibold uppercase">
-                  {designerInfo.name.toUpperCase()}
-                </span>
+                <InlineEdit
+                  value={designerInfo.name}
+                  onSave={(val) => onUpdateDesignerInfo?.({ name: val })}
+                  isOwnerMode={isOwnerMode}
+                  label="Designer Name"
+                  className="text-xl sm:text-2xl font-mono tracking-widest text-zinc-300 font-semibold uppercase"
+                >
+                  <span className="text-xl sm:text-2xl font-mono tracking-widest text-zinc-300 font-semibold uppercase">
+                    {designerInfo.name.toUpperCase()}
+                  </span>
+                </InlineEdit>
                 <span className="h-0.5 w-12 bg-amber-500/60 inline-block"></span>
-                <span className="text-xs tracking-wider uppercase text-amber-400/90 font-mono">
-                  {designerInfo.title}
-                </span>
+                <InlineEdit
+                  value={designerInfo.title}
+                  onSave={(val) => onUpdateDesignerInfo?.({ title: val })}
+                  isOwnerMode={isOwnerMode}
+                  label="Role / Title"
+                  className="text-xs tracking-wider uppercase text-amber-400/90 font-mono"
+                />
               </div>
             </div>
 
             {/* Description / Tagline */}
-            <p className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed">
-              {designerInfo.tagline}
-            </p>
+            <div className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed">
+              <InlineEdit
+                value={designerInfo.tagline}
+                onSave={(val) => onUpdateDesignerInfo?.({ tagline: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                label="Hero Tagline"
+                as="p"
+              />
+            </div>
 
             {/* Call to Actions */}
             <div className="pt-2 flex flex-wrap items-center gap-4">
@@ -168,17 +219,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     </div>
                   </button>
 
-                  {/* Owner Edit Photo Button */}
-                  {isOwnerMode && (
-                    <button
-                      onClick={onEditHero}
-                      className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
-                      title="Change Hero Photo & Engine Badges"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Edit Photo</span>
-                    </button>
-                  )}
+                  {/* Direct In-place Media Upload for Owner */}
+                  <MediaUploadOverlay
+                    currentUrl={designerInfo.heroPhotoUrl || '/showcase/hero-adhavan.jpg'}
+                    mediaType="image"
+                    isOwnerMode={isOwnerMode}
+                    onMediaUploaded={(newUrl) => onUpdateDesignerInfo?.({ heroPhotoUrl: newUrl })}
+                    label="Upload Hero Photo"
+                    position="top-right"
+                  />
 
                   {/* Bottom caption overlay */}
                   <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between">
@@ -200,21 +249,51 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div className="p-4 bg-zinc-900/60 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center">
                   <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
                     <span className="block text-xs font-mono text-zinc-400 uppercase">Engine</span>
-                    <strong className="text-sm text-white font-semibold">
-                      {designerInfo.heroEngineTags?.engine || 'Unreal 5'}
-                    </strong>
+                    <InlineEdit
+                      value={designerInfo.heroEngineTags?.engine || 'Unreal 5'}
+                      onSave={(val) => onUpdateDesignerInfo?.({
+                        heroEngineTags: {
+                          engine: val,
+                          maya: designerInfo.heroEngineTags?.maya || 'Maya',
+                          focus: designerInfo.heroEngineTags?.focus || 'Mechanics'
+                        }
+                      })}
+                      isOwnerMode={isOwnerMode}
+                      label="Engine"
+                      className="text-sm text-white font-semibold block"
+                    />
                   </div>
                   <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
                     <span className="block text-xs font-mono text-zinc-400 uppercase">3D Modeling</span>
-                    <strong className="text-sm text-amber-400 font-semibold">
-                      {designerInfo.heroEngineTags?.maya || 'Maya'}
-                    </strong>
+                    <InlineEdit
+                      value={designerInfo.heroEngineTags?.maya || 'Maya'}
+                      onSave={(val) => onUpdateDesignerInfo?.({
+                        heroEngineTags: {
+                          engine: designerInfo.heroEngineTags?.engine || 'Unreal 5',
+                          maya: val,
+                          focus: designerInfo.heroEngineTags?.focus || 'Mechanics'
+                        }
+                      })}
+                      isOwnerMode={isOwnerMode}
+                      label="3D Modeling Software"
+                      className="text-sm text-amber-400 font-semibold block"
+                    />
                   </div>
                   <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
                     <span className="block text-xs font-mono text-zinc-400 uppercase">Focus</span>
-                    <strong className="text-sm text-white font-semibold">
-                      {designerInfo.heroEngineTags?.focus || 'Mechanics'}
-                    </strong>
+                    <InlineEdit
+                      value={designerInfo.heroEngineTags?.focus || 'Mechanics'}
+                      onSave={(val) => onUpdateDesignerInfo?.({
+                        heroEngineTags: {
+                          engine: designerInfo.heroEngineTags?.engine || 'Unreal 5',
+                          maya: designerInfo.heroEngineTags?.maya || 'Maya',
+                          focus: val
+                        }
+                      })}
+                      isOwnerMode={isOwnerMode}
+                      label="Design Focus"
+                      className="text-sm text-white font-semibold block"
+                    />
                   </div>
                 </div>
 
@@ -225,7 +304,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* Floating Stat Counters Bar */}
-        <div className="mt-16 pt-8 border-t border-zinc-800/80 relative">
+        <div className="mt-8 pt-5 border-t border-zinc-800/80 relative">
           {isOwnerMode && (
             <div className="absolute -top-3 right-0">
               <button
@@ -238,7 +317,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
             </div>
           )}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4">
             {(designerInfo.heroStats && designerInfo.heroStats.length > 0
               ? designerInfo.heroStats
               : [
@@ -248,13 +327,41 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
                 ]
             ).map((stat, idx) => (
-              <div key={idx} className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
-                <span className={`text-3xl font-heading font-black block ${idx % 2 === 0 ? 'text-amber-400' : 'text-white'}`}>
-                  {stat.number}
-                </span>
-                <span className="text-xs text-zinc-400 font-mono uppercase tracking-wider">
-                  {stat.label}
-                </span>
+              <div key={idx} className="p-3 sm:p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
+                <InlineEdit
+                  value={stat.number}
+                  onSave={(val) => {
+                    const currentStats = designerInfo.heroStats || [
+                      { number: '6+', label: 'Unreal Environments & Levels' },
+                      { number: '3D RPG', label: 'Flagship Game In Progress' },
+                      { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
+                      { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
+                    ];
+                    const next = [...currentStats];
+                    next[idx] = { ...next[idx], number: val };
+                    onUpdateDesignerInfo?.({ heroStats: next });
+                  }}
+                  isOwnerMode={isOwnerMode}
+                  label="Stat Number"
+                  className={`text-3xl font-heading font-black block ${idx % 2 === 0 ? 'text-amber-400' : 'text-white'}`}
+                />
+                <InlineEdit
+                  value={stat.label}
+                  onSave={(val) => {
+                    const currentStats = designerInfo.heroStats || [
+                      { number: '6+', label: 'Unreal Environments & Levels' },
+                      { number: '3D RPG', label: 'Flagship Game In Progress' },
+                      { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
+                      { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
+                    ];
+                    const next = [...currentStats];
+                    next[idx] = { ...next[idx], label: val };
+                    onUpdateDesignerInfo?.({ heroStats: next });
+                  }}
+                  isOwnerMode={isOwnerMode}
+                  label="Stat Label"
+                  className="text-xs text-zinc-400 font-mono uppercase tracking-wider block mt-1"
+                />
               </div>
             ))}
           </div>

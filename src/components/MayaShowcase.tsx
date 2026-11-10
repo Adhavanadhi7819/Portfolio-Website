@@ -1,24 +1,43 @@
 import React, { useState } from 'react';
 import { Box, Sparkles, CheckCircle2, Play, Eye, Layers, Plus, Edit3, Trash2 } from 'lucide-react';
 import { MAYA_MODELS } from '../data/portfolioData';
-import { MayaModelItem } from '../types/portfolio';
+import { MayaModelItem, DesignerInfo } from '../types/portfolio';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface MayaShowcaseProps {
   models?: MayaModelItem[];
+  designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onPlayInReel: (timestamp: number) => void;
   onAddModel?: () => void;
   onEditModel?: (model: MayaModelItem) => void;
   onDeleteModel?: (id: string) => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   models = MAYA_MODELS,
+  designerInfo,
   isOwnerMode = false,
   onPlayInReel,
   onAddModel,
   onEditModel,
-  onDeleteModel
+  onDeleteModel,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   const currentModels = models && models.length > 0 ? models : MAYA_MODELS;
   const [selectedModelId, setSelectedModelId] = useState(currentModels[0]?.id || '');
@@ -27,21 +46,48 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   const selectedModel = currentModels.find(m => m.id === selectedModelId) || currentModels[0];
 
   return (
-    <section id="maya" className="py-20 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="maya" className="py-10 sm:py-12 relative bg-[#09090c] border-t border-zinc-800/80">
+      
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="maya"
+          sectionTitle="Autodesk Maya 3D Assets"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onAddModel}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
           <div>
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Box className="w-3.5 h-3.5 text-amber-400" />
               <span>Autodesk Maya Hard-Surface Suite</span>
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              3D Modeling & <span className="text-amber-500">Assets</span>
+              <InlineEdit
+                value={designerInfo?.mayaHeading || '3D Modeling & Assets'}
+                onSave={(val) => onUpdateDesignerInfo?.({ mayaHeading: val })}
+                isOwnerMode={isOwnerMode}
+                className="text-white font-black"
+              />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl">
-              &ldquo;Created these models using Autodesk Maya.&rdquo; Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl leading-relaxed">
+              <InlineEdit
+                value={designerInfo?.mayaSubheading || '“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.'}
+                onSave={(val) => onUpdateDesignerInfo?.({ mayaSubheading: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                className="text-zinc-400"
+              />
             </p>
           </div>
 
@@ -87,7 +133,16 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 }`}
               />
               
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none"></div>
+              {/* Direct In-place 3D Render Upload for Owner */}
+              <MediaUploadOverlay
+                currentUrl={selectedModel.thumbnail}
+                mediaType="image"
+                isOwnerMode={isOwnerMode}
+                onMediaUploaded={(newUrl) => onEditModel?.({ ...selectedModel, thumbnail: newUrl })}
+                label="Upload 3D Render"
+                position="top-right"
+                className="mt-10 mr-2"
+              />
 
               {/* Viewport Top Bar */}
               <div className="absolute top-3 left-3 right-3 flex items-center justify-between">

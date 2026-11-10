@@ -1,27 +1,45 @@
 import React, { useState } from 'react';
 import { Layers, Sparkles, Filter, Search, Plus } from 'lucide-react';
-import { ProjectItem, ProjectCategory } from '../types/portfolio';
+import { ProjectItem, ProjectCategory, DesignerInfo } from '../types/portfolio';
 import { filterProjects } from '../utils/portfolioLogic';
 import { ProjectCard } from './ProjectCard';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
 
 interface ProjectGalleryProps {
   projects: ProjectItem[];
+  designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onOpenModal: (project: ProjectItem) => void;
   onPlayInReel: (timestamp: number) => void;
   onAddProject?: () => void;
   onEditProject?: (project: ProjectItem) => void;
   onDeleteProject?: (id: string) => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   projects,
+  designerInfo,
   isOwnerMode = false,
   onOpenModal,
   onPlayInReel,
   onAddProject,
   onEditProject,
-  onDeleteProject
+  onDeleteProject,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }) => {
   const [activeCategory, setActiveCategory] = useState<ProjectCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,21 +66,48 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   });
 
   return (
-    <section id="projects" className="py-20 relative bg-[#070709]">
+    <section id="projects" className="py-10 sm:py-12 relative bg-[#070709]">
+      
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="projects"
+          sectionTitle="Projects Gallery"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onAddProject}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 sm:mb-5 gap-4">
           <div>
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Layers className="w-3.5 h-3.5 text-amber-400" />
               <span>Interactive Portfolio Index</span>
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              Curated <span className="text-amber-500">Works</span>
+              <InlineEdit
+                value={designerInfo?.projectsHeading || 'Curated Works'}
+                onSave={(val) => onUpdateDesignerInfo?.({ projectsHeading: val })}
+                isOwnerMode={isOwnerMode}
+                className="text-white font-black"
+              />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl">
-              Explorations spanning Unreal Engine level layout, dynamic vehicle rigging, lighting duality concepts, and Autodesk Maya models.
+            <p className="text-zinc-400 text-sm sm:text-base mt-1.5 max-w-2xl leading-relaxed">
+              <InlineEdit
+                value={designerInfo?.projectsSubheading || 'Explorations spanning Unreal Engine level layout, dynamic vehicle rigging, lighting duality concepts, and Autodesk Maya models.'}
+                onSave={(val) => onUpdateDesignerInfo?.({ projectsSubheading: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                className="text-zinc-400"
+              />
             </p>
           </div>
 
@@ -92,7 +137,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
           {categories.map((cat) => {
             const count = cat.value === 'all' 
               ? projects.length 

@@ -18,6 +18,9 @@ import {
 import { VIDEO_PATH, VIDEO_CHAPTERS } from '../data/portfolioData';
 import { formatVideoTime, findCurrentChapter } from '../utils/portfolioLogic';
 import { VideoChapter, DesignerInfo } from '../types/portfolio';
+import { InlineEdit } from './InlineEdit';
+import { SectionControls } from './SectionControls';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 export interface VideoReelRef {
   seekTo: (seconds: number) => void;
@@ -36,6 +39,14 @@ interface CinematicVideoReelProps {
   onEditChapter?: (chapter: VideoChapter) => void;
   onDeleteChapter?: (chapterId: string) => void;
   onEditReelSettings?: () => void;
+  onUploadVideo?: (newVideoPath: string) => void;
+  onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onHide?: () => void;
+  onAddSectionBelow?: () => void;
 }
 
 export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelProps>(({ 
@@ -47,13 +58,24 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   onAddChapter,
   onEditChapter,
   onDeleteChapter,
-  onEditReelSettings
+  onEditReelSettings,
+  onUploadVideo,
+  onUpdateDesignerInfo,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+  onAddSectionBelow
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [hasPlaybackError, setHasPlaybackError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(292.65);
   const [isMuted, setIsMuted] = useState(false);
@@ -64,17 +86,40 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const attemptPlay = async () => {
+    if (!videoRef.current) return;
+    setHasPlaybackError(false);
+    setErrorMessage(null);
+    try {
+      await videoRef.current.play();
+      setIsPlaying(true);
+    } catch (err: any) {
+      console.warn('Direct playback rejected, trying muted fallback:', err);
+      try {
+        if (videoRef.current) {
+          videoRef.current.muted = true;
+          setIsMuted(true);
+          await videoRef.current.play();
+          setIsPlaying(true);
+        }
+      } catch (fallbackErr: any) {
+        console.error('Video playback failed:', fallbackErr);
+        setHasPlaybackError(true);
+        setErrorMessage(fallbackErr?.message || 'Video playback was blocked or source cannot be decoded.');
+        setIsPlaying(false);
+      }
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     seekTo: (seconds: number) => {
       if (videoRef.current) {
         videoRef.current.currentTime = seconds;
-        videoRef.current.play().catch(() => {});
-        setIsPlaying(true);
+        attemptPlay();
       }
     },
     play: () => {
-      videoRef.current?.play().catch(() => {});
-      setIsPlaying(true);
+      attemptPlay();
     },
     pause: () => {
       videoRef.current?.pause();
@@ -84,6 +129,15 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }));
+
+  // Re-load video whenever videoPath changes
+  useEffect(() => {
+    if (videoRef.current) {
+      setHasPlaybackError(false);
+      setErrorMessage(null);
+      videoRef.current.load();
+    }
+  }, [videoPath]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -101,17 +155,32 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       if (video.duration && !isNaN(video.duration)) {
         setDuration(video.duration);
       }
+      setHasPlaybackError(false);
     };
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsBuffering(false);
+      setHasPlaybackError(false);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => setIsPlaying(false);
+    const handleWaiting = () => setIsBuffering(true);
+    const handleCanPlay = () => setIsBuffering(false);
+    const handleError = () => {
+      setIsBuffering(false);
+      setHasPlaybackError(true);
+      setErrorMessage('Failed to load video file. Please check video path or re-upload.');
+    };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
@@ -119,6 +188,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
     };
   }, [activeChapter, videoChapters]);
 
@@ -126,8 +198,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
+      setIsPlaying(false);
     } else {
-      videoRef.current.play().catch(() => {});
+      attemptPlay();
     }
   };
 
@@ -211,30 +284,59 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <section id="reel" ref={containerRef} className="py-20 relative bg-[#09090c] border-y border-zinc-800/80">
+    <section id="reel" ref={containerRef} className="py-10 sm:py-12 relative bg-[#09090c] border-y border-zinc-800/80">
+      
+      {/* Section Controls for Owner */}
+      {isOwnerMode && (
+        <SectionControls
+          sectionId="reel"
+          sectionTitle="Cinematic Showreel"
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onHide={onHide}
+          onEditSettings={onEditReelSettings}
+          onAddSectionBelow={onAddSectionBelow}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 sm:mb-5 gap-4">
           <div>
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-1">
               Original Work Showcase Reel
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              {designerInfo?.reelHeading ? (
-                designerInfo.reelHeading
-              ) : (
-                <>Cinematic <span className="text-amber-500">Showreel</span></>
-              )}
+              <InlineEdit
+                value={designerInfo?.reelHeading || 'Cinematic Showreel'}
+                onSave={(val) => onUpdateDesignerInfo?.({ reelHeading: val })}
+                isOwnerMode={isOwnerMode}
+                label="Reel Heading"
+              />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl">
-              {designerInfo?.reelSubheading || 'Recorded directly from Unreal Engine and Autodesk Maya viewport sessions. Use the chapter navigator below to jump between projects.'}
-            </p>
+            <div className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl">
+              <InlineEdit
+                value={designerInfo?.reelSubheading || 'Recorded directly from Unreal Engine and Autodesk Maya viewport sessions. Use the chapter navigator below to jump between projects.'}
+                onSave={(val) => onUpdateDesignerInfo?.({ reelSubheading: val })}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                label="Reel Description"
+                as="p"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest hidden sm:inline">
-              {designerInfo?.reelResolutionNote || 'Resolution: 1080p 30fps'}
+              <InlineEdit
+                value={designerInfo?.reelResolutionNote || 'Resolution: 1080p 30fps'}
+                onSave={(val) => onUpdateDesignerInfo?.({ reelResolutionNote: val })}
+                isOwnerMode={isOwnerMode}
+                label="Resolution Badge"
+              />
             </span>
             {isOwnerMode && (
               <>
@@ -273,16 +375,87 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           onClick={handleUserActivity}
         >
           {/* Main Video Element */}
-          <div className="relative aspect-video w-full bg-black">
+          <div className="relative aspect-video w-full bg-black flex items-center justify-center">
             <video
               ref={videoRef}
               src={videoPath}
               poster="/showcase/hero-adhavan.jpg"
               playsInline
-              preload="metadata"
+              preload="auto"
+              controlsList="nodownload"
               className="w-full h-full object-contain cursor-pointer"
               onClick={togglePlay}
+            >
+              <source src={videoPath} type="video/mp4" />
+              Your browser does not support HTML5 MP4 video playback.
+            </video>
+
+            {/* In-Place Live Video Upload for Owner */}
+            <MediaUploadOverlay
+              currentUrl={videoPath}
+              mediaType="video"
+              isOwnerMode={isOwnerMode}
+              onMediaUploaded={(newUrl) => {
+                setHasPlaybackError(false);
+                onUploadVideo?.(newUrl);
+              }}
+              label="Upload Video File"
+              position="top-right"
+              className="mt-14 mr-3"
             />
+
+            {/* Buffering Spinner */}
+            {isBuffering && !hasPlaybackError && (
+              <div className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/70 backdrop-blur-sm border border-amber-500/40 flex items-center justify-center z-20 pointer-events-none">
+                <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+
+            {/* Playback Error / Tap-to-Play recovery card */}
+            {hasPlaybackError && (
+              <div className="absolute inset-0 m-auto max-w-md h-fit p-6 rounded-2xl bg-zinc-950/95 border border-amber-500/60 shadow-2xl z-30 text-center space-y-4 mx-4">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                  <Play className="w-6 h-6 fill-amber-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-white">
+                    Unreal Engine Showreel Ready
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    {errorMessage || 'Browser audio policy paused autoplay. Click below to start playback.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.muted = true;
+                        setIsMuted(true);
+                        videoRef.current.play().then(() => {
+                          setIsPlaying(true);
+                          setHasPlaybackError(false);
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                  >
+                    Play Reel (Muted)
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        setHasPlaybackError(false);
+                        videoRef.current.load();
+                        attemptPlay();
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Reload Reel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Top HUD Overlay (Watermark & Active Chapter) */}
             <div className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/80 via-black/30 to-transparent flex items-center justify-between transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
@@ -309,8 +482,8 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               </div>
             </div>
 
-            {/* Center Big Play Button (when paused) */}
-            {!isPlaying && (
+            {/* Center Big Play Button (when paused & no error) */}
+            {!isPlaying && !hasPlaybackError && !isBuffering && (
               <button
                 onClick={togglePlay}
                 className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black flex items-center justify-center shadow-2xl shadow-amber-500/50 hover:scale-110 transition-all cursor-pointer z-20 group/btn"
@@ -437,8 +610,8 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Interactive Chapter Strip */}
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mt-4 sm:mt-5">
+          <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-400">
               <Layers className="w-4 h-4 text-amber-500" />
               <span>Select Scene Chapter To Inspect:</span>

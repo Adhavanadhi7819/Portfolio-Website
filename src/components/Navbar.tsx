@@ -31,21 +31,21 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const navLinks = sections && sections.length > 0
-    ? sections
-        .filter(s => s.enabled)
-        .sort((a, b) => a.order - b.order)
-        .map(s => ({ label: s.label || s.title, id: s.id }))
-    : [
-        { label: 'Home', id: 'hero' },
-        { label: 'Showreel', id: 'reel' },
-        { label: 'Flagship', id: 'flagship' },
-        { label: 'Projects', id: 'projects' },
-        { label: 'Proficiency', id: 'proficiency' },
-        { label: 'About', id: 'about' },
-        { label: 'Resume', id: 'resume' },
-        { label: 'Contact', id: 'contact' },
-      ];
+  // Exact requested 5 tabs: Home, Work, About, Resume, Contact
+  const defaultTabs = [
+    { label: 'Home', id: 'hero' },
+    { label: 'Work', id: 'projects' },
+    { label: 'About', id: 'about' },
+    { label: 'Resume', id: 'resume' },
+    { label: 'Contact', id: 'contact' }
+  ];
+
+  // If user has custom added sections (isCustom: true), we can also include them
+  const customSections = sections
+    ? sections.filter(s => s.enabled && s.isCustom).map(s => ({ label: s.label || s.title, id: s.id }))
+    : [];
+
+  const navLinks = [...defaultTabs, ...customSections];
 
   const handleLinkClick = (id: string) => {
     setMobileMenuOpen(false);
@@ -58,90 +58,50 @@ export const Navbar: React.FC<NavbarProps> = ({
         isOwnerMode ? 'top-[44px]' : 'top-0'
       } ${
         isScrolled
-          ? 'bg-[#070709]/90 backdrop-blur-md border-b border-zinc-800/80 py-3 shadow-2xl shadow-black/80'
-          : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent py-5'
+          ? 'bg-[#070709]/95 backdrop-blur-md border-b border-zinc-800/80 py-3 shadow-2xl shadow-black/80'
+          : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent py-4'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <button
-            onClick={() => handleLinkClick('hero')}
-            className="flex items-center gap-3 group text-left cursor-pointer"
-            aria-label="Adhavan Game Designer Home"
-          >
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center font-bold text-black text-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
-              A
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-heading font-black tracking-wider text-lg text-white group-hover:text-amber-400 transition-colors uppercase">
-                  ADHAVAN
-                </span>
-              </div>
-              <p className="text-[10px] tracking-widest text-zinc-400 uppercase font-mono">
-                Game Designer & 3D Artist
-              </p>
-            </div>
-          </button>
-
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+          
+          {/* Left: Tab Section (Home, Work, About, Resume, Contact) - No Name/Logo as requested */}
+          <nav className="flex items-center gap-1 sm:gap-2">
             {navLinks.map((link) => (
               <button
                 key={link.id}
                 onClick={() => handleLinkClick(link.id)}
-                className="px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800/50 rounded-md transition-all cursor-pointer font-medium"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 hover:bg-zinc-800/60 rounded-xl transition-all cursor-pointer font-heading"
               >
                 {link.label}
               </button>
             ))}
           </nav>
 
-          {/* Actions */}
-          <div className="hidden sm:flex items-center gap-2 lg:gap-3">
-
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => handleLinkClick('contact')}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-lg shadow-amber-500/20 hover:shadow-amber-500/35 transition-all cursor-pointer"
             >
               <Mail className="w-3.5 h-3.5" />
-              <span>Hire Me</span>
+              <span className="hidden xs:inline">Get In Touch</span>
+              <span className="xs:hidden">Contact</span>
             </button>
 
             {/* Owner Access Button */}
             <button
               onClick={onOpenOwnerAuth}
-              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
                 isOwnerMode 
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/20'
-                  : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
+                  : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
               }`}
               title={isOwnerMode ? 'Owner Studio Mode Active - Click to Manage' : 'Owner Edit Access (Passcode required)'}
               aria-label={isOwnerMode ? 'Owner Mode Active' : 'Owner Login'}
             >
               {isOwnerMode ? <Unlock className="w-3.5 h-3.5 text-amber-400" /> : <Lock className="w-3.5 h-3.5" />}
-              <span className="hidden xl:inline">{isOwnerMode ? 'Owner: Active' : 'Owner'}</span>
-            </button>
-          </div>
-
-          {/* Mobile hamburger button */}
-          <div className="flex md:hidden items-center gap-2">
-            <button
-              onClick={onOpenOwnerAuth}
-              className={`p-2 rounded-lg border text-xs ${
-                isOwnerMode ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-              }`}
-              aria-label="Owner Login"
-            >
-              {isOwnerMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg bg-zinc-900/80 text-zinc-300 hover:text-white border border-zinc-800"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              <span className="hidden lg:inline">{isOwnerMode ? 'Owner' : 'Owner'}</span>
             </button>
           </div>
         </div>

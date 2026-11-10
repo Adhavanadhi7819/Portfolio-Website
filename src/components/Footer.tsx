@@ -21,14 +21,14 @@ export const Footer: React.FC<FooterProps> = ({
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   return (
-    <footer className="relative bg-black border-t border-zinc-900 text-zinc-400 py-16 overflow-hidden">
+    <footer className="relative bg-black border-t border-zinc-900 text-zinc-400 py-8 sm:py-10 overflow-hidden">
       {/* Ambient background glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-32 bg-amber-500/10 blur-[90px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Outro Callout from Video Outro Slide */}
-        <div className="p-8 sm:p-12 rounded-3xl bg-zinc-950 border border-zinc-800/80 mb-12 relative overflow-hidden text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-8">
+        <div className="p-5 sm:p-7 rounded-2xl bg-zinc-950 border border-zinc-800/80 mb-6 relative overflow-hidden text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono tracking-widest text-amber-500 font-bold uppercase">

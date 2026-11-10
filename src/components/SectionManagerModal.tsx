@@ -22,6 +22,8 @@ interface SectionManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   sections: PortfolioSectionConfig[];
+  initialTab?: 'manage' | 'add';
+  insertTargetName?: string;
   onToggleVisibility: (sectionId: string, enabled: boolean) => void;
   onReorder: (sectionId: string, direction: 'up' | 'down') => void;
   onAddSection: (newSection: PortfolioSectionConfig) => void;
@@ -34,6 +36,8 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
   isOpen,
   onClose,
   sections,
+  initialTab = 'manage',
+  insertTargetName,
   onToggleVisibility,
   onReorder,
   onAddSection,
@@ -41,10 +45,16 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
   onUpdateSection,
   onResetSections
 }) => {
-  const [activeTab, setActiveTab] = useState<'manage' | 'add'>('manage');
+  const [activeTab, setActiveTab] = useState<'manage' | 'add'>(initialTab);
   const [newTitle, setNewTitle] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newPreset, setNewPreset] = useState<'grid' | 'media' | 'text'>('grid');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
@@ -322,9 +332,21 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleCreateNewSection} className="space-y-5">
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
-                Choose a template and title for your new section. Once created, you can edit every line, card, and image right on the page!
-              </div>
+              {insertTargetName ? (
+                <div className="p-3.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-xs text-amber-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-zinc-400 font-mono text-[11px] block uppercase">Target Insertion Position:</span>
+                    <span>Directly below <strong>{insertTargetName}</strong></span>
+                  </div>
+                  <span className="text-[10px] uppercase font-mono px-2 py-1 rounded bg-black/60 text-amber-400 border border-amber-500/30">
+                    On-Point Insert
+                  </span>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+                  Choose a template and title for your new section. Once created, you can edit every line, card, and image right on the page!
+                </div>
+              )}
 
               {/* Section Presets */}
               <div className="space-y-2">

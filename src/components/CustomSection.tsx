@@ -8,7 +8,7 @@ import {
   Image as ImageIcon,
   Play
 } from 'lucide-react';
-import { PortfolioSectionConfig, CustomSectionCard } from '../types/portfolio';
+import { PortfolioSectionConfig, CustomSectionCard, CustomSectionData } from '../types/portfolio';
 import { SectionControls } from './SectionControls';
 import { InlineEdit } from './InlineEdit';
 
@@ -23,7 +23,7 @@ interface CustomSectionProps {
   onDelete?: () => void;
   onEditSettings?: () => void;
   onAddSectionBelow?: () => void;
-  onUpdateSectionData?: (updates: Partial<PortfolioSectionConfig['customData']>) => void;
+  onUpdateSectionData?: (updates: Partial<CustomSectionData>) => void;
   onAddCard?: () => void;
   onEditCard?: (card: CustomSectionCard) => void;
   onDeleteCard?: (cardId: string) => void;
@@ -61,7 +61,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   };
 
   return (
-    <section id={section.id} className="py-24 relative bg-[#070709] border-t border-zinc-800/80">
+    <section id={section.id} className="py-10 sm:py-12 md:py-14 relative bg-[#070709] border-t border-zinc-800/80">
       
       {/* Ambient background glow */}
       <div className="absolute top-1/3 right-1/4 w-[500px] h-[350px] bg-amber-500/5 blur-[140px] rounded-full pointer-events-none"></div>
@@ -86,8 +86,8 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-          <div className="max-w-3xl space-y-3">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
+          <div className="max-w-3xl space-y-2">
             
             {/* Badge */}
             <div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, ArrowUpRight, Sparkles, Layers, Box, Edit3, Trash2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface ProjectCardProps {
   project: ProjectItem;
@@ -34,7 +35,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/30"></div>
 
           {/* Top badges */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+          <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-20">
             <span className="px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md text-[11px] font-mono text-amber-400 border border-amber-500/30 uppercase font-semibold">
               {project.categoryLabel}
             </span>
@@ -42,6 +43,15 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             <div className="flex items-center gap-1.5">
               {isOwnerMode && (
                 <>
+                  <MediaUploadOverlay
+                    currentUrl={project.thumbnail}
+                    mediaType="image"
+                    isOwnerMode={isOwnerMode}
+                    onMediaUploaded={(newUrl) => onEdit?.({ ...project, thumbnail: newUrl })}
+                    label="Photo"
+                    position="top-right"
+                    className="!static"
+                  />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

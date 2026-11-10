@@ -108,6 +108,16 @@ export interface StillPhotoItem {
   image: string;
 }
 
+export interface TimelineMilestone {
+  id: string;
+  phase: string;
+  title: string;
+  period: string;
+  description: string;
+  status: 'completed' | 'current' | 'target';
+  highlights?: string[];
+}
+
 export interface DesignerInfo {
   name: string;
   title: string;
@@ -126,6 +136,13 @@ export interface DesignerInfo {
   resumeSummary?: string;
   resumeExperiences?: ResumeExperience[];
   resumeEducation?: ResumeEducation[];
+  // Uploaded Custom Resume Document
+  resumePdfUrl?: string;
+  resumeFileName?: string;
+  resumeUploadDate?: string;
+  resumeFileSize?: string;
+  // Career Objective Timeline Chart
+  careerTimeline?: TimelineMilestone[];
   // Hero customizations
   heroPhotoUrl?: string;
   heroEngineTags?: {
@@ -209,6 +226,15 @@ export interface PortfolioState {
   projects: ProjectItem[];
   mayaModels: MayaModelItem[];
   sections?: PortfolioSectionConfig[];
+}
+
+export interface PortfolioProfile {
+  id: string;
+  name: string;
+  subtitle: string;
+  createdAt: string;
+  updatedAt: string;
+  state: PortfolioState;
 }
 
 export interface ContactFormData {
