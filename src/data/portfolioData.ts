@@ -12,9 +12,8 @@ export const DESIGNER_INFO: DesignerInfo = {
   phone: '8072647909',
   linkedin: 'Adhavan P',
   linkedinUrl: 'https://www.linkedin.com/in/adhavan-p',
-  artstationUrl: 'https://www.artstation.com/adhavan7819',
-  whatsappNumber: '+91 8072647909',
-  whatsappUrl: 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!',
+  artstationUrl: 'https://www.artstation.com/adhavan',
+  whatsappUrl: 'https://wa.me/918072647909',
   status: 'Open to Game Studio Roles & Freelance Design',
   skills: [
     { name: 'Unreal Engine 5 (Lumen, Nanite, Sequencer)', pct: 90, desc: 'Environment blockout, post-process color grading, camera sequencer', category: 'Engine & Workflows' },
