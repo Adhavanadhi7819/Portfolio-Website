@@ -787,12 +787,10 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete chapter "${chapter.title}"?`)) {
-                            onDeleteChapter?.(chapter.id);
-                          }
+                          onDeleteChapter?.(chapter.id);
                         }}
-                        className="p-1 rounded bg-black/80 hover:bg-red-500 text-zinc-300 hover:text-white border border-zinc-700 transition-colors"
-                        title="Delete Chapter"
+                        className="p-1 rounded bg-black/80 hover:bg-red-500 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
+                        title={`Delete Chapter "${chapter.title}"`}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

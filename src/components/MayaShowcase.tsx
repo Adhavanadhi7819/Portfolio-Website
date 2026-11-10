@@ -13,6 +13,7 @@ interface MayaShowcaseProps {
   onPlayInReel: (timestamp: number) => void;
   onAddModel?: () => void;
   onEditModel?: (model: MayaModelItem) => void;
+  onSaveModel?: (model: MayaModelItem) => void;
   onDeleteModel?: (id: string) => void;
   onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
   canMoveUp?: boolean;
@@ -30,6 +31,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   onPlayInReel,
   onAddModel,
   onEditModel,
+  onSaveModel,
   onDeleteModel,
   onUpdateDesignerInfo,
   canMoveUp,
@@ -138,10 +140,17 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 currentUrl={selectedModel.thumbnail}
                 mediaType="image"
                 isOwnerMode={isOwnerMode}
-                onMediaUploaded={(newUrl) => onEditModel?.({ ...selectedModel, thumbnail: newUrl })}
+                onMediaUploaded={(newUrl) => {
+                  if (onSaveModel) {
+                    onSaveModel({ ...selectedModel, thumbnail: newUrl });
+                  } else if (onEditModel) {
+                    onEditModel({ ...selectedModel, thumbnail: newUrl });
+                  }
+                }}
                 label="Upload 3D Render"
                 position="top-right"
                 className="mt-10 mr-2"
+                defaultFallbackUrl="/showcase/maya-models.jpg"
               />
 
               {/* Viewport Top Bar */}
@@ -271,12 +280,10 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 {currentModels.length > 1 && (
                   <button
                     onClick={() => {
-                      if (window.confirm(`Delete 3D model "${selectedModel.title}"?`)) {
-                        onDeleteModel?.(selectedModel.id);
-                      }
+                      onDeleteModel?.(selectedModel.id);
                     }}
                     className="py-2.5 px-3 rounded-xl bg-red-500/15 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/40 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    title="Delete model"
+                    title={`Delete model "${selectedModel.title}"`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Delete</span>

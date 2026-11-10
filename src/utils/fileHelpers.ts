@@ -20,14 +20,22 @@ export function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 /**
+ * Creates a lightweight, high-performance object URL for video streaming.
+ * Avoids multi-megabyte base64 strings that freeze browser memory or exceed localStorage quotas.
+ */
+export function createVideoBlobUrl(file: File): string {
+  return URL.createObjectURL(file);
+}
+
+/**
  * Compresses an image file before storing in state/localStorage
  * Scales down dimensions if they exceed maxWidth/maxHeight and encodes as JPEG
  */
 export async function compressImageFile(
   file: File, 
-  maxWidth = 1600, 
-  maxHeight = 1200, 
-  quality = 0.82
+  maxWidth = 1200, 
+  maxHeight = 900, 
+  quality = 0.76
 ): Promise<string> {
   // If not an image or SVG/GIF, return standard data URL
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') {

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, ArrowUpRight, Sparkles, Layers, Box, Edit3, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
@@ -11,6 +11,7 @@ interface ProjectCardProps {
   onPlayInReel?: (timestamp: number) => void;
   onEdit?: (project: ProjectItem) => void;
   onDelete?: (id: string) => void;
+  onSaveProject?: (project: ProjectItem) => void;
 }
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -19,8 +20,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onOpenModal,
   onPlayInReel,
   onEdit,
-  onDelete
+  onDelete,
+  onSaveProject
 }) => {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   return (
     <div className="group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between">
       
@@ -47,10 +51,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                     currentUrl={project.thumbnail}
                     mediaType="image"
                     isOwnerMode={isOwnerMode}
-                    onMediaUploaded={(newUrl) => onEdit?.({ ...project, thumbnail: newUrl })}
+                    onMediaUploaded={(newUrl) => {
+                      if (onSaveProject) {
+                        onSaveProject({ ...project, thumbnail: newUrl });
+                      } else if (onEdit) {
+                        onEdit({ ...project, thumbnail: newUrl });
+                      }
+                    }}
                     label="Photo"
                     position="top-right"
                     className="!static"
+                    defaultFallbackUrl="/showcase/gas-station-night.jpg"
                   />
                   <button
                     onClick={(e) => {
@@ -63,19 +74,33 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete project "${project.title}"?`)) {
+
+                  {confirmDelete ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         onDelete?.(project.id);
-                      }
-                    }}
-                    className="p-1.5 rounded-md bg-red-600/90 text-white hover:bg-red-500 font-bold transition-all shadow-md cursor-pointer"
-                    title={`Delete ${project.title}`}
-                    aria-label={`Delete ${project.title}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                        setConfirmDelete(false);
+                      }}
+                      className="px-2 py-1 rounded-md bg-red-600 text-white font-mono text-[10px] font-bold uppercase transition-all shadow-lg animate-pulse cursor-pointer"
+                      title="Click to permanently confirm delete"
+                    >
+                      Confirm Delete?
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDelete(true);
+                        setTimeout(() => setConfirmDelete(false), 3500);
+                      }}
+                      className="p-1.5 rounded-md bg-red-600/90 text-white hover:bg-red-500 font-bold transition-all shadow-md cursor-pointer"
+                      title={`Delete ${project.title}`}
+                      aria-label={`Delete ${project.title}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </>
               )}
 

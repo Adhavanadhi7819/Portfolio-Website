@@ -700,6 +700,7 @@ export default function App() {
                 onPlayInReel={handlePlayInReel}
                 onAddProject={() => handleOpenEditModal('project')}
                 onEditProject={(p) => handleOpenEditModal('project', p)}
+                onSaveProject={handleSaveProject}
                 onDeleteProject={handleDeleteProject}
                 onUpdateDesignerInfo={handleSaveDesignerInfo}
                 canMoveUp={canMoveUp}
@@ -720,6 +721,7 @@ export default function App() {
                 onPlayInReel={handlePlayInReel}
                 onAddModel={() => handleOpenEditModal('model')}
                 onEditModel={(m) => handleOpenEditModal('model', m)}
+                onSaveModel={handleSaveModel}
                 onDeleteModel={handleDeleteModel}
                 onUpdateDesignerInfo={handleSaveDesignerInfo}
                 canMoveUp={canMoveUp}

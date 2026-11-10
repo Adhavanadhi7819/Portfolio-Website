@@ -37,16 +37,10 @@ export const SectionControls: React.FC<SectionControlsProps> = ({
   onAddSectionBelow
 }) => {
   const handleRemove = () => {
-    const confirmMsg = isCustom
-      ? `Are you sure you want to permanently delete the custom section "${sectionTitle}"?`
-      : `Remove the "${sectionTitle}" section from your live portfolio?\n\n(It will be removed immediately. You can restore it anytime in Section Manager).`;
-
-    if (window.confirm(confirmMsg)) {
-      if (isCustom && onDelete) {
-        onDelete();
-      } else if (onHide) {
-        onHide();
-      }
+    if (isCustom && onDelete) {
+      onDelete();
+    } else if (onHide) {
+      onHide();
     }
   };
 

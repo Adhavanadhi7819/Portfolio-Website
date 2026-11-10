@@ -15,6 +15,7 @@ interface ProjectGalleryProps {
   onPlayInReel: (timestamp: number) => void;
   onAddProject?: () => void;
   onEditProject?: (project: ProjectItem) => void;
+  onSaveProject?: (project: ProjectItem) => void;
   onDeleteProject?: (id: string) => void;
   onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
   canMoveUp?: boolean;
@@ -33,6 +34,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   onPlayInReel,
   onAddProject,
   onEditProject,
+  onSaveProject,
   onDeleteProject,
   onUpdateDesignerInfo,
   canMoveUp,
@@ -200,6 +202,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                     onOpenModal={onOpenModal}
                     onPlayInReel={onPlayInReel}
                     onEdit={onEditProject}
+                    onSaveProject={onSaveProject}
                     onDelete={onDeleteProject}
                   />
                 </motion.div>
