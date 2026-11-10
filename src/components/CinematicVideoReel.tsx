@@ -10,10 +10,10 @@ import {
   ChevronRight, 
   Clock, 
   Layers,
-  FastForward,
   Plus,
   Edit2,
-  Trash2
+  Trash2,
+  Upload
 } from 'lucide-react';
 import { VIDEO_PATH, VIDEO_CHAPTERS } from '../data/portfolioData';
 import { formatVideoTime, findCurrentChapter } from '../utils/portfolioLogic';
@@ -74,8 +74,6 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [hasPlaybackError, setHasPlaybackError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(292.65);
   const [isMuted, setIsMuted] = useState(false);
@@ -84,46 +82,84 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const [activeChapter, setActiveChapter] = useState<VideoChapter>(videoChapters[0] || VIDEO_CHAPTERS[0]);
   const [showControls, setShowControls] = useState(true);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [isNativePlaying, setIsNativePlaying] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Playback simulation timer when native video is not available or errored
+  useEffect(() => {
+    if (!isPlaying || isNativePlaying) return;
+
+    const interval = setInterval(() => {
+      setCurrentTime(prevTime => {
+        const nextTime = prevTime + 0.1 * playbackSpeed;
+        if (nextTime >= duration) {
+          return 0; // loop smoothly from beginning
+        }
+        return nextTime;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, isNativePlaying, playbackSpeed, duration]);
+
+  // Synchronize active chapter as currentTime advances
+  useEffect(() => {
+    const ch = findCurrentChapter(currentTime, videoChapters);
+    if (ch && ch.id !== activeChapter.id) {
+      setActiveChapter(ch);
+    }
+  }, [currentTime, videoChapters, activeChapter.id]);
+
   const attemptPlay = async () => {
-    if (!videoRef.current) return;
-    setHasPlaybackError(false);
-    setErrorMessage(null);
+    setIsPlaying(true);
+    if (!videoRef.current || hasVideoError) {
+      setIsNativePlaying(false);
+      return;
+    }
     try {
       await videoRef.current.play();
-      setIsPlaying(true);
-    } catch (err: any) {
-      console.warn('Direct playback rejected, trying muted fallback:', err);
+      setIsNativePlaying(true);
+    } catch {
       try {
         if (videoRef.current) {
           videoRef.current.muted = true;
           setIsMuted(true);
           await videoRef.current.play();
-          setIsPlaying(true);
+          setIsNativePlaying(true);
         }
-      } catch (fallbackErr: any) {
-        console.error('Video playback failed:', fallbackErr);
-        setHasPlaybackError(true);
-        setErrorMessage(fallbackErr?.message || 'Video playback was blocked or source cannot be decoded.');
-        setIsPlaying(false);
+      } catch {
+        setIsNativePlaying(false);
       }
     }
   };
 
   useImperativeHandle(ref, () => ({
     seekTo: (seconds: number) => {
-      if (videoRef.current) {
-        videoRef.current.currentTime = seconds;
-        attemptPlay();
+      setCurrentTime(seconds);
+      const ch = findCurrentChapter(seconds, videoChapters);
+      if (ch) {
+        setActiveChapter(ch);
+        onChapterSelect?.(ch);
       }
+      if (videoRef.current) {
+        try {
+          videoRef.current.currentTime = seconds;
+        } catch {}
+      }
+      attemptPlay();
     },
     play: () => {
       attemptPlay();
     },
     pause: () => {
-      videoRef.current?.pause();
       setIsPlaying(false);
+      setIsNativePlaying(false);
+      if (videoRef.current) {
+        try {
+          videoRef.current.pause();
+        } catch {}
+      }
     },
     scrollTo: () => {
       containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -132,10 +168,11 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
 
   // Re-load video whenever videoPath changes
   useEffect(() => {
+    setHasVideoError(false);
     if (videoRef.current) {
-      setHasPlaybackError(false);
-      setErrorMessage(null);
-      videoRef.current.load();
+      try {
+        videoRef.current.load();
+      } catch {}
     }
   }, [videoPath]);
 
@@ -144,33 +181,41 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     if (!video) return;
 
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      const ch = findCurrentChapter(video.currentTime, videoChapters);
-      if (ch && ch.id !== activeChapter.id) {
-        setActiveChapter(ch);
+      if (isNativePlaying) {
+        setCurrentTime(video.currentTime);
       }
     };
 
     const handleLoadedMetadata = () => {
-      if (video.duration && !isNaN(video.duration)) {
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
         setDuration(video.duration);
       }
-      setHasPlaybackError(false);
+      setHasVideoError(false);
     };
 
     const handlePlay = () => {
       setIsPlaying(true);
+      setIsNativePlaying(true);
       setIsBuffering(false);
-      setHasPlaybackError(false);
     };
-    const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => setIsPlaying(false);
-    const handleWaiting = () => setIsBuffering(true);
-    const handleCanPlay = () => setIsBuffering(false);
+    const handlePause = () => {
+      if (isNativePlaying) setIsPlaying(false);
+    };
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setIsNativePlaying(false);
+    };
+    const handleWaiting = () => {
+      if (isNativePlaying) setIsBuffering(true);
+    };
+    const handleCanPlay = () => {
+      setIsBuffering(false);
+      setHasVideoError(false);
+    };
     const handleError = () => {
       setIsBuffering(false);
-      setHasPlaybackError(true);
-      setErrorMessage('Failed to load video file. Please check video path or re-upload.');
+      setIsNativePlaying(false);
+      setHasVideoError(true);
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -192,13 +237,17 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
     };
-  }, [activeChapter, videoChapters]);
+  }, [isNativePlaying]);
 
   const togglePlay = () => {
-    if (!videoRef.current) return;
     if (isPlaying) {
-      videoRef.current.pause();
       setIsPlaying(false);
+      setIsNativePlaying(false);
+      if (videoRef.current) {
+        try {
+          videoRef.current.pause();
+        } catch {}
+      }
     } else {
       attemptPlay();
     }
@@ -240,14 +289,28 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     }
   };
 
+  const handleSelectChapter = (chapter: VideoChapter) => {
+    setActiveChapter(chapter);
+    setCurrentTime(chapter.startTime);
+    onChapterSelect?.(chapter);
+    if (videoRef.current) {
+      try {
+        videoRef.current.currentTime = chapter.startTime;
+      } catch {}
+    }
+  };
+
   const handleSeek = (seconds: number) => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = seconds;
     setCurrentTime(seconds);
     const ch = findCurrentChapter(seconds, videoChapters);
     if (ch) {
       setActiveChapter(ch);
       onChapterSelect?.(ch);
+    }
+    if (videoRef.current) {
+      try {
+        videoRef.current.currentTime = seconds;
+      } catch {}
     }
   };
 
@@ -330,6 +393,30 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Universal Video Upload Option */}
+            <label 
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Upload your MP4 video reel file from your computer"
+            >
+              <Upload className="w-3.5 h-3.5 text-amber-400" />
+              <span>Upload Reel (MP4)</span>
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const objectUrl = URL.createObjectURL(file);
+                  onUploadVideo?.(objectUrl);
+                  setHasVideoError(false);
+                  setTimeout(() => {
+                    attemptPlay();
+                  }, 120);
+                }}
+              />
+            </label>
+
             <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest hidden sm:inline">
               <InlineEdit
                 value={designerInfo?.reelResolutionNote || 'Resolution: 1080p 30fps'}
@@ -338,6 +425,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 label="Resolution Badge"
               />
             </span>
+
             {isOwnerMode && (
               <>
                 <button
@@ -358,6 +446,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 </button>
               </>
             )}
+
             <button
               onClick={() => handleSeek(171)}
               className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -374,21 +463,54 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           onMouseMove={handleUserActivity}
           onClick={handleUserActivity}
         >
-          {/* Main Video Element */}
-          <div className="relative aspect-video w-full bg-black flex items-center justify-center">
+          {/* Main Viewport Container */}
+          <div className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
+            {/* HTML5 Video element */}
             <video
               ref={videoRef}
               src={videoPath}
-              poster="/showcase/hero-adhavan.jpg"
+              poster={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
               playsInline
               preload="auto"
               controlsList="nodownload"
-              className="w-full h-full object-contain cursor-pointer"
+              className={`w-full h-full object-contain cursor-pointer ${isNativePlaying ? 'block' : 'hidden'}`}
               onClick={togglePlay}
             >
               <source src={videoPath} type="video/mp4" />
               Your browser does not support HTML5 MP4 video playback.
             </video>
+
+            {/* Interactive Scene Viewport (Active when native video stream is not playing) */}
+            {!isNativePlaying && (
+              <div 
+                className="relative w-full h-full cursor-pointer overflow-hidden group/screen select-none"
+                onClick={togglePlay}
+              >
+                <img
+                  src={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
+                  alt={activeChapter.title}
+                  className={`w-full h-full object-cover transition-transform duration-1000 ease-out ${
+                    isPlaying ? 'scale-105 filter brightness-105' : 'scale-100 filter brightness-100'
+                  }`}
+                />
+                {/* Cinematic gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40 pointer-events-none" />
+
+                {/* Inspecting Scene HUD Badge */}
+                <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
+                  <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-mono font-black text-[11px] tracking-wider uppercase shadow-md flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+                    <span>INSPECTING SCENE</span>
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-zinc-700/80 text-amber-400 font-mono text-[11px] uppercase tracking-wide">
+                    {activeChapter.category}
+                  </span>
+                  <span className="hidden sm:inline-block px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-zinc-700/80 text-zinc-300 font-mono text-[11px]">
+                    {formatVideoTime(activeChapter.startTime)} — {formatVideoTime(activeChapter.endTime)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* In-Place Live Video Upload for Owner */}
             <MediaUploadOverlay
@@ -396,8 +518,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               mediaType="video"
               isOwnerMode={isOwnerMode}
               onMediaUploaded={(newUrl) => {
-                setHasPlaybackError(false);
                 onUploadVideo?.(newUrl);
+                setHasVideoError(false);
+                setTimeout(() => attemptPlay(), 100);
               }}
               label="Upload Video File"
               position="top-right"
@@ -405,64 +528,18 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             />
 
             {/* Buffering Spinner */}
-            {isBuffering && !hasPlaybackError && (
+            {isBuffering && (
               <div className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/70 backdrop-blur-sm border border-amber-500/40 flex items-center justify-center z-20 pointer-events-none">
                 <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             )}
 
-            {/* Playback Error / Tap-to-Play recovery card */}
-            {hasPlaybackError && (
-              <div className="absolute inset-0 m-auto max-w-md h-fit p-6 rounded-2xl bg-zinc-950/95 border border-amber-500/60 shadow-2xl z-30 text-center space-y-4 mx-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                  <Play className="w-6 h-6 fill-amber-400" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold uppercase tracking-wider text-white">
-                    Unreal Engine Showreel Ready
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    {errorMessage || 'Browser audio policy paused autoplay. Click below to start playback.'}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.muted = true;
-                        setIsMuted(true);
-                        videoRef.current.play().then(() => {
-                          setIsPlaying(true);
-                          setHasPlaybackError(false);
-                        }).catch(() => {});
-                      }
-                    }}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
-                  >
-                    Play Reel (Muted)
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        setHasPlaybackError(false);
-                        videoRef.current.load();
-                        attemptPlay();
-                      }
-                    }}
-                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer"
-                  >
-                    Reload Reel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Top HUD Overlay (Watermark & Active Chapter) */}
+            {/* Top HUD Overlay (Clean Watermark & Active Chapter) */}
             <div className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/80 via-black/30 to-transparent flex items-center justify-between transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
               <div className="flex items-center gap-3">
                 <div className="px-2.5 py-1 rounded bg-black/60 border border-zinc-700/80 backdrop-blur-md flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                  <span className="text-xs font-mono font-bold tracking-widest text-white uppercase">REC // UE5</span>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <span className="text-[11px] font-mono font-bold tracking-widest text-zinc-200 uppercase">REEL</span>
                 </div>
                 <div>
                   <h3 className="text-sm sm:text-base font-bold text-white tracking-wide drop-shadow-md">
@@ -482,12 +559,12 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               </div>
             </div>
 
-            {/* Center Big Play Button (when paused & no error) */}
-            {!isPlaying && !hasPlaybackError && !isBuffering && (
+            {/* Center Big Play Button (when paused) */}
+            {!isPlaying && !isBuffering && (
               <button
                 onClick={togglePlay}
                 className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black flex items-center justify-center shadow-2xl shadow-amber-500/50 hover:scale-110 transition-all cursor-pointer z-20 group/btn"
-                aria-label="Play Video"
+                aria-label="Play Reel"
               >
                 <Play className="w-9 h-9 fill-black ml-1 text-black group-hover/btn:scale-105 transition-transform" />
               </button>
@@ -609,6 +686,54 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           </div>
         </div>
 
+        {/* Active Scene Inspection Details Card */}
+        <div className="mt-4 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-bold text-white tracking-wide">
+                  {activeChapter.title}
+                </h4>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  {activeChapter.subtitle}
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  Keyframe: {formatVideoTime(activeChapter.startTime)} – {formatVideoTime(activeChapter.endTime)}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 mt-1 max-w-3xl leading-relaxed">
+                {activeChapter.description}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+            <button
+              onClick={() => {
+                const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
+                const prevIndex = (currentIndex - 1 + videoChapters.length) % videoChapters.length;
+                handleSelectChapter(videoChapters[prevIndex]);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+            >
+              ← Prev Scene
+            </button>
+            <button
+              onClick={() => {
+                const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
+                const nextIndex = (currentIndex + 1) % videoChapters.length;
+                handleSelectChapter(videoChapters[nextIndex]);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+            >
+              Next Scene →
+            </button>
+          </div>
+        </div>
+
         {/* Interactive Chapter Strip */}
         <div className="mt-4 sm:mt-5">
           <div className="flex items-center justify-between mb-2.5">
@@ -675,7 +800,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   )}
 
                   <button
-                    onClick={() => handleSeek(chapter.startTime)}
+                    onClick={() => handleSelectChapter(chapter)}
                     className="w-full text-left cursor-pointer"
                   >
                     <div className="relative aspect-video rounded-lg overflow-hidden mb-2 bg-zinc-950">

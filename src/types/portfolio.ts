@@ -130,6 +130,9 @@ export interface DesignerInfo {
   phone: string;
   linkedin: string;
   linkedinUrl: string;
+  artstationUrl?: string;
+  whatsappNumber?: string;
+  whatsappUrl?: string;
   status: string;
   skills: DesignerSkill[];
   tools: string[];

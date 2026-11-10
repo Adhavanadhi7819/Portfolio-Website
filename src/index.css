@@ -25,11 +25,20 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
+  }
+
   body {
     background-color: #070709;
     color: #e4e4e7;
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     overflow-x: hidden;
+  }
+
+  section {
+    scroll-margin-top: 5.5rem;
   }
 
   h1, h2, h3, .font-heading {

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Plus } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
@@ -51,6 +52,7 @@ import {
 export default function App() {
   const reelRef = useRef<VideoReelRef>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('hero');
 
   // Persistent Portfolio State
   const [portfolioState, setPortfolioState] = useState<PortfolioState>(() => {
@@ -456,25 +458,63 @@ export default function App() {
     }
   };
 
-  // Navigation & Reel Playback
+  // Tab-aware Navigation & Reel Playback
   const handleNavigate = (sectionId: string) => {
-    const el = document.getElementById(sectionId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    let targetTab = sectionId;
+    if (sectionId === 'hero') {
+      targetTab = 'hero';
+    } else if (['projects', 'flagship', 'reel', 'maya'].includes(sectionId)) {
+      targetTab = 'projects';
+    } else if (['about', 'proficiency'].includes(sectionId)) {
+      targetTab = 'about';
+    } else if (sectionId === 'resume') {
+      targetTab = 'resume';
+    } else if (sectionId === 'contact') {
+      targetTab = 'contact';
+    }
+
+    setActiveTab(targetTab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // If targeting an anchor inside a multi-section tab, smoothly position to it
+    if (!['hero', 'projects', 'about', 'resume', 'contact'].includes(sectionId)) {
+      setTimeout(() => {
+        const el = document.getElementById(sectionId);
+        if (el) {
+          const navOffset = isOwnerMode ? 105 : 75;
+          const elementPosition = el.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.pageYOffset - navOffset;
+          window.scrollTo({
+            top: Math.max(0, offsetPosition),
+            behavior: 'smooth'
+          });
+        }
+      }, 150);
     }
   };
 
   const handlePlayInReel = (timestamp: number) => {
-    reelRef.current?.scrollTo();
+    setActiveTab('projects');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
-      reelRef.current?.seekTo(timestamp);
-    }, 400);
+      reelRef.current?.scrollTo();
+      setTimeout(() => {
+        reelRef.current?.seekTo(timestamp);
+      }, 350);
+    }, 120);
   };
 
   const handleJumpToChapter = (chapterId: string) => {
+    setActiveTab('projects');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     const ch = portfolioState.videoChapters.find(c => c.id === chapterId);
     if (ch) {
-      handlePlayInReel(ch.startTime);
+      setTimeout(() => {
+        reelRef.current?.scrollTo();
+        setTimeout(() => {
+          reelRef.current?.seekTo(ch.startTime);
+        }, 350);
+      }, 120);
     }
   };
 
@@ -489,6 +529,33 @@ export default function App() {
 
   const flagshipProject = portfolioState.projects.find(p => p.isFlagship) || portfolioState.projects[0];
   const activeSections = getActiveSections(portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS);
+
+  // Map tab IDs to the respective sections they contain
+  const getSectionsForTab = (tabId: string): string[] => {
+    switch (tabId) {
+      case 'hero':
+        // Home tab contains ONLY the home section
+        return ['hero'];
+      case 'projects':
+        // Work tab contains the work showcase: Flagship RPG, Showreel, Curated Projects, Maya 3D
+        return ['flagship', 'reel', 'projects', 'maya'];
+      case 'about':
+        // About tab contains About & Philosophy, Career Timeline, and Technical Proficiency
+        return ['about', 'proficiency'];
+      case 'resume':
+        // Resume tab contains complete CV and credentials
+        return ['resume'];
+      case 'contact':
+        // Contact tab contains direct contact channels, ArtStation, LinkedIn, WhatsApp, form
+        return ['contact'];
+      default:
+        // Custom section or directly selected section
+        return [tabId];
+    }
+  };
+
+  const visibleSectionIds = getSectionsForTab(activeTab);
+  const currentTabSections = activeSections.filter(sec => visibleSectionIds.includes(sec.id));
 
   return (
     <div className="min-h-screen bg-[#070709] text-zinc-100 selection:bg-amber-500 selection:text-black">
@@ -512,6 +579,8 @@ export default function App() {
 
       {/* Top Navigation */}
       <Navbar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
         onWatchReelClick={() => handlePlayInReel(0)}
         onNavigate={handleNavigate}
         isOwnerMode={isOwnerMode}
@@ -520,26 +589,35 @@ export default function App() {
         onOpenSectionManager={() => setIsSectionManagerOpen(true)}
       />
 
-      {/* Main Content - Dynamically rendered based on active sections order */}
-      <main>
-        {/* On-Point Add Section Top Button in Owner Mode */}
-        {isOwnerMode && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-1 flex items-center justify-center">
-            <button
-              onClick={() => {
-                setInsertBelowTargetId(undefined);
-                setIsSectionManagerOpen(true);
-              }}
-              className="px-4 py-1.5 rounded-full bg-zinc-900/90 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-lg flex items-center gap-1.5 cursor-pointer hover:scale-105"
-              title="Add a new custom section at the top of your portfolio"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>+ Add Section at Top</span>
-            </button>
-          </div>
-        )}
+      {/* Main Content - Tab-specific with smooth motion transitions and zero negative space */}
+      <main className="min-h-[calc(100vh-140px)]">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+            className="w-full"
+          >
+            {/* On-Point Add Section Top Button in Owner Mode */}
+            {isOwnerMode && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-1 flex items-center justify-center">
+                <button
+                  onClick={() => {
+                    setInsertBelowTargetId(undefined);
+                    setIsSectionManagerOpen(true);
+                  }}
+                  className="px-4 py-1.5 rounded-full bg-zinc-900/90 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-lg flex items-center gap-1.5 cursor-pointer hover:scale-105"
+                  title="Add a new custom section at the top of your portfolio"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>+ Add Section at Top</span>
+                </button>
+              </div>
+            )}
 
-        {activeSections.map((sec, idx) => {
+            {currentTabSections.map((sec, idx) => {
           const canMoveUp = idx > 0;
           const canMoveDown = idx < activeSections.length - 1;
           const onMoveUp = () => handleReorderSection(sec.id, 'up');
@@ -767,6 +845,8 @@ export default function App() {
             </React.Fragment>
           );
         })}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Section Manager Modal */}

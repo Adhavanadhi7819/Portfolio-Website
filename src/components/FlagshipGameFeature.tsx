@@ -87,7 +87,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
       ];
 
   return (
-    <section id="flagship" className="py-10 sm:py-12 md:py-14 relative overflow-hidden bg-gradient-to-b from-[#09090c] via-[#0d0d12] to-[#070709]">
+    <section id="flagship" className="pt-20 sm:pt-24 pb-10 sm:pb-12 relative overflow-hidden bg-gradient-to-b from-[#09090c] via-[#0d0d12] to-[#070709]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (

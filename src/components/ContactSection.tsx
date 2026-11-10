@@ -10,7 +10,9 @@ import {
   MessageSquare,
   ArrowRight,
   ShieldCheck,
-  Edit3
+  Edit3,
+  ExternalLink,
+  Palette
 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
@@ -98,7 +100,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   };
 
   return (
-    <section id="contact" className="py-10 sm:py-12 md:py-14 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="contact" className="pt-20 sm:pt-24 pb-12 sm:pb-16 relative bg-[#09090c] min-h-[calc(100vh-140px)]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -177,23 +179,177 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           
           {/* Left Column: Direct Verified Contact Cards from Slide */}
-          <div className="lg:col-span-5 space-y-6">
+          <div className="lg:col-span-5 space-y-5">
             
-            <div className="space-y-4">
+            {/* Quick Connected Profile Badges */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950/90 border border-amber-500/30 shadow-xl shadow-amber-500/5 space-y-3">
+              <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Connected Direct Links</span>
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {/* ArtStation ↗ */}
+                <a
+                  href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-amber-500/60 transition-all group/link"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover/link:scale-110 transition-transform">
+                      <Palette className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-bold tracking-tight">ArtStation</span>
+                  </div>
+                  <span className="text-amber-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
+                </a>
+
+                {/* LinkedIn ↗ */}
+                <a
+                  href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-sky-500/60 transition-all group/link"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover/link:scale-110 transition-transform">
+                      <Linkedin className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-bold tracking-tight">LinkedIn</span>
+                  </div>
+                  <span className="text-sky-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
+                </a>
+
+                {/* WhatsApp ↗ */}
+                <a
+                  href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-emerald-500/60 transition-all group/link"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover/link:scale-110 transition-transform">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-bold tracking-tight">WhatsApp</span>
+                  </div>
+                  <span className="text-emerald-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-3">
               
-              {/* Email Card */}
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Mail className="w-6 h-6" />
+              {/* ArtStation Direct Card */}
+              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Palette className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                      3D Art & Showreel
+                    </span>
+                    <a
+                      href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors flex items-center gap-1.5"
+                    >
+                      <span>ArtStation Portfolio</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </a>
+                  </div>
+                </div>
+
+                <a
+                  href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
+                >
+                  <span>Open ↗</span>
+                </a>
+              </div>
+
+              {/* LinkedIn Direct Card */}
+              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Linkedin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                      Professional Network
+                    </span>
+                    <a
+                      href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors flex items-center gap-1.5"
+                    >
+                      <span>{info.linkedin || 'Adhavan P'}</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </a>
+                  </div>
+                </div>
+
+                <a
+                  href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500 text-sky-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
+                >
+                  <span>Open ↗</span>
+                </a>
+              </div>
+
+              {/* WhatsApp Direct Chat Card */}
+              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-emerald-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                      Instant Chat
+                    </span>
+                    <a
+                      href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-white hover:text-emerald-400 transition-colors flex items-center gap-1.5"
+                    >
+                      <span>WhatsApp Direct</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </a>
+                  </div>
+                </div>
+
+                <a
+                  href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
+                >
+                  <span>Chat ↗</span>
+                </a>
+              </div>
+
+              {/* Email Card */}
+              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
                       Email Address
                     </span>
                     <a
                       href={`mailto:${info.email}`}
-                      className="text-sm sm:text-base font-semibold text-white hover:text-amber-400 transition-colors break-all"
+                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors break-all"
                     >
                       {info.email}
                     </a>
@@ -215,18 +371,18 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
               </div>
 
               {/* Phone Card */}
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Phone className="w-6 h-6" />
+              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
                       Phone Number
                     </span>
                     <a
                       href={`tel:${info.phone}`}
-                      className="text-sm sm:text-base font-semibold text-white hover:text-amber-400 transition-colors"
+                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors"
                     >
                       {info.phone}
                     </a>
@@ -247,35 +403,6 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 </button>
               </div>
 
-              {/* LinkedIn Card */}
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Linkedin className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
-                      LinkedIn Profile
-                    </span>
-                    <span className="text-sm sm:text-base font-semibold text-white">
-                      {info.linkedin}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => copyToClipboard(info.linkedin, 'linkedin')}
-                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
-                  aria-label="Copy LinkedIn username"
-                  title="Copy to clipboard"
-                >
-                  {copiedField === 'linkedin' ? (
-                    <Check className="w-4 h-4 text-emerald-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
             </div>
 
             {/* Video Slide Visual Reference Staging */}

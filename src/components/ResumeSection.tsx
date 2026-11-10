@@ -68,7 +68,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   };
 
   return (
-    <section id="resume" className="py-10 sm:py-12 md:py-14 relative bg-[#070709] border-t border-zinc-800/80">
+    <section id="resume" className="pt-20 sm:pt-24 pb-12 sm:pb-16 relative bg-[#070709] min-h-[calc(100vh-140px)]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -126,7 +126,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
                 href={info.resumePdfUrl}
                 download={info.resumeFileName || `${info.name.replace(/\s+/g, '_')}_Game_Designer_Resume.pdf`}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-black font-extrabold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all cursor-pointer"
-                title={`Download official uploaded resume (${info.resumeFileName})`}
+                title={`Download uploaded resume (${info.resumeFileName})`}
               >
                 <Download className="w-4 h-4 stroke-[2.5]" />
                 <span>Download Resume (PDF)</span>
@@ -142,46 +142,44 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               </button>
             )}
 
-            {/* Owner Resume Upload Button */}
-            {isOwnerMode && (
-              <label 
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 hover:border-amber-400 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
-                title="Upload your official resume PDF or DOCX file so recruiters can download it directly"
-              >
-                <Download className="w-3.5 h-3.5 rotate-180" />
-                <span>{info.resumePdfUrl ? 'Replace PDF Resume' : 'Upload My PDF Resume'}</span>
-                <input
-                  type="file"
-                  accept=".pdf,.docx,.doc,application/pdf"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        const dataUrl = reader.result as string;
-                        const k = 1024;
-                        const sizes = ['Bytes', 'KB', 'MB'];
-                        const i = Math.floor(Math.log(file.size) / Math.log(k));
-                        const formattedSize = parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            {/* Universal Resume Upload Button - Available for user to upload custom resume file */}
+            <label 
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 hover:border-amber-400 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+              title="Upload your own resume PDF or DOCX file so visitors and recruiters can download it"
+            >
+              <Download className="w-3.5 h-3.5 rotate-180" />
+              <span>{info.resumePdfUrl ? 'Replace Resume (PDF)' : 'Upload Your Resume'}</span>
+              <input
+                type="file"
+                accept=".pdf,.docx,.doc,application/pdf"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = reader.result as string;
+                      const k = 1024;
+                      const sizes = ['Bytes', 'KB', 'MB'];
+                      const i = Math.floor(Math.log(file.size) / Math.log(k));
+                      const formattedSize = parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 
-                        onUpdateDesignerInfo?.({
-                          resumePdfUrl: dataUrl,
-                          resumeFileName: file.name,
-                          resumeUploadDate: new Date().toLocaleDateString(),
-                          resumeFileSize: formattedSize
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    } catch (err) {
-                      console.error('Failed to read resume file:', err);
-                      alert('Could not process resume file. Please select a valid PDF.');
-                    }
-                  }}
-                />
-              </label>
-            )}
+                      onUpdateDesignerInfo?.({
+                        resumePdfUrl: dataUrl,
+                        resumeFileName: file.name,
+                        resumeUploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        resumeFileSize: formattedSize
+                      });
+                    };
+                    reader.readAsDataURL(file);
+                  } catch (err) {
+                    console.error('Failed to read resume file:', err);
+                    alert('Could not process resume file. Please select a valid PDF.');
+                  }
+                }}
+              />
+            </label>
 
             <button
               onClick={handlePrint}
@@ -223,39 +221,71 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
           </div>
         </div>
 
-        {/* Uploaded Resume Status Banner (Visible to both recruiters and owner) */}
-        {info.resumePdfUrl && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">
-                    {info.resumeFileName || 'Adhavan_Game_Designer_Resume.pdf'}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold">
-                    OFFICIAL PDF
-                  </span>
+        {/* Dedicated Resume Document Box (Upload & Download Card) */}
+        <div className="mb-6">
+          {info.resumePdfUrl ? (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-zinc-900/80 to-zinc-900/60 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                  <FileText className="w-6 h-6" />
                 </div>
-                <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                  Direct recruiter download ready {info.resumeFileSize ? `• ${info.resumeFileSize}` : ''} {info.resumeUploadDate ? `• Uploaded ${info.resumeUploadDate}` : ''}
-                </p>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-white text-sm sm:text-base">
+                      {info.resumeFileName || 'Adhavan_Game_Designer_Resume.pdf'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-mono font-bold">
+                      AUTHENTIC RESUME READY
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">
+                    Uploaded file available for download {info.resumeFileSize ? `• ${info.resumeFileSize}` : ''} {info.resumeUploadDate ? `• ${info.resumeUploadDate}` : ''}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={info.resumePdfUrl}
-                download={info.resumeFileName || `${info.name.replace(/\s+/g, '_')}_Game_Designer_Resume.pdf`}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Download File</span>
-              </a>
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <a
+                  href={info.resumePdfUrl}
+                  download={info.resumeFileName || `${info.name.replace(/\s+/g, '_')}_Game_Designer_Resume.pdf`}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-black font-extrabold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 stroke-[2.5]" />
+                  <span>Download Resume (PDF)</span>
+                </a>
 
-              {isOwnerMode && (
+                <label 
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-mono font-semibold transition-colors cursor-pointer"
+                  title="Upload a new file to replace the current resume"
+                >
+                  <span>Replace File</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc,application/pdf"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const dataUrl = reader.result as string;
+                        const k = 1024;
+                        const sizes = ['Bytes', 'KB', 'MB'];
+                        const i = Math.floor(Math.log(file.size) / Math.log(k));
+                        const formattedSize = parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+
+                        onUpdateDesignerInfo?.({
+                          resumePdfUrl: dataUrl,
+                          resumeFileName: file.name,
+                          resumeUploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                          resumeFileSize: formattedSize
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+
                 <button
                   onClick={() => {
                     if (window.confirm('Remove uploaded custom PDF resume and restore default formatted resume?')) {
@@ -267,15 +297,86 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
                       });
                     }
                   }}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-red-950 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer text-xs font-mono"
+                  className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800/50 transition-colors cursor-pointer text-xs font-mono"
                   title="Remove uploaded resume file"
                 >
                   Remove
                 </button>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div 
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataUrl = reader.result as string;
+                  const k = 1024;
+                  const sizes = ['Bytes', 'KB', 'MB'];
+                  const i = Math.floor(Math.log(file.size) / Math.log(k));
+                  const formattedSize = parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+
+                  onUpdateDesignerInfo?.({
+                    resumePdfUrl: dataUrl,
+                    resumeFileName: file.name,
+                    resumeUploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                    resumeFileSize: formattedSize
+                  });
+                };
+                reader.readAsDataURL(file);
+              }}
+              className="p-5 rounded-2xl bg-zinc-900/40 border border-dashed border-zinc-700/80 hover:border-amber-500/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-amber-400 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Have your own resume file?</span>
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">PDF / DOCX</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Upload your custom resume so visitors and recruiters can download your authentic file directly.
+                  </p>
+                </div>
+              </div>
+
+              <label className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md shrink-0">
+                <Download className="w-3.5 h-3.5 rotate-180" />
+                <span>Upload My Resume (PDF)</span>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.doc,application/pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = reader.result as string;
+                      const k = 1024;
+                      const sizes = ['Bytes', 'KB', 'MB'];
+                      const i = Math.floor(Math.log(file.size) / Math.log(k));
+                      const formattedSize = parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+
+                      onUpdateDesignerInfo?.({
+                        resumePdfUrl: dataUrl,
+                        resumeFileName: file.name,
+                        resumeUploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        resumeFileSize: formattedSize
+                      });
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+            </div>
+          )}
+        </div>
 
         {/* Printable Resume Sheet Container */}
         <div className="bg-[#0c0c10] border border-zinc-800/90 rounded-2xl p-5 sm:p-7 lg:p-8 shadow-2xl space-y-6 print:bg-white print:text-black print:p-0 print:border-none print:shadow-none">

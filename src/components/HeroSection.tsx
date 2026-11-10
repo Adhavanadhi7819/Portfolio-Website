@@ -38,7 +38,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onAddSectionBelow
 }) => {
   return (
-    <section id="hero" className="relative pt-20 sm:pt-24 pb-8 sm:pb-10 flex flex-col justify-center overflow-hidden">
+    <section id="hero" className="relative pt-20 sm:pt-24 pb-12 sm:pb-16 min-h-[calc(100vh-140px)] flex flex-col justify-center overflow-hidden">
       {/* Background radial gradient & ambient glow */}
       <div className="absolute inset-0 bg-radial-vignette pointer-events-none"></div>
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-amber-500/10 blur-[140px] rounded-full pointer-events-none"></div>
@@ -194,9 +194,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block"></span>
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
-                    <span className="ml-2 text-zinc-300 font-semibold">ADHAVAN_PORTFOLIO.UE5</span>
+                    <span className="ml-2 text-zinc-300 font-semibold tracking-wide">ADHAVAN // SHOWCASE</span>
                   </div>
-                  <span className="text-amber-400 font-bold uppercase tracking-wider text-[11px]">LIVE DEMO</span>
+                  <span className="text-amber-400 font-bold uppercase tracking-wider text-[11px]">PORTFOLIO</span>
                 </div>
 
                 {/* Primary Photo from user's video intro */}

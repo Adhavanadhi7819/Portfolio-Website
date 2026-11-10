@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Sparkles, Filter, Search, Plus } from 'lucide-react';
 import { ProjectItem, ProjectCategory, DesignerInfo } from '../types/portfolio';
 import { filterProjects } from '../utils/portfolioLogic';
@@ -136,8 +137,8 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+        {/* Filter Tabs with interactive smooth gliding animations */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none" role="tablist">
           {categories.map((cat) => {
             const count = cat.value === 'all' 
               ? projects.length 
@@ -148,16 +149,26 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
               <button
                 key={cat.value}
                 onClick={() => setActiveCategory(cat.value)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 border cursor-pointer ${
+                role="tab"
+                aria-selected={isSelected}
+                tabIndex={0}
+                className={`relative px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors duration-200 flex items-center gap-2 border cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
                   isSelected
-                    ? 'bg-amber-500 text-black border-amber-500 shadow-lg shadow-amber-500/25 font-bold'
+                    ? 'text-black font-bold border-amber-500 shadow-lg shadow-amber-500/25'
                     : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
                 }`}
               >
-                <span>{cat.label}</span>
+                {isSelected && (
+                  <motion.span
+                    layoutId="project-tab-pill"
+                    transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    className="absolute inset-0 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 rounded-xl -z-10"
+                  />
+                )}
+                <span className="relative z-10">{cat.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-black/20 text-black font-mono' : 'bg-zinc-800 text-zinc-400 font-mono'
+                  className={`relative z-10 text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isSelected ? 'bg-black/20 text-black font-mono font-bold' : 'bg-zinc-800 text-zinc-400 font-mono'
                   }`}
                 >
                   {count}
@@ -167,21 +178,34 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
           })}
         </div>
 
-        {/* Projects Grid */}
+        {/* Projects Grid with smooth transition */}
         {filteredProjects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                isOwnerMode={isOwnerMode}
-                onOpenModal={onOpenModal}
-                onPlayInReel={onPlayInReel}
-                onEdit={onEditProject}
-                onDelete={onDeleteProject}
-              />
-            ))}
-          </div>
+          <motion.div 
+            layout
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
+            <AnimatePresence mode="popLayout">
+              {filteredProjects.map((project) => (
+                <motion.div
+                  key={project.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <ProjectCard
+                    project={project}
+                    isOwnerMode={isOwnerMode}
+                    onOpenModal={onOpenModal}
+                    onPlayInReel={onPlayInReel}
+                    onEdit={onEditProject}
+                    onDelete={onDeleteProject}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
         ) : (
           <div className="py-16 text-center rounded-2xl bg-zinc-900/40 border border-zinc-800/80 p-8">
             <p className="text-zinc-400 text-sm">No projects matched your search criteria.</p>

@@ -68,7 +68,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
   ];
 
   return (
-    <section id="about" className="py-10 sm:py-12 md:py-14 relative bg-[#070709] border-t border-zinc-800/80">
+    <section id="about" className="pt-20 sm:pt-24 pb-10 sm:pb-12 relative bg-[#070709]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (

@@ -1881,6 +1881,34 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                    ArtStation Profile URL
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.artstationUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, artstationUrl: e.target.value })}
+                    placeholder="https://artstation.com/..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                    WhatsApp Chat URL / Number
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.whatsappUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, whatsappUrl: e.target.value })}
+                    placeholder="https://wa.me/918072647909"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"

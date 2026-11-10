@@ -87,7 +87,7 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 text-zinc-400">
+          <div className="flex flex-wrap items-center justify-center gap-5 text-zinc-400">
             <button onClick={() => onNavigate('hero')} className="hover:text-amber-400 transition-colors cursor-pointer">
               Home
             </button>
@@ -106,6 +106,35 @@ export const Footer: React.FC<FooterProps> = ({
             <button onClick={() => onNavigate('contact')} className="hover:text-amber-400 transition-colors cursor-pointer">
               Contact
             </button>
+
+            {/* Direct Connected Profile Links */}
+            <div className="flex items-center gap-3 border-l border-zinc-800 pl-4 text-xs">
+              <a
+                href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-amber-400 transition-colors"
+              >
+                ArtStation ↗
+              </a>
+              <a
+                href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-sky-400 transition-colors"
+              >
+                LinkedIn ↗
+              </a>
+              <a
+                href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-emerald-400 transition-colors"
+              >
+                WhatsApp ↗
+              </a>
+            </div>
+
             <button
               onClick={onOpenOwnerAuth}
               className="flex items-center gap-1.5 transition-colors cursor-pointer text-zinc-500 hover:text-amber-400 border-l border-zinc-800 pl-4"
@@ -125,8 +154,13 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
           </div>
 
-          <div className="text-zinc-500 font-mono text-[11px] text-center md:text-right">
-            © {new Date().getFullYear()} Adhavan. Built with Unreal Engine & Autodesk Maya.
+          <div className="text-zinc-400 font-mono text-xs text-center md:text-right space-y-1">
+            <div className="text-zinc-300 font-medium">
+              © 2026 Adhavan · Game Designer & 3D Artist
+            </div>
+            <div className="text-[11px] text-zinc-500">
+              All rights reserved. Unreal Engine 5 & Autodesk Maya Showcase.
+            </div>
           </div>
         </div>
 

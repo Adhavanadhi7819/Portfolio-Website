@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Menu, X, Mail, Lock, Unlock } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
-
 import { PortfolioSectionConfig } from '../types/portfolio';
 
 interface NavbarProps {
+  activeTab?: string;
+  onSelectTab?: (tabId: string) => void;
   onWatchReelClick?: () => void;
   onNavigate: (sectionId: string) => void;
   isOwnerMode: boolean;
@@ -14,6 +16,8 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
+  activeTab: propActiveTab,
+  onSelectTab,
   onNavigate,
   isOwnerMode,
   onOpenOwnerAuth,
@@ -22,14 +26,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  const [localActiveTab, setLocalActiveTab] = useState<string>('hero');
+  const currentTab = propActiveTab || localActiveTab;
 
   // Exact requested 5 tabs: Home, Work, About, Resume, Contact
   const defaultTabs = [
@@ -47,7 +45,33 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navLinks = [...defaultTabs, ...customSections];
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+
+      const tabIds = navLinks.map(l => l.id);
+      const scrollPos = window.scrollY + 180;
+      let current = tabIds[0];
+      for (const id of tabIds) {
+        const el = document.getElementById(id);
+        if (el) {
+          const top = el.offsetTop;
+          if (scrollPos >= top) {
+            current = id;
+          }
+        }
+      }
+      setLocalActiveTab(current);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [navLinks]);
+
   const handleLinkClick = (id: string) => {
+    setLocalActiveTab(id);
+    onSelectTab?.(id);
     setMobileMenuOpen(false);
     onNavigate(id);
   };
@@ -65,17 +89,32 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           
-          {/* Left: Tab Section (Home, Work, About, Resume, Contact) - No Name/Logo as requested */}
-          <nav className="flex items-center gap-1 sm:gap-2">
-            {navLinks.map((link) => (
-              <button
-                key={link.id}
-                onClick={() => handleLinkClick(link.id)}
-                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 hover:bg-zinc-800/60 rounded-xl transition-all cursor-pointer font-heading"
-              >
-                {link.label}
-              </button>
-            ))}
+          {/* Left: Tab Section (Home, Work, About, Resume, Contact) with smooth interactive gliding tab */}
+          <nav className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-zinc-950/40 border border-zinc-800/50 backdrop-blur-md" role="tablist">
+            {navLinks.map((link) => {
+              const isActive = currentTab === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => handleLinkClick(link.id)}
+                  tabIndex={0}
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`relative px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold uppercase tracking-wider rounded-xl transition-all cursor-pointer font-heading focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                    isActive ? 'text-black font-bold' : 'text-zinc-300 hover:text-amber-400 hover:bg-zinc-800/40'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="nav-active-pill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 rounded-xl shadow-lg shadow-amber-500/30"
+                    />
+                  )}
+                  <span className="relative z-10">{link.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* Right: Actions */}
@@ -89,6 +128,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="xs:hidden">Contact</span>
             </button>
 
+            {/* Mobile menu trigger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
+              aria-label="Toggle Navigation Menu"
+            >
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+
             {/* Owner Access Button */}
             <button
               onClick={onOpenOwnerAuth}
@@ -100,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title={isOwnerMode ? 'Owner Studio Mode Active - Click to Manage' : 'Owner Edit Access (Passcode required)'}
               aria-label={isOwnerMode ? 'Owner Mode Active' : 'Owner Login'}
             >
-              {isOwnerMode ? <Unlock className="w-3.5 h-3.5 text-amber-400" /> : <Lock className="w-3.5 h-3.5" />}
+              {isOwnerMode ? <Unlock className="w-3.5 h-3.5 text-amber-400" /> : <Lock className="w-3.5 h-3.5 text-zinc-400" />}
               <span className="hidden lg:inline">{isOwnerMode ? 'Owner' : 'Owner'}</span>
             </button>
           </div>
