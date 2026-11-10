@@ -1,0 +1,6 @@
+{
+  "name": "Adhavan - Game Designer Portfolio",
+  "description": "Cinematic 3D game design portfolio showcasing Unreal Engine environments, vehicle rigging, level design, and Autodesk Maya 3D models by Adhavan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

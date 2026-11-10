@@ -1,0 +1,401 @@
+import React, { useState } from 'react';
+import { 
+  Mail, 
+  Phone, 
+  Linkedin, 
+  Copy, 
+  Check, 
+  Send, 
+  Sparkles, 
+  MessageSquare,
+  ArrowRight,
+  ShieldCheck,
+  Edit3
+} from 'lucide-react';
+import { DESIGNER_INFO } from '../data/portfolioData';
+import { validateContactForm } from '../utils/portfolioLogic';
+import { ContactFormData, ContactFormErrors, DesignerInfo } from '../types/portfolio';
+
+interface ContactSectionProps {
+  designerInfo?: DesignerInfo;
+  isOwnerMode?: boolean;
+  onEditContact?: () => void;
+}
+
+export const ContactSection: React.FC<ContactSectionProps> = ({
+  designerInfo = DESIGNER_INFO,
+  isOwnerMode = false,
+  onEditContact
+}) => {
+  const info = designerInfo || DESIGNER_INFO;
+  const [formData, setFormData] = useState<ContactFormData>({
+    name: '',
+    email: '',
+    projectType: 'Game Studio Position',
+    message: ''
+  });
+
+  const [formErrors, setFormErrors] = useState<ContactFormErrors>({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => {
+      setCopiedField(null);
+    }, 2500);
+  };
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (formErrors[name as keyof ContactFormErrors]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = validateContactForm(formData);
+    if (!result.isValid) {
+      setFormErrors(result.errors);
+      return;
+    }
+
+    // Successfully validated
+    setIsSubmitted(true);
+    setFormErrors({});
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      projectType: 'Game Studio Position',
+      message: ''
+    });
+    setIsSubmitted(false);
+  };
+
+  return (
+    <section id="contact" className="py-24 relative bg-[#09090c] border-t border-zinc-800/80">
+      
+      {/* Background glow */}
+      <div className="absolute bottom-0 left-1/3 w-[600px] h-[400px] bg-amber-500/10 blur-[150px] rounded-full pointer-events-none"></div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+          <div className="max-w-3xl">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-2">
+              <Mail className="w-3.5 h-3.5 text-amber-400" />
+              <span>{info.contactBadge || 'Connect & Collaborate'}</span>
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
+              {info.contactHeading ? (
+                info.contactHeading
+              ) : (
+                <>GET IN <span className="text-amber-500">TOUCH</span></>
+              )}
+            </h2>
+            <div className="flex items-start gap-2 mt-2">
+              <p className="text-zinc-400 text-sm sm:text-base">
+                {info.contactSubheading || 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.'}
+              </p>
+              {isOwnerMode && (
+                <button
+                  onClick={onEditContact}
+                  className="p-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black transition-colors cursor-pointer shrink-0 mt-0.5"
+                  title="Edit contact text"
+                >
+                  <Edit3 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isOwnerMode && (
+            <button
+              onClick={onEditContact}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md shrink-0"
+              title="Edit email, phone, LinkedIn, heading, and subtitle"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Edit Contact Section & Text</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+          
+          {/* Left Column: Direct Verified Contact Cards from Slide */}
+          <div className="lg:col-span-5 space-y-6">
+            
+            <div className="space-y-4">
+              
+              {/* Email Card */}
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Mail className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
+                      Email Address
+                    </span>
+                    <a
+                      href={`mailto:${info.email}`}
+                      className="text-sm sm:text-base font-semibold text-white hover:text-amber-400 transition-colors break-all"
+                    >
+                      {info.email}
+                    </a>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => copyToClipboard(info.email, 'email')}
+                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  aria-label="Copy email address"
+                  title="Copy to clipboard"
+                >
+                  {copiedField === 'email' ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* Phone Card */}
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Phone className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
+                      Phone Number
+                    </span>
+                    <a
+                      href={`tel:${info.phone}`}
+                      className="text-sm sm:text-base font-semibold text-white hover:text-amber-400 transition-colors"
+                    >
+                      {info.phone}
+                    </a>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => copyToClipboard(info.phone, 'phone')}
+                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  aria-label="Copy phone number"
+                  title="Copy to clipboard"
+                >
+                  {copiedField === 'phone' ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* LinkedIn Card */}
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Linkedin className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider block">
+                      LinkedIn Profile
+                    </span>
+                    <span className="text-sm sm:text-base font-semibold text-white">
+                      {info.linkedin}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => copyToClipboard(info.linkedin, 'linkedin')}
+                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  aria-label="Copy LinkedIn username"
+                  title="Copy to clipboard"
+                >
+                  {copiedField === 'linkedin' ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Video Slide Visual Reference Staging */}
+            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/90 overflow-hidden relative">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
+                  Showcase Stills from Get In Touch Slide:
+                </span>
+                {isOwnerMode && (
+                  <button
+                    onClick={onEditContact}
+                    className="p-1 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                    title="Change Slide Photo URL"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    <span className="text-[10px]">Edit Photo</span>
+                  </button>
+                )}
+              </div>
+              <div className="relative aspect-[16/9] rounded-xl overflow-hidden border border-zinc-800">
+                <img
+                  src={info.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
+                  alt="Get In Touch Slide Showcase"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* Right Column: Interactive Inquiry Form */}
+          <div className="lg:col-span-7">
+            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl relative">
+              
+              <div className="border-b border-zinc-800 pb-4 mb-6">
+                <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold">
+                  Send Direct Inquiry
+                </span>
+                <h3 className="text-2xl font-heading font-black text-white mt-1">
+                  Message Adhavan
+                </h3>
+              </div>
+
+              {isSubmitted ? (
+                <div className="py-12 text-center space-y-4 animate-in fade-in duration-300">
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
+                    <ShieldCheck className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-xl font-bold text-white">Thank You For Your Message!</h4>
+                  <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
+                    Your inquiry has been received. You can also reach out directly via email at <strong className="text-amber-400">{info.email}</strong> or call <strong className="text-amber-400">{info.phone}</strong>.
+                  </p>
+                  <button
+                    onClick={resetForm}
+                    className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Send Another Message
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Name */}
+                    <div>
+                      <label htmlFor="name" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                        Your Name *
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Alex Mercer"
+                        className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                          formErrors.name ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
+                        }`}
+                      />
+                      {formErrors.name && (
+                        <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>
+                      )}
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label htmlFor="email" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                        Your Email *
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="e.g. alex@gamestudio.com"
+                        className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                          formErrors.email ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
+                        }`}
+                      />
+                      {formErrors.email && (
+                        <p className="text-xs text-red-400 mt-1">{formErrors.email}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Project Type */}
+                  <div>
+                    <label htmlFor="projectType" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                      Subject / Opportunity Type
+                    </label>
+                    <select
+                      id="projectType"
+                      name="projectType"
+                      value={formData.projectType}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    >
+                      <option value="Game Studio Position">Game Studio Role (Level Designer / Unreal Dev)</option>
+                      <option value="Freelance Environment Contract">Freelance Environment / Level Design Project</option>
+                      <option value="Vehicle Rigging & Mechanix">Vehicle Rigging & Physics Consultation</option>
+                      <option value="Maya 3D Modeling Request">3D Modeling Asset Request</option>
+                      <option value="General Inquiries">Other Inquiries / Mentorship</option>
+                    </select>
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <label htmlFor="message" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                      Your Message *
+                    </label>
+                    <textarea
+                      id="message"
+                      name="message"
+                      rows={4}
+                      value={formData.message}
+                      onChange={handleInputChange}
+                      placeholder="Tell me about the role, project scope, or level design challenges you'd like to collaborate on..."
+                      className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors resize-none ${
+                        formErrors.message ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
+                      }`}
+                    />
+                    {formErrors.message && (
+                      <p className="text-xs text-red-400 mt-1">{formErrors.message}</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold uppercase tracking-wider text-xs shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4"
+                  >
+                    <Send className="w-4 h-4 fill-black text-black" />
+                    <span>Send Message to Adhavan</span>
+                  </button>
+
+                </form>
+              )}
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+  );
+};
