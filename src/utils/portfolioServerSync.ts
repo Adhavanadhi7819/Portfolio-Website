@@ -201,29 +201,106 @@ export async function submitContactMessage(payload: {
   deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
   deliveryNote: string;
 }> {
-  const res = await fetch('/api/contact', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    id?: string;
-    recipientEmail?: string;
-    deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
-    deliveryNote?: string;
-    error?: string;
-  };
-  if (!res.ok || !data.ok) {
-    throw new Error(data.error || 'Could not send message. Please try again.');
+  const recipientEmail = (payload.recipientEmail || 'prabuprabu906@gmail.com').trim();
+
+  // 1. Primary path: Express backend (persists to Owner Inbox + dispatches email server-side)
+  try {
+    const res = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, recipientEmail })
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson
+      ? ((await res.json().catch(() => null)) as {
+          ok?: boolean;
+          id?: string;
+          recipientEmail?: string;
+          deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+          deliveryNote?: string;
+          error?: string;
+        } | null)
+      : null;
+
+    if (res.ok && data?.ok) {
+      return {
+        ok: true,
+        id: data.id || '',
+        recipientEmail: data.recipientEmail || recipientEmail,
+        deliveryStatus: data.deliveryStatus || 'stored_only',
+        deliveryNote: data.deliveryNote || ''
+      };
+    }
+
+    // Surface explicit validation / rate-limit errors directly from server
+    if (isJson && data?.error && (res.status === 400 || res.status === 429)) {
+      throw new Error(data.error);
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      !err.message.includes('Failed to fetch') &&
+      !err.message.includes('NetworkError') &&
+      !err.message.includes('Load failed') &&
+      err.name !== 'TypeError'
+    ) {
+      throw err;
+    }
   }
-  return {
-    ok: true,
-    id: data.id || '',
-    recipientEmail: data.recipientEmail || payload.recipientEmail || '',
-    deliveryStatus: data.deliveryStatus || 'stored_only',
-    deliveryNote: data.deliveryNote || ''
+
+  // 2. Fallback path: Direct HTTPS FormSubmit relay from browser if /api/contact returned HTML/404 or network error
+  const relayRes = await fetch(
+    `https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        name: payload.name,
+        email: payload.email,
+        _replyto: payload.email,
+        _subject: `Portfolio Inquiry (${payload.projectType}) — from ${payload.name}`,
+        Project_Focus: payload.projectType,
+        message: payload.message,
+        _template: 'table',
+        _captcha: 'false'
+      })
+    }
+  );
+
+  const relayData = (await relayRes.json().catch(() => ({}))) as {
+    success?: boolean | string;
+    message?: string;
   };
+
+  if (relayRes.ok && (relayData.success === true || relayData.success === 'true')) {
+    return {
+      ok: true,
+      id: `direct_${Date.now()}`,
+      recipientEmail,
+      deliveryStatus: 'sent',
+      deliveryNote: `Email forwarded to ${recipientEmail}`
+    };
+  }
+
+  if (String(relayData.message || '').toLowerCase().includes('activat')) {
+    return {
+      ok: true,
+      id: `direct_${Date.now()}`,
+      recipientEmail,
+      deliveryStatus: 'activation_pending',
+      deliveryNote: `One-time activation email sent to ${recipientEmail}. Click "Activate Form" in your inbox to enable future messages.`
+    };
+  }
+
+  throw new Error(
+    relayData.message ||
+      'Unable to deliver message right now. Please try again or email directly.'
+  );
 }
 
 export async function fetchOwnerMessages(): Promise<{

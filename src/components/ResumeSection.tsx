@@ -55,8 +55,26 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
   const [pageImages, setPageImages] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!src) {
+      setStatus('error');
+      setPageImages([]);
+      return;
+    }
+
     let cancelled = false;
     let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+    let activeRenderTask: pdfjsLib.RenderTask | null = null;
+
+    const isCancellationError = (err: unknown) => {
+      if (cancelled) return true;
+      if (!(err instanceof Error)) return false;
+      return (
+        err.name === 'RenderingCancelledException' ||
+        err.name === 'AbortException' ||
+        err.message.toLowerCase().includes('rendering cancelled') ||
+        err.message.toLowerCase().includes('worker was destroyed')
+      );
+    };
 
     const renderPdf = async () => {
       setStatus('loading');
@@ -97,12 +115,14 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          await page.render({
+          activeRenderTask = page.render({
             canvasContext: ctx,
             viewport,
             canvas,
             background: 'rgb(255, 255, 255)'
-          }).promise;
+          });
+          await activeRenderTask.promise;
+          activeRenderTask = null;
 
           if (cancelled) return;
           renderedPages.push(canvas.toDataURL('image/png'));
@@ -113,6 +133,9 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
           setStatus(renderedPages.length > 0 ? 'ready' : 'error');
         }
       } catch (err) {
+        if (isCancellationError(err)) {
+          return;
+        }
         console.error('PDF preview render failed:', err);
         if (!cancelled) {
           setStatus('error');
@@ -124,11 +147,16 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
 
     return () => {
       cancelled = true;
+      try {
+        activeRenderTask?.cancel();
+      } catch {
+        // Ignore expected render task cancellation errors
+      }
       if (loadingTask) {
         loadingTask.destroy().catch(() => {});
       }
     };
-  }, [src, fileName]);
+  }, [src]);
 
   return (
     <div ref={containerRef} className="bg-zinc-950/90 p-3 sm:p-4 space-y-3">

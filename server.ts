@@ -2,11 +2,26 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_DIR = path.resolve(process.cwd(), 'portfolio-data');
+
+function resolveWritableDataDir(): string {
+  const preferred = path.resolve(process.cwd(), 'portfolio-data');
+  try {
+    fs.mkdirSync(path.join(preferred, 'assets'), { recursive: true });
+    fs.accessSync(preferred, fs.constants.W_OK);
+    return preferred;
+  } catch {
+    const fallback = path.join(os.tmpdir(), 'adhavan-portfolio-data');
+    fs.mkdirSync(path.join(fallback, 'assets'), { recursive: true });
+    return fallback;
+  }
+}
+
+const DATA_DIR = resolveWritableDataDir();
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
@@ -996,6 +1011,22 @@ async function startServer(): Promise<void> {
       deliveryStatus: result.status,
       deliveryNote: result.note
     });
+  });
+
+  app.all('/api/*', (_req: Request, res: Response) => {
+    res.status(404).json({ ok: false, error: 'API endpoint not found.' });
+  });
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api/')) {
+      console.error('Unhandled API error:', err);
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Internal server error'
+      });
+      return;
+    }
+    next(err);
   });
 
   // --- Frontend Mounting (Vite Dev vs Production Dist) ---
