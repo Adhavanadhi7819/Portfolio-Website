@@ -17,7 +17,7 @@ import {
 import { ProjectItem, DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
-import { createVideoBlobUrl } from '../utils/fileHelpers';
+import { uploadVideoAsset } from '../utils/fileHelpers';
 
 interface FlagshipGameFeatureProps {
   flagshipProject?: ProjectItem;
@@ -93,10 +93,16 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
     setTimeout(() => setLinkSavedToast(false), 2500);
   };
 
-  const handleBuildVideoUpload = (file: File) => {
-    const videoUrl = createVideoBlobUrl(file);
-    setVideoUrlDraft(videoUrl);
-    onUpdateDesignerInfo?.({ flagshipVideoUrl: videoUrl });
+  const handleBuildVideoUpload = async (file: File) => {
+    try {
+      const videoUrl = await uploadVideoAsset(file);
+      setVideoUrlDraft(videoUrl);
+      onUpdateDesignerInfo?.({ flagshipVideoUrl: videoUrl });
+      setLinkSavedToast(true);
+      setTimeout(() => setLinkSavedToast(false), 2500);
+    } catch (err) {
+      console.error('Gameplay video upload failed:', err);
+    }
   };
 
   const handleUpdateSpecRow = (idx: number, field: 'label' | 'value', val: string) => {

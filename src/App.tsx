@@ -48,6 +48,14 @@ import {
   removeSection,
   updateSectionConfig
 } from './utils/portfolioLogic';
+import {
+  fetchServerAuthStatus,
+  fetchServerPortfolio,
+  saveServerPortfolio,
+  resetServerPortfolio,
+  logoutOwnerServer,
+  subscribeToPortfolioUpdates
+} from './utils/portfolioServerSync';
 
 export default function App() {
   const reelRef = useRef<VideoReelRef>(null);
@@ -213,6 +221,13 @@ export default function App() {
   );
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const serverVersionRef = useRef<number>(0);
+  const isServerHydratedRef = useRef<boolean>(false);
+  const lastSavedSignatureRef = useRef<string>('');
+  const activeSyncPromiseRef = useRef<Promise<boolean> | null>(null);
+  const hasPendingSaveRef = useRef<boolean>(false);
 
   const hasUnsavedOwnerChanges = useMemo(() => {
     if (!isOwnerMode || ownerSessionSnapshot === null) return false;
@@ -368,6 +383,214 @@ export default function App() {
     );
   }, [portfolioState, activePortfolioId]);
 
+  // Helper to apply canonical server payload without echoing back an extra save
+  const applyServerPayload = (
+    serverPortfolios: PortfolioProfile[],
+    serverActiveId: string,
+    version: number
+  ) => {
+    const resolvedActiveId =
+      serverPortfolios.some((p) => p.id === serverActiveId)
+        ? serverActiveId
+        : serverPortfolios[0]?.id || 'default_portfolio';
+    const activeProfile =
+      serverPortfolios.find((p) => p.id === resolvedActiveId) || serverPortfolios[0];
+    if (!activeProfile?.state) return;
+
+    const normalizedState: PortfolioState = {
+      ...activeProfile.state,
+      sections:
+        Array.isArray(activeProfile.state.sections) && activeProfile.state.sections.length > 0
+          ? activeProfile.state.sections
+          : DEFAULT_PORTFOLIO_SECTIONS
+    };
+
+    const sig = JSON.stringify({
+      activePortfolioId: resolvedActiveId,
+      state: normalizedState,
+      portfolioIds: serverPortfolios.map((p) => ({ id: p.id, name: p.name, subtitle: p.subtitle }))
+    });
+
+    serverVersionRef.current = version;
+    lastSavedSignatureRef.current = sig;
+    setPortfolios(serverPortfolios);
+    setActivePortfolioId(resolvedActiveId);
+    setPortfolioState(normalizedState);
+  };
+
+  // Push current state & vault to persistent server
+  const pushStateToServer = async (
+    nextPortfolios: PortfolioProfile[],
+    nextActiveId: string
+  ): Promise<boolean> => {
+    if (activeSyncPromiseRef.current) {
+      await activeSyncPromiseRef.current.catch(() => false);
+    }
+
+    const runSave = async (): Promise<boolean> => {
+      setSyncStatus('saving');
+      try {
+        const saved = await saveServerPortfolio({
+          activePortfolioId: nextActiveId,
+          portfolios: nextPortfolios
+        });
+        if (saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0) {
+          const hadDataUrls = JSON.stringify(nextPortfolios).includes('data:');
+          const nextVersion = saved.version ?? serverVersionRef.current + 1;
+          serverVersionRef.current = nextVersion;
+          if (hadDataUrls) {
+            applyServerPayload(
+              saved.portfolios,
+              saved.activePortfolioId || nextActiveId,
+              nextVersion
+            );
+          }
+        }
+        setSyncStatus('saved');
+        return true;
+      } catch (err) {
+        console.error('Failed to sync portfolio to server:', err);
+        setSyncStatus('error');
+        return false;
+      } finally {
+        hasPendingSaveRef.current = false;
+        activeSyncPromiseRef.current = null;
+      }
+    };
+
+    const promise = runSave();
+    activeSyncPromiseRef.current = promise;
+    return promise;
+  };
+
+  // Initial server hydration + auth status verification + live SSE sync across all devices
+  useEffect(() => {
+    let active = true;
+
+    const hydrateFromServer = async () => {
+      try {
+        const [authStatus, serverData] = await Promise.all([
+          fetchServerAuthStatus().catch(() => null),
+          fetchServerPortfolio().catch(() => null)
+        ]);
+        if (!active) return;
+
+        if (authStatus && !authStatus.isAuthenticated && isOwnerMode) {
+          setIsOwnerMode(false);
+          setOwnerSessionSnapshot(null);
+          try {
+            localStorage.setItem('adhavan_portfolio_owner_auth', 'false');
+          } catch {}
+        }
+
+        if (
+          serverData?.initialized &&
+          Array.isArray(serverData.portfolios) &&
+          serverData.portfolios.length > 0
+        ) {
+          applyServerPayload(
+            serverData.portfolios,
+            serverData.activePortfolioId || 'default_portfolio',
+            serverData.version || 1
+          );
+          if (authStatus?.isAuthenticated) {
+            const activeP =
+              serverData.portfolios.find(
+                (p) => p.id === (serverData.activePortfolioId || 'default_portfolio')
+              ) || serverData.portfolios[0];
+            if (activeP?.state) {
+              setOwnerSessionSnapshot(JSON.stringify(activeP.state));
+            }
+          }
+          setSyncStatus('saved');
+        } else if (authStatus?.isAuthenticated) {
+          // Server not initialized yet, seed it immediately with current state (including any local edits/resume)
+          const seededPortfolios = portfolios.map((p) =>
+            p.id === activePortfolioId ? { ...p, state: portfolioState } : p
+          );
+          await pushStateToServer(seededPortfolios, activePortfolioId);
+        }
+      } finally {
+        if (active) {
+          isServerHydratedRef.current = true;
+        }
+      }
+    };
+
+    hydrateFromServer();
+
+    const syncLatestIfNewer = async () => {
+      if (activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
+      try {
+        const serverData = await fetchServerPortfolio();
+        if (!active || activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
+        if (
+          serverData.initialized &&
+          Array.isArray(serverData.portfolios) &&
+          serverData.portfolios.length > 0 &&
+          typeof serverData.version === 'number' &&
+          serverData.version > serverVersionRef.current
+        ) {
+          applyServerPayload(
+            serverData.portfolios,
+            serverData.activePortfolioId || 'default_portfolio',
+            serverData.version
+          );
+        }
+      } catch {}
+    };
+
+    const unsubscribeSse = subscribeToPortfolioUpdates(({ version }) => {
+      if (version > serverVersionRef.current && !activeSyncPromiseRef.current && !hasPendingSaveRef.current) {
+        syncLatestIfNewer();
+      }
+    });
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncLatestIfNewer();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      active = false;
+      unsubscribeSse();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced auto-save to server whenever Owner makes edits
+  useEffect(() => {
+    if (!isOwnerMode || !isServerHydratedRef.current) return;
+
+    const mergedPortfolios = portfolios.map((p) =>
+      p.id === activePortfolioId
+        ? { ...p, state: portfolioState, updatedAt: new Date().toISOString() }
+        : p
+    );
+
+    const sig = JSON.stringify({
+      activePortfolioId,
+      state: portfolioState,
+      portfolioIds: mergedPortfolios.map((p) => ({ id: p.id, name: p.name, subtitle: p.subtitle }))
+    });
+
+    if (sig === lastSavedSignatureRef.current) return;
+
+    hasPendingSaveRef.current = true;
+    const timer = window.setTimeout(async () => {
+      lastSavedSignatureRef.current = sig;
+      await pushStateToServer(mergedPortfolios, activePortfolioId);
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwnerMode, portfolioState, portfolios, activePortfolioId]);
+
   const handleSwitchPortfolio = (portfolioId: string) => {
     const target = portfolios.find(p => p.id === portfolioId);
     if (target && target.state) {
@@ -429,6 +652,13 @@ export default function App() {
       } catch {
         setOwnerSessionSnapshot(null);
       }
+      // If server hasn't been initialized yet, immediately publish current state & assets on unlock
+      if (serverVersionRef.current === 0) {
+        const merged = portfolios.map((p) =>
+          p.id === activePortfolioId ? { ...p, state: portfolioState } : p
+        );
+        void pushStateToServer(merged, activePortfolioId);
+      }
     } else {
       setOwnerSessionSnapshot(null);
       setIsExitConfirmOpen(false);
@@ -443,31 +673,54 @@ export default function App() {
     if (hasUnsavedOwnerChanges) {
       setIsExitConfirmOpen(true);
     } else {
+      void logoutOwnerServer();
       handleSetOwnerMode(false);
     }
   };
 
-  const handleSaveAndExitOwnerMode = () => {
+  const handleSaveAndExitOwnerMode = async () => {
+    const mergedPortfolios = portfolios.map((p) =>
+      p.id === activePortfolioId
+        ? { ...p, state: portfolioState, updatedAt: new Date().toISOString() }
+        : p
+    );
     try {
       localStorage.setItem('adhavan_portfolio_state_v1', JSON.stringify(portfolioState));
-      localStorage.setItem('adhavan_portfolios_vault_v1', JSON.stringify(portfolios));
+      localStorage.setItem('adhavan_portfolios_vault_v1', JSON.stringify(mergedPortfolios));
     } catch (e) {
-      console.error('Failed to persist portfolio changes', e);
+      console.error('Failed to persist local portfolio backup', e);
     }
+
+    const ok = await pushStateToServer(mergedPortfolios, activePortfolioId);
+    if (!ok) {
+      setSaveToast('Could not save to server · Please re-verify 2FA and retry');
+      setIsExitConfirmOpen(false);
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    await logoutOwnerServer();
     handleSetOwnerMode(false);
-    setSaveToast('Changes saved · Owner Mode closed');
+    setSaveToast('Changes saved & live across all devices · Owner Mode closed');
   };
 
-  const handleDiscardAndExitOwnerMode = () => {
+  const handleDiscardAndExitOwnerMode = async () => {
     if (ownerSessionSnapshot) {
       try {
         const restored = JSON.parse(ownerSessionSnapshot) as PortfolioState;
+        const merged = portfolios.map((p) =>
+          p.id === activePortfolioId
+            ? { ...p, state: restored, updatedAt: new Date().toISOString() }
+            : p
+        );
         setPortfolioState(restored);
         localStorage.setItem('adhavan_portfolio_state_v1', ownerSessionSnapshot);
+        await pushStateToServer(merged, activePortfolioId);
       } catch (e) {
         console.error('Failed to restore pre-session snapshot', e);
       }
     }
+    await logoutOwnerServer();
     handleSetOwnerMode(false);
     setSaveToast('Unsaved changes discarded · Owner Mode closed');
   };
@@ -691,12 +944,18 @@ export default function App() {
     setPortfolioState(newState);
   };
 
-  const handleResetDefaults = () => {
-    if (window.confirm('Reset portfolio to original default showcases and information? Custom changes will be reset.')) {
+  const handleResetDefaults = async () => {
+    if (window.confirm('Reset portfolio to original default showcases and information? Custom changes will be reset across all devices.')) {
       setPortfolioState(INITIAL_PORTFOLIO_STATE);
       try {
         localStorage.removeItem('adhavan_portfolio_state_v1');
       } catch {}
+      try {
+        await resetServerPortfolio(INITIAL_PORTFOLIO_STATE);
+        setSaveToast('Portfolio reset to defaults across all devices');
+      } catch (err) {
+        console.error('Server reset failed:', err);
+      }
     }
   };
 
@@ -824,6 +1083,7 @@ export default function App() {
           onLockMode={handleRequestCloseOwnerMode}
           onOpenSecurity={() => setIsAuthModalOpen(true)}
           hasUnsavedChanges={hasUnsavedOwnerChanges}
+          syncStatus={syncStatus}
         />
       )}
 

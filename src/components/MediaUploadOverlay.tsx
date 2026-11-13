@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Upload, Video, Link, Check, X, RefreshCw } from 'lucide-react';
-import { compressImageFile, createVideoBlobUrl } from '../utils/fileHelpers';
+import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
 
 interface MediaUploadOverlayProps {
   currentUrl?: string;
@@ -39,16 +39,19 @@ export const MediaUploadOverlay: React.FC<MediaUploadOverlayProps> = ({
       setIsUploading(true);
       setErrorMessage(null);
       if (mediaType === 'image') {
-        const compressed = await compressImageFile(file);
-        onMediaUploaded(compressed);
+        const assetUrl = await uploadImageAsset(file);
+        onMediaUploaded(assetUrl);
       } else {
-        // High-performance video object URL
-        const videoBlobUrl = createVideoBlobUrl(file);
-        onMediaUploaded(videoBlobUrl);
+        const assetUrl = await uploadVideoAsset(file);
+        onMediaUploaded(assetUrl);
       }
     } catch (err) {
       console.error('Failed to upload media file:', err);
-      setErrorMessage(`Could not process this file. Please select a valid ${mediaType} file.`);
+      const msg =
+        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+          ? 'Session expired. Unlock Owner Mode with 2FA to upload files.'
+          : `Could not upload this ${mediaType} file. Please try again.`;
+      setErrorMessage(msg);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

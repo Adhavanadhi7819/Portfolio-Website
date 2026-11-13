@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { TimelineMilestone } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
-import { compressImageFile } from '../utils/fileHelpers';
+import { uploadImageAsset } from '../utils/fileHelpers';
 
 interface CareerTimelineChartProps {
   timeline?: TimelineMilestone[];
@@ -134,16 +134,20 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
     setUploadingId(milestoneId);
     setUploadError(null);
     try {
-      const compressedUrl = await compressImageFile(file, 1200, 900, 0.78);
+      const assetUrl = await uploadImageAsset(file, 1200, 900, 0.8);
       handleUpdateMilestone(milestoneId, {
-        photoUrl: compressedUrl,
+        photoUrl: assetUrl,
         photoCaption:
           currentTimeline.find((m) => m.id === milestoneId)?.photoCaption ||
           file.name.replace(/\.[^.]+$/, '')
       });
     } catch (err) {
       console.error('Failed to upload milestone photo:', err);
-      setUploadError('Could not process image file. Please try another JPG, PNG, or WebP.');
+      setUploadError(
+        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+          ? 'Owner session expired. Re-verify 2FA to upload images.'
+          : 'Could not upload image file. Please try another JPG, PNG, or WebP.'
+      );
     } finally {
       setUploadingId(null);
     }

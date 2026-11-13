@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Edit3
 } from 'lucide-react';
+import { uploadDocumentAsset } from '../utils/fileHelpers';
 import { 
   ProjectItem, 
   ProjectCategory, 
@@ -1835,35 +1836,28 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                         type="file"
                         accept=".pdf,.docx,.doc,application/pdf"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            const dataUrl = reader.result as string;
-                            const k = 1024;
-                            const sizes = ['Bytes', 'KB', 'MB'];
-                            const i = file.size > 0 ? Math.floor(Math.log(file.size) / Math.log(k)) : 0;
-                            const formattedSize =
-                              file.size > 0
-                                ? parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-                                : 'Ready';
+                          e.target.value = '';
+                          try {
+                            const uploaded = await uploadDocumentAsset(file);
                             const nextFields = {
-                              resumePdfUrl: dataUrl,
-                              resumeFileName: file.name,
+                              resumePdfUrl: uploaded.url,
+                              resumeFileName: uploaded.fileName,
                               resumeUploadDate: new Date().toLocaleDateString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
                                 year: 'numeric'
                               }),
-                              resumeFileSize: formattedSize
+                              resumeFileSize: uploaded.fileSize
                             };
                             setBioForm((prev) => ({ ...prev, ...nextFields }));
                             onSaveDesignerInfo(nextFields);
-                            triggerSuccess(`Uploaded "${file.name}" for visitors to download!`);
-                          };
-                          reader.readAsDataURL(file);
-                          e.target.value = '';
+                            triggerSuccess(`Uploaded "${uploaded.fileName}" for visitors to download!`);
+                          } catch (err) {
+                            console.error('Resume upload failed:', err);
+                          }
                         }}
                       />
                     </label>

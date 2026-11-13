@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Unlock, X, QrCode, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import QRCode from 'qrcode';
+import { getTotpSecondsRemaining } from '../utils/totp';
 import {
-  OWNER_TOTP_SECRET,
-  buildOtpAuthUri,
-  verifyTotpCode,
-  getTotpSecondsRemaining
-} from '../utils/totp';
+  fetchServerAuthStatus,
+  verifyOwnerTotpWithServer
+} from '../utils/portfolioServerSync';
 
 interface OwnerAuthModalProps {
   isOpen: boolean;
@@ -16,21 +15,6 @@ interface OwnerAuthModalProps {
   onUpdatePasscode?: (newPasscode: string) => void;
   isAlreadyOwner: boolean;
   onLockOwnerMode: () => void;
-}
-
-const PAIRING_STORAGE_KEY = 'adhavan_owner_2fa_paired_v1';
-
-function isStudioPreviewHost(): boolean {
-  try {
-    const host = window.location.hostname;
-    return (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host.startsWith('ais-dev-')
-    );
-  } catch {
-    return false;
-  }
 }
 
 export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
@@ -44,35 +28,42 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [otpauthUri, setOtpauthUri] = useState<string | null>(null);
+  const [canShowFirstTimeSetup, setCanShowFirstTimeSetup] = useState(false);
   const [showSetupQr, setShowSetupQr] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(() => getTotpSecondsRemaining());
 
-  const [isPaired, setIsPaired] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(PAIRING_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  // One-time QR setup is only exposed on the unauthenticated modal in dev/studio preview BEFORE pairing.
-  // On any deployed/public host or once paired, only the 6-digit 2FA verification is ever shown.
-  const canShowFirstTimeSetup = !isAlreadyOwner && !isPaired && isStudioPreviewHost();
-
   useEffect(() => {
     if (!isOpen) return;
+    let active = true;
     setError('');
     setTotpCode('');
+    setShowSetupQr(false);
+
+    fetchServerAuthStatus()
+      .then((status) => {
+        if (!active) return;
+        setCanShowFirstTimeSetup(!isAlreadyOwner && status.canShowInitialSetupQr);
+        setOtpauthUri(status.otpauthUri || null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCanShowFirstTimeSetup(false);
+        setOtpauthUri(null);
+      });
+
     const tick = setInterval(() => {
       setSecondsLeft(getTotpSecondsRemaining());
     }, 1000);
-    return () => clearInterval(tick);
-  }, [isOpen]);
+    return () => {
+      active = false;
+      clearInterval(tick);
+    };
+  }, [isOpen, isAlreadyOwner]);
 
   useEffect(() => {
-    if (!isOpen || (!showSetupQr && !isAlreadyOwner)) return;
-    const uri = buildOtpAuthUri(OWNER_TOTP_SECRET);
-    QRCode.toDataURL(uri, {
+    if (!isOpen || !otpauthUri || (!showSetupQr && !isAlreadyOwner)) return;
+    QRCode.toDataURL(otpauthUri, {
       width: 220,
       margin: 2,
       color: {
@@ -82,7 +73,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     })
       .then(setQrDataUrl)
       .catch((err) => console.error('Failed to render 2FA QR code:', err));
-  }, [isOpen, showSetupQr, isAlreadyOwner]);
+  }, [isOpen, otpauthUri, showSetupQr, isAlreadyOwner]);
 
   if (!isOpen) return null;
 
@@ -97,21 +88,19 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     setIsVerifying(true);
     setError('');
     try {
-      const valid = await verifyTotpCode(OWNER_TOTP_SECRET, cleaned);
-      if (valid) {
-        try {
-          localStorage.setItem(PAIRING_STORAGE_KEY, 'true');
-        } catch {}
-        setIsPaired(true);
+      const result = await verifyOwnerTotpWithServer(cleaned);
+      if (result.ok) {
+        if (result.otpauthUri) setOtpauthUri(result.otpauthUri);
+        setCanShowFirstTimeSetup(false);
         setShowSetupQr(false);
         setTotpCode('');
         onSuccess();
         onClose();
       } else {
-        setError('Invalid or expired 2FA code. Check your Authenticator app and try again.');
+        setError(result.error || 'Invalid or expired 2FA code. Check your Authenticator app and try again.');
       }
     } catch {
-      setError('Verification failed. Please try again.');
+      setError('Verification failed. Please check your connection and try again.');
     } finally {
       setIsVerifying(false);
     }
@@ -153,7 +142,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           </h2>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
             {isAlreadyOwner
-              ? '2FA Authenticator security is active for Owner Mode. Scan the QR code if linking a new device or lock Owner Mode below.'
+              ? '2FA Authenticator security is active for Owner Mode. All edits automatically sync to the live website.'
               : 'Protected by Time-Based 2FA. Enter the 6-digit verification code from your Authenticator app.'}
           </p>
         </div>
@@ -163,24 +152,22 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-amber-400" />
               <span>
-                Authenticated as <strong>Adhavan</strong> with 2FA protection active.
+                Authenticated as <strong>Adhavan</strong> with 2FA server sync active.
               </span>
             </div>
 
-            {showSetupQr ? (
+            {showSetupQr && qrDataUrl ? (
               <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3 text-center">
                 <p className="text-xs font-mono text-zinc-300">
                   Scan once with Google Authenticator, Authy, or Microsoft Authenticator:
                 </p>
-                {qrDataUrl && (
-                  <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
-                    <img
-                      src={qrDataUrl}
-                      alt="2FA Authenticator QR Code"
-                      className="w-44 h-44 block"
-                    />
-                  </div>
-                )}
+                <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                  <img
+                    src={qrDataUrl}
+                    alt="2FA Authenticator QR Code"
+                    className="w-44 h-44 block"
+                  />
+                </div>
                 <p className="text-[11px] font-mono text-zinc-400">
                   Your 6-digit rolling code refreshes every 30s ({secondsLeft}s remaining).
                 </p>
@@ -217,7 +204,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleVerifyTotp} className="space-y-4">
-            {canShowFirstTimeSetup && !showSetupQr && (
+            {canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
               <div className="p-3 rounded-xl bg-zinc-900/70 border border-amber-500/30 flex items-center justify-between gap-3">
                 <div className="text-[11px] text-zinc-300 font-mono">
                   First time on this app? Scan the setup QR once.
@@ -233,7 +220,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
               </div>
             )}
 
-            {canShowFirstTimeSetup && showSetupQr && (
+            {canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
               <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
                 <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
                   One-Time Authenticator Pairing
@@ -243,15 +230,13 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
                   <strong>Authy</strong>, or <strong>Microsoft Authenticator</strong>, then enter the
                   6-digit code below to activate.
                 </p>
-                {qrDataUrl && (
-                  <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
-                    <img
-                      src={qrDataUrl}
-                      alt="Scan 2FA QR Code"
-                      className="w-44 h-44 block"
-                    />
-                  </div>
-                )}
+                <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                  <img
+                    src={qrDataUrl}
+                    alt="Scan 2FA QR Code"
+                    className="w-44 h-44 block"
+                  />
+                </div>
                 <div className="text-[10px] font-mono text-zinc-500">
                   After verification, this QR code stays hidden permanently.
                 </div>

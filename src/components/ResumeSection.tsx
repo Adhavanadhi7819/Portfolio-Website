@@ -7,6 +7,7 @@ import { DesignerInfo } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
+import { uploadDocumentAsset } from '../utils/fileHelpers';
 
 // Bind PDF.js worker in-bundle so preview works offline and inside nested iframes without worker fetch issues
 (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
@@ -188,6 +189,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   const info = designerInfo || DESIGNER_INFO;
   const [confirmRemovePdf, setConfirmRemovePdf] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [downloadBlobUrl, setDownloadBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -225,46 +227,41 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
     };
   }, [info.resumePdfUrl]);
 
-  const handleResumeFile = (file: File) => {
+  const handleResumeFile = async (file: File) => {
     try {
       setUploadError(null);
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB'];
-        const i = file.size > 0 ? Math.floor(Math.log(file.size) / Math.log(k)) : 0;
-        const formattedSize =
-          file.size > 0
-            ? parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-            : 'Ready';
-
-        onUpdateDesignerInfo?.({
-          resumePdfUrl: dataUrl,
-          resumeFileName: file.name,
-          resumeUploadDate: new Date().toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-          }),
-          resumeFileSize: formattedSize
-        });
-      };
-      reader.onerror = () => {
-        setUploadError('Could not read resume file. Please select a valid PDF, image, or DOCX.');
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      setUploadError('Could not process resume file. Please select a valid PDF, image, or DOCX.');
+      setIsUploadingResume(true);
+      const uploaded = await uploadDocumentAsset(file);
+      onUpdateDesignerInfo?.({
+        resumePdfUrl: uploaded.url,
+        resumeFileName: uploaded.fileName,
+        resumeUploadDate: new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        }),
+        resumeFileSize: uploaded.fileSize
+      });
+    } catch (err) {
+      console.error('Resume upload failed:', err);
+      setUploadError(
+        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+          ? 'Owner session expired. Re-verify 2FA to upload your resume to the server.'
+          : 'Could not upload resume file. Please select a valid PDF, image, or DOCX.'
+      );
+    } finally {
+      setIsUploadingResume(false);
     }
   };
 
   const isPdfDocument =
     Boolean(info.resumePdfUrl?.startsWith('data:application/pdf')) ||
+    Boolean(info.resumePdfUrl?.toLowerCase().endsWith('.pdf')) ||
     Boolean(info.resumeFileName?.toLowerCase().endsWith('.pdf'));
 
   const isImageDocument =
     Boolean(info.resumePdfUrl?.startsWith('data:image/')) ||
+    Boolean(/\.(png|jpe?g|webp)$/i.test(info.resumePdfUrl || '')) ||
     Boolean(/\.(png|jpe?g|webp)$/i.test(info.resumeFileName || ''));
 
   return (
@@ -374,12 +371,17 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
                       className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/40 text-xs font-mono font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                       title="Upload a new file to replace the current resume"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Replace File</span>
+                      {isUploadingResume ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isUploadingResume ? 'Uploading...' : 'Replace File'}</span>
                       <input
                         type="file"
                         accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
                         className="hidden"
+                        disabled={isUploadingResume}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) handleResumeFile(file);
@@ -465,12 +467,17 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               </p>
             </div>
             <label className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20">
-              <Upload className="w-4 h-4 stroke-[2.5]" />
-              <span>Choose Resume File (PDF / DOCX)</span>
+              {isUploadingResume ? (
+                <Loader2 className="w-4 h-4 stroke-[2.5] animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 stroke-[2.5]" />
+              )}
+              <span>{isUploadingResume ? 'Uploading Resume...' : 'Choose Resume File (PDF / DOCX)'}</span>
               <input
                 type="file"
                 accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
                 className="hidden"
+                disabled={isUploadingResume}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleResumeFile(file);

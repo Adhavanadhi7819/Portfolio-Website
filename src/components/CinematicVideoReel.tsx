@@ -21,6 +21,7 @@ import { VideoChapter, DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
+import { uploadVideoAsset } from '../utils/fileHelpers';
 
 export interface VideoReelRef {
   seekTo: (seconds: number) => void;
@@ -405,15 +406,20 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   type="file"
                   accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const objectUrl = URL.createObjectURL(file);
-                    onUploadVideo?.(objectUrl);
-                    setHasVideoError(false);
-                    setTimeout(() => {
-                      attemptPlay();
-                    }, 120);
+                    try {
+                      const assetUrl = await uploadVideoAsset(file);
+                      onUploadVideo?.(assetUrl);
+                      setHasVideoError(false);
+                      setTimeout(() => {
+                        attemptPlay();
+                      }, 120);
+                    } catch (err) {
+                      console.error('Reel video upload failed:', err);
+                    }
+                    e.target.value = '';
                   }}
                 />
               </label>

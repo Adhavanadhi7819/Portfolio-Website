@@ -31,6 +31,7 @@ interface OwnerAdminBarProps {
   onLockMode: () => void;
   onOpenSecurity?: () => void;
   hasUnsavedChanges?: boolean;
+  syncStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
@@ -46,7 +47,8 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onResetDefaults,
   onLockMode,
   onOpenSecurity,
-  hasUnsavedChanges = false
+  hasUnsavedChanges = false,
+  syncStatus = 'idle'
 }) => {
   return (
     <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
@@ -60,9 +62,15 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
               OWNER EDIT MODE
             </span>
             <span className="text-zinc-400 font-mono text-[10px] ml-2 hidden md:inline">
-              {hasUnsavedChanges
+              {syncStatus === 'saving'
+                ? 'Syncing changes to live server...'
+                : syncStatus === 'error'
+                ? 'Sync paused · Click 2FA QR to re-verify'
+                : syncStatus === 'saved'
+                ? 'Live · Synced across all devices'
+                : hasUnsavedChanges
                 ? 'Edits detected · Prompt to save on close'
-                : 'Make edits, then click Lock when done'}
+                : 'Live edits sync globally'}
             </span>
           </div>
         </div>
