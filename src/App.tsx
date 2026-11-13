@@ -21,6 +21,7 @@ import { OwnerAuthModal } from './components/OwnerAuthModal';
 import { OwnerEditModal, EditModalMode } from './components/OwnerEditModal';
 import { OwnerInboxModal } from './components/OwnerInboxModal';
 import { INITIAL_PORTFOLIO_STATE, DEFAULT_OWNER_PASSCODE, DEFAULT_PORTFOLIO_SECTIONS } from './data/portfolioData';
+import { PUBLISHED_PORTFOLIO_SNAPSHOT } from './data/publishedPortfolio';
 import { 
   ProjectItem, 
   VideoChapter, 
@@ -58,6 +59,21 @@ import {
   subscribeToPortfolioUpdates,
   fetchOwnerMessages
 } from './utils/portfolioServerSync';
+
+function getInitialPublishedProfile(): PortfolioProfile | null {
+  if (
+    PUBLISHED_PORTFOLIO_SNAPSHOT.initialized &&
+    Array.isArray(PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios) &&
+    PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios.length > 0
+  ) {
+    return (
+      PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios.find(
+        (p) => p.id === PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId
+      ) || PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios[0]
+    );
+  }
+  return null;
+}
 
 export default function App() {
   const reelRef = useRef<VideoReelRef>(null);
@@ -196,7 +212,7 @@ export default function App() {
     } catch (e) {
       console.error('Failed to parse saved portfolio state', e);
     }
-    return INITIAL_PORTFOLIO_STATE;
+    return getInitialPublishedProfile()?.state || INITIAL_PORTFOLIO_STATE;
   });
 
   // Sync portfolio state to localStorage
@@ -234,6 +250,7 @@ export default function App() {
   const hasPendingSaveRef = useRef<boolean>(false);
   const immediateSaveRequestedRef = useRef<boolean>(false);
   const hasBackendRef = useRef<boolean>(true);
+  const [isStaticHost, setIsStaticHost] = useState<boolean>(false);
 
   const hasUnsavedOwnerChanges = useMemo(() => {
     if (!isOwnerMode || ownerSessionSnapshot === null) return false;
@@ -345,6 +362,13 @@ export default function App() {
     } catch (e) {
       console.error('Failed to parse portfolios vault', e);
     }
+    if (
+      PUBLISHED_PORTFOLIO_SNAPSHOT.initialized &&
+      Array.isArray(PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios) &&
+      PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios.length > 0
+    ) {
+      return PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios;
+    }
     return [
       {
         id: 'default_portfolio',
@@ -359,9 +383,13 @@ export default function App() {
 
   const [activePortfolioId, setActivePortfolioId] = useState<string>(() => {
     try {
-      return localStorage.getItem('adhavan_active_portfolio_id') || 'default_portfolio';
+      return (
+        localStorage.getItem('adhavan_active_portfolio_id') ||
+        PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId ||
+        'default_portfolio'
+      );
     } catch {
-      return 'default_portfolio';
+      return PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId || 'default_portfolio';
     }
   });
 
@@ -462,6 +490,7 @@ export default function App() {
       } catch (err) {
         if (err instanceof Error && err.message === 'STATIC_HOST_READONLY') {
           hasBackendRef.current = false;
+          setIsStaticHost(true);
           try {
             localStorage.setItem('adhavan_local_static_dirty_v1', 'true');
           } catch {}
@@ -492,6 +521,29 @@ export default function App() {
   // Initial server hydration + auth status verification + live SSE sync across all devices
   useEffect(() => {
     let active = true;
+    let unsubscribeSse: (() => void) | null = null;
+
+    const syncLatestIfNewer = async () => {
+      if (activeSyncPromiseRef.current || hasPendingSaveRef.current || !hasBackendRef.current) return;
+      try {
+        const serverData = await fetchServerPortfolio();
+        if (!active || activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
+        if (serverData.fromStaticSnapshot) return;
+        if (
+          serverData.initialized &&
+          Array.isArray(serverData.portfolios) &&
+          serverData.portfolios.length > 0 &&
+          typeof serverData.version === 'number' &&
+          serverData.version > serverVersionRef.current
+        ) {
+          applyServerPayload(
+            serverData.portfolios,
+            serverData.activePortfolioId || 'default_portfolio',
+            serverData.version
+          );
+        }
+      } catch {}
+    };
 
     const hydrateFromServer = async () => {
       try {
@@ -503,6 +555,7 @@ export default function App() {
 
         if (authStatus && authStatus.serverAvailable === false) {
           hasBackendRef.current = false;
+          setIsStaticHost(true);
         }
 
         if (authStatus && authStatus.serverAvailable && !authStatus.isAuthenticated && isOwnerMode) {
@@ -521,6 +574,7 @@ export default function App() {
           let shouldApply = true;
           if (serverData.fromStaticSnapshot) {
             hasBackendRef.current = false;
+            setIsStaticHost(true);
             const snapshotSig = `${serverData.version ?? 1}:${serverData.updatedAt ?? ''}`;
             try {
               const lastStaticSig = localStorage.getItem('adhavan_static_snapshot_sig_v1');
@@ -570,6 +624,23 @@ export default function App() {
             })
             .catch(() => {});
         }
+
+        if (active && authStatus?.serverAvailable && hasBackendRef.current) {
+          unsubscribeSse = subscribeToPortfolioUpdates(
+            ({ version }) => {
+              if (
+                version > serverVersionRef.current &&
+                !activeSyncPromiseRef.current &&
+                !hasPendingSaveRef.current
+              ) {
+                syncLatestIfNewer();
+              }
+            },
+            ({ unreadCount }) => {
+              setUnreadMessageCount(unreadCount);
+            }
+          );
+        }
       } finally {
         if (active) {
           isServerHydratedRef.current = true;
@@ -578,38 +649,6 @@ export default function App() {
     };
 
     hydrateFromServer();
-
-    const syncLatestIfNewer = async () => {
-      if (activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
-      try {
-        const serverData = await fetchServerPortfolio();
-        if (!active || activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
-        if (
-          serverData.initialized &&
-          Array.isArray(serverData.portfolios) &&
-          serverData.portfolios.length > 0 &&
-          typeof serverData.version === 'number' &&
-          serverData.version > serverVersionRef.current
-        ) {
-          applyServerPayload(
-            serverData.portfolios,
-            serverData.activePortfolioId || 'default_portfolio',
-            serverData.version
-          );
-        }
-      } catch {}
-    };
-
-    const unsubscribeSse = subscribeToPortfolioUpdates(
-      ({ version }) => {
-        if (version > serverVersionRef.current && !activeSyncPromiseRef.current && !hasPendingSaveRef.current) {
-          syncLatestIfNewer();
-        }
-      },
-      ({ unreadCount }) => {
-        setUnreadMessageCount(unreadCount);
-      }
-    );
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -620,7 +659,7 @@ export default function App() {
 
     return () => {
       active = false;
-      unsubscribeSse();
+      unsubscribeSse?.();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1168,6 +1207,7 @@ export default function App() {
           onOpenSecurity={() => setIsAuthModalOpen(true)}
           hasUnsavedChanges={hasUnsavedOwnerChanges}
           syncStatus={syncStatus}
+          isStaticHost={isStaticHost}
           onOpenInbox={() => setIsInboxOpen(true)}
           unreadMessageCount={unreadMessageCount}
         />

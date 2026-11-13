@@ -64,6 +64,8 @@ const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
 const STATIC_SNAPSHOT_FILE = path.join(PUBLIC_DIR, 'portfolio-snapshot.json');
 const STATIC_ASSETS_DIR = path.join(PUBLIC_DIR, 'uploaded-assets');
+const SHOWCASE_DIR = path.join(PUBLIC_DIR, 'showcase');
+const COMPILED_SNAPSHOT_FILE = path.resolve(process.cwd(), 'src', 'data', 'publishedPortfolio.ts');
 
 const DEFAULT_TOTP_SECRET =
   process.env.OWNER_TOTP_SECRET || 'NBSWY3DPFQQHO33SNRSCC43FMNZGK5A4';
@@ -479,34 +481,22 @@ function dehydrateDataUrls(value: unknown, keyHint?: string): unknown {
   return value;
 }
 
-function rewriteAssetsForStaticDeploy(
-  value: unknown,
-  referencedFiles: Set<string>
-): unknown {
-  if (typeof value === 'string') {
-    const match = /^\/api\/assets\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(value.trim());
-    if (match) {
-      const fileId = match[1];
-      referencedFiles.add(fileId);
-      return `/uploaded-assets/${fileId}`;
+function buildShowcaseHashIndex(): Map<string, string> {
+  const index = new Map<string, string>();
+  try {
+    if (!fs.existsSync(SHOWCASE_DIR)) return index;
+    for (const entry of fs.readdirSync(SHOWCASE_DIR)) {
+      const fullPath = path.join(SHOWCASE_DIR, entry);
+      if (!fs.statSync(fullPath).isFile()) continue;
+      const hashPrefix = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(fullPath))
+        .digest('hex')
+        .slice(0, 32);
+      index.set(hashPrefix, `/showcase/${entry}`);
     }
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => rewriteAssetsForStaticDeploy(item, referencedFiles));
-  }
-
-  if (value !== null && typeof value === 'object') {
-    const inputObj = value as Record<string, unknown>;
-    const outObj: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(inputObj)) {
-      outObj[k] = rewriteAssetsForStaticDeploy(v, referencedFiles);
-    }
-    return outObj;
-  }
-
-  return value;
+  } catch {}
+  return index;
 }
 
 function resolveExistingAssetPath(fileId: string): string | null {
@@ -515,6 +505,65 @@ function resolveExistingAssetPath(fileId: string): string | null {
   const bundled = path.join(BUNDLED_DATA_DIR, 'assets', fileId);
   if (fs.existsSync(bundled)) return bundled;
   return null;
+}
+
+function rewriteAssetsForStaticDeploy(
+  value: unknown,
+  referencedFiles: Set<string>,
+  showcaseIndex: Map<string, string>
+): unknown {
+  if (typeof value === 'string') {
+    const match = /^\/api\/assets\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(value.trim());
+    if (match) {
+      const fileId = match[1];
+      const hashPrefix = fileId.split('.')[0];
+      const existingShowcaseUrl = showcaseIndex.get(hashPrefix);
+      if (existingShowcaseUrl) {
+        return existingShowcaseUrl;
+      }
+      referencedFiles.add(fileId);
+      return `/uploaded-assets/${fileId}`;
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      rewriteAssetsForStaticDeploy(item, referencedFiles, showcaseIndex)
+    );
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const inputObj = value as Record<string, unknown>;
+    const outObj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(inputObj)) {
+      outObj[k] = rewriteAssetsForStaticDeploy(v, referencedFiles, showcaseIndex);
+    }
+    return outObj;
+  }
+
+  return value;
+}
+
+function formatCompiledSnapshotModule(payload: Record<string, unknown>): string {
+  return [
+    `import type { PortfolioProfile } from '../types/portfolio';`,
+    ``,
+    `export interface PublishedPortfolioBundle {`,
+    `  initialized: boolean;`,
+    `  version: number;`,
+    `  updatedAt: string;`,
+    `  activePortfolioId: string;`,
+    `  portfolios: PortfolioProfile[];`,
+    `}`,
+    ``,
+    `export const PUBLISHED_PORTFOLIO_SNAPSHOT: PublishedPortfolioBundle = ${JSON.stringify(
+      payload,
+      null,
+      2
+    )};`,
+    ``
+  ].join('\n');
 }
 
 function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): void {
@@ -526,13 +575,23 @@ function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): void
       if (fs.existsSync(STATIC_SNAPSHOT_FILE)) {
         fs.unlinkSync(STATIC_SNAPSHOT_FILE);
       }
+      const emptyPayload = {
+        initialized: false,
+        version: 0,
+        updatedAt: '',
+        activePortfolioId: 'default_portfolio',
+        portfolios: []
+      };
+      writeAtomic(COMPILED_SNAPSHOT_FILE, formatCompiledSnapshotModule(emptyPayload));
       return;
     }
 
+    const showcaseIndex = buildShowcaseHashIndex();
     const referencedFiles = new Set<string>();
     const staticPortfolios = rewriteAssetsForStaticDeploy(
       record.portfolios,
-      referencedFiles
+      referencedFiles,
+      showcaseIndex
     ) as unknown[];
 
     fs.mkdirSync(STATIC_ASSETS_DIR, { recursive: true });
@@ -574,7 +633,9 @@ function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): void
       portfolios: staticPortfolios
     };
 
-    writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(staticPayload, null, 2));
+    const jsonText = JSON.stringify(staticPayload, null, 2);
+    writeAtomic(STATIC_SNAPSHOT_FILE, jsonText);
+    writeAtomic(COMPILED_SNAPSHOT_FILE, formatCompiledSnapshotModule(staticPayload));
   } catch (err) {
     console.warn('Skipped exporting static deploy snapshot:', err);
   }

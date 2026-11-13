@@ -33,6 +33,7 @@ interface OwnerAdminBarProps {
   onOpenSecurity?: () => void;
   hasUnsavedChanges?: boolean;
   syncStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  isStaticHost?: boolean;
   onOpenInbox?: () => void;
   unreadMessageCount?: number;
 }
@@ -52,6 +53,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onOpenSecurity,
   hasUnsavedChanges = false,
   syncStatus = 'idle',
+  isStaticHost = false,
   onOpenInbox,
   unreadMessageCount = 0
 }) => {
@@ -71,6 +73,8 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
                 ? 'Syncing changes to live server...'
                 : syncStatus === 'error'
                 ? 'Sync paused · Click 2FA to re-verify'
+                : isStaticHost
+                ? 'Browser-saved · Edit in Preview & deploy to update globally'
                 : syncStatus === 'saved'
                 ? 'Live · Synced across all devices'
                 : hasUnsavedChanges

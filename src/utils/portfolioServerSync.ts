@@ -1,4 +1,5 @@
 import { PortfolioProfile, PortfolioState } from '../types/portfolio';
+import { PUBLISHED_PORTFOLIO_SNAPSHOT } from '../data/publishedPortfolio';
 import { OWNER_TOTP_SECRET, verifyTotpCode } from './totp';
 
 const OWNER_TOKEN_KEY = 'adhavan_owner_token_v1';
@@ -298,7 +299,22 @@ export async function fetchServerPortfolio(): Promise<ServerPortfolioResponse> {
       }
     }
   } catch {
-    // Fall back to static deploy snapshot when /api/portfolio is unavailable (e.g. Vercel static CDN)
+    // Fall back to static snapshot when /api/portfolio is unavailable (e.g. Vercel static CDN)
+  }
+
+  if (
+    PUBLISHED_PORTFOLIO_SNAPSHOT.initialized &&
+    Array.isArray(PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios) &&
+    PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios.length > 0
+  ) {
+    return {
+      initialized: true,
+      version: PUBLISHED_PORTFOLIO_SNAPSHOT.version,
+      updatedAt: PUBLISHED_PORTFOLIO_SNAPSHOT.updatedAt,
+      activePortfolioId: PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId || 'default_portfolio',
+      portfolios: PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios,
+      fromStaticSnapshot: true
+    };
   }
 
   try {
