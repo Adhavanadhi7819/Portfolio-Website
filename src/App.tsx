@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Plus } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { Plus, Save, RotateCcw, Lock, X, CheckCircle2 } from 'lucide-react';
 import { Navbar } from './components/Navbar';
+import { InteractiveCursor } from './components/InteractiveCursor';
 import { HeroSection } from './components/HeroSection';
 import { CinematicVideoReel, VideoReelRef } from './components/CinematicVideoReel';
 import { FlagshipGameFeature } from './components/FlagshipGameFeature';
@@ -9,7 +10,6 @@ import { ProjectGallery } from './components/ProjectGallery';
 import { ProjectModal } from './components/ProjectModal';
 import { MayaShowcase } from './components/MayaShowcase';
 import { AboutSection } from './components/AboutSection';
-import { ProficiencySection } from './components/ProficiencySection';
 import { ResumeSection } from './components/ResumeSection';
 import { ContactSection } from './components/ContactSection';
 import { CustomSection } from './components/CustomSection';
@@ -63,6 +63,122 @@ export default function App() {
         if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.videoChapters)) {
           if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
             parsed.sections = DEFAULT_PORTFOLIO_SECTIONS;
+          } else {
+            // Strip removed proficiency section and upgrade default portrait photo once
+            const v3Migrated = localStorage.getItem('adhavan_v3_monochrome_cleanup');
+            if (!v3Migrated) {
+              parsed.sections = parsed.sections.filter((s: PortfolioSectionConfig) => s.id !== 'proficiency');
+              if (
+                parsed.designerInfo &&
+                (!parsed.designerInfo.heroPhotoUrl || parsed.designerInfo.heroPhotoUrl === '/showcase/hero-adhavan.jpg')
+              ) {
+                parsed.designerInfo.heroPhotoUrl = '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png';
+              }
+              localStorage.setItem('adhavan_v3_monochrome_cleanup', 'true');
+            }
+
+            // Upgrade to v4 brand identity ("ADHAVAN" / "Game Designer | 3D Artist"), social URLs, and timeline photo
+            const v4Migrated = localStorage.getItem('adhavan_v4_brand_title');
+            if (!v4Migrated && parsed.designerInfo) {
+              const info = parsed.designerInfo;
+              if (!info.name || info.name === 'Adhavan') {
+                info.name = 'ADHAVAN';
+              }
+              if (!info.title || info.title === 'Game Designer & 3D Environment Artist') {
+                info.title = 'Game Designer | 3D Artist';
+              }
+              if (!info.instagramUrl) {
+                info.instagramUrl = 'https://www.instagram.com/';
+              }
+              if (!info.youtubeUrl) {
+                info.youtubeUrl = 'https://www.youtube.com/';
+              }
+              if (!info.artstationUrl) {
+                info.artstationUrl = 'https://www.artstation.com/adhavan7819';
+              }
+              if (Array.isArray(info.careerTimeline)) {
+                info.careerTimeline = info.careerTimeline.map((item: any) =>
+                  item.photoUrl === '/showcase/hero-adhavan.jpg'
+                    ? { ...item, photoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png' }
+                    : item
+                );
+              }
+              localStorage.setItem('adhavan_v4_brand_title', 'true');
+            }
+
+            // Upgrade to v5 contact layout defaults & photo alignment defaults
+            const v5Migrated = localStorage.getItem('adhavan_v5_contact_photo_align');
+            if (!v5Migrated && parsed.designerInfo) {
+              const info = parsed.designerInfo;
+              if (info.contactHeading === 'GET IN TOUCH') {
+                info.contactHeading = "Let's Work Together";
+              }
+              if (info.contactBadge === 'Connect & Collaborate') {
+                info.contactBadge = 'GET IN TOUCH';
+              }
+              if (!info.heroPhotoAlign) {
+                info.heroPhotoAlign = { x: 50, y: 50, zoom: 1, fit: 'cover' };
+              }
+              localStorage.setItem('adhavan_v5_contact_photo_align', 'true');
+            }
+
+            // Upgrade to v6 streamlined Latest Project (recorded gameplay video + playable build button + editable specs)
+            const v6Migrated = localStorage.getItem('adhavan_v6_latest_project_clean');
+            if (!v6Migrated && parsed.designerInfo) {
+              const info = parsed.designerInfo;
+              if (!info.flagshipGameTitle) {
+                info.flagshipGameTitle = 'Game Specifications';
+              }
+              if (!info.flagshipGameSpecs) {
+                info.flagshipGameSpecs =
+                  'Add your game overview, core gameplay mechanics, controls, and build notes here.';
+              }
+              if (!Array.isArray(info.flagshipSpecRows) || info.flagshipSpecRows.length === 0) {
+                info.flagshipSpecRows = [
+                  { label: 'Engine', value: 'Unreal Engine 5' },
+                  { label: 'Genre', value: 'To Be Updated' },
+                  { label: 'Platform', value: 'Windows PC Build' },
+                  { label: 'Status', value: 'Playable Build In Progress' }
+                ];
+              }
+              if (!info.flagshipGameLabel || info.flagshipGameLabel === 'Download & Play Build') {
+                info.flagshipGameLabel = 'Download Playable Build';
+              }
+              if (
+                info.flagshipQuote ===
+                '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”'
+              ) {
+                info.flagshipQuote =
+                  'Recorded gameplay footage, playable build download, and game specifications.';
+              }
+              localStorage.setItem('adhavan_v6_latest_project_clean', 'true');
+            }
+
+            // Strip blank hero stats that had text cleared
+            const v7Migrated = localStorage.getItem('adhavan_v7_stats_cleanup');
+            if (!v7Migrated && parsed.designerInfo) {
+              const info = parsed.designerInfo;
+              if (Array.isArray(info.heroStats)) {
+                info.heroStats = info.heroStats.filter(
+                  (s: any) => Boolean(s?.number?.trim() || s?.label?.trim())
+                );
+              }
+              localStorage.setItem('adhavan_v7_stats_cleanup', 'true');
+            }
+
+            // Remove legacy 'Soon Final out' outro sentence from cached storage
+            const v8Migrated = localStorage.getItem('adhavan_v8_remove_outro');
+            if (!v8Migrated && parsed.designerInfo) {
+              const info = parsed.designerInfo;
+              if (
+                typeof info.outroText === 'string' &&
+                info.outroText.toLowerCase().includes('soon final out')
+              ) {
+                info.outroText = '';
+                info.outroTitle = '';
+              }
+              localStorage.setItem('adhavan_v8_remove_outro', 'true');
+            }
           }
           return parsed;
         }
@@ -91,6 +207,28 @@ export default function App() {
     }
   });
 
+  // Baseline snapshot taken when opening Owner Mode to detect session edits on close
+  const [ownerSessionSnapshot, setOwnerSessionSnapshot] = useState<string | null>(() =>
+    isOwnerMode ? JSON.stringify(portfolioState) : null
+  );
+  const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  const hasUnsavedOwnerChanges = useMemo(() => {
+    if (!isOwnerMode || ownerSessionSnapshot === null) return false;
+    try {
+      return JSON.stringify(portfolioState) !== ownerSessionSnapshot;
+    } catch {
+      return false;
+    }
+  }, [isOwnerMode, ownerSessionSnapshot, portfolioState]);
+
+  useEffect(() => {
+    if (!saveToast) return;
+    const t = window.setTimeout(() => setSaveToast(null), 3200);
+    return () => window.clearTimeout(t);
+  }, [saveToast]);
+
   // Owner Passcode (defaults to '906', customizable by owner)
   const [ownerPasscode, setOwnerPasscode] = useState<string>(() => {
     try {
@@ -112,6 +250,31 @@ export default function App() {
     initialData: undefined
   });
 
+  // Silent Owner Auth unlock triggers (Shift+O or ?owner=1 / #owner)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('owner') === '1' || window.location.hash === '#owner') {
+        setIsAuthModalOpen(true);
+      }
+    } catch {}
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+      if (e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        setIsAuthModalOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Multi-Portfolio Management (Owner exclusive)
   const [portfolios, setPortfolios] = useState<PortfolioProfile[]>(() => {
     try {
@@ -119,7 +282,43 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((profile: PortfolioProfile) => {
+            if (!profile.state) return profile;
+            const cleanedSections = Array.isArray(profile.state.sections)
+              ? profile.state.sections.filter((s: PortfolioSectionConfig) => s.id !== 'proficiency')
+              : DEFAULT_PORTFOLIO_SECTIONS;
+            const info = profile.state.designerInfo;
+            const updatedHero =
+              info && (!info.heroPhotoUrl || info.heroPhotoUrl === '/showcase/hero-adhavan.jpg')
+                ? '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png'
+                : info?.heroPhotoUrl;
+            const updatedTimeline = Array.isArray(info?.careerTimeline)
+              ? info.careerTimeline.map((item) =>
+                  item.photoUrl === '/showcase/hero-adhavan.jpg'
+                    ? { ...item, photoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png' }
+                    : item
+                )
+              : info?.careerTimeline;
+            return {
+              ...profile,
+              state: {
+                ...profile.state,
+                sections: cleanedSections,
+                designerInfo: info
+                  ? {
+                      ...info,
+                      name: !info.name || info.name === 'Adhavan' ? 'ADHAVAN' : info.name,
+                      title: !info.title || info.title === 'Game Designer & 3D Environment Artist' ? 'Game Designer | 3D Artist' : info.title,
+                      instagramUrl: info.instagramUrl || 'https://www.instagram.com/',
+                      youtubeUrl: info.youtubeUrl || 'https://www.youtube.com/',
+                      artstationUrl: info.artstationUrl || 'https://www.artstation.com/adhavan7819',
+                      heroPhotoUrl: updatedHero,
+                      careerTimeline: updatedTimeline
+                    }
+                  : info
+              }
+            };
+          });
         }
       }
     } catch (e) {
@@ -128,8 +327,8 @@ export default function App() {
     return [
       {
         id: 'default_portfolio',
-        name: 'UE5 Game Designer & 3D Artist',
-        subtitle: 'Unreal Engine gameplay, level layout, and vehicle mechanics',
+        name: 'ADHAVAN — Game Designer | 3D Artist',
+        subtitle: 'Unreal Engine gameplay, level layout, and 3D art',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         state: INITIAL_PORTFOLIO_STATE
@@ -224,10 +423,53 @@ export default function App() {
   const [insertBelowTargetId, setInsertBelowTargetId] = useState<string | undefined>(undefined);
 
   const handleSetOwnerMode = (val: boolean) => {
+    if (val) {
+      try {
+        setOwnerSessionSnapshot(JSON.stringify(portfolioState));
+      } catch {
+        setOwnerSessionSnapshot(null);
+      }
+    } else {
+      setOwnerSessionSnapshot(null);
+      setIsExitConfirmOpen(false);
+    }
     setIsOwnerMode(val);
     try {
       localStorage.setItem('adhavan_portfolio_owner_auth', String(val));
     } catch {}
+  };
+
+  const handleRequestCloseOwnerMode = () => {
+    if (hasUnsavedOwnerChanges) {
+      setIsExitConfirmOpen(true);
+    } else {
+      handleSetOwnerMode(false);
+    }
+  };
+
+  const handleSaveAndExitOwnerMode = () => {
+    try {
+      localStorage.setItem('adhavan_portfolio_state_v1', JSON.stringify(portfolioState));
+      localStorage.setItem('adhavan_portfolios_vault_v1', JSON.stringify(portfolios));
+    } catch (e) {
+      console.error('Failed to persist portfolio changes', e);
+    }
+    handleSetOwnerMode(false);
+    setSaveToast('Changes saved · Owner Mode closed');
+  };
+
+  const handleDiscardAndExitOwnerMode = () => {
+    if (ownerSessionSnapshot) {
+      try {
+        const restored = JSON.parse(ownerSessionSnapshot) as PortfolioState;
+        setPortfolioState(restored);
+        localStorage.setItem('adhavan_portfolio_state_v1', ownerSessionSnapshot);
+      } catch (e) {
+        console.error('Failed to restore pre-session snapshot', e);
+      }
+    }
+    handleSetOwnerMode(false);
+    setSaveToast('Unsaved changes discarded · Owner Mode closed');
   };
 
   const handleChangePasscode = (newCode: string) => {
@@ -465,7 +707,7 @@ export default function App() {
       targetTab = 'hero';
     } else if (['projects', 'flagship', 'reel', 'maya'].includes(sectionId)) {
       targetTab = 'projects';
-    } else if (['about', 'proficiency'].includes(sectionId)) {
+    } else if (sectionId === 'about') {
       targetTab = 'about';
     } else if (sectionId === 'resume') {
       targetTab = 'resume';
@@ -540,8 +782,8 @@ export default function App() {
         // Work tab contains the work showcase: Flagship RPG, Showreel, Curated Projects, Maya 3D
         return ['flagship', 'reel', 'projects', 'maya'];
       case 'about':
-        // About tab contains About & Philosophy, Career Timeline, and Technical Proficiency
-        return ['about', 'proficiency'];
+        // About tab contains About & Philosophy and Career Timeline
+        return ['about'];
       case 'resume':
         // Resume tab contains complete CV and credentials
         return ['resume'];
@@ -558,9 +800,15 @@ export default function App() {
   const currentTabSections = activeSections.filter(sec => visibleSectionIds.includes(sec.id));
 
   return (
-    <div className="min-h-screen bg-[#070709] text-zinc-100 selection:bg-amber-500 selection:text-black">
-      
-      {/* Owner Admin Top HUD Bar (Only shown to authenticated owner) */}
+    <MotionConfig reducedMotion="user">
+      <div
+        className={`min-h-screen flex flex-col bg-[#050507] text-zinc-100 selection:bg-amber-500 selection:text-black ${
+          isOwnerMode ? 'pt-[44px]' : ''
+        }`}
+      >
+        <InteractiveCursor />
+        
+        {/* Owner Admin Top HUD Bar (Only shown to authenticated owner) */}
       {isOwnerMode && (
         <OwnerAdminBar
           onAddProject={() => handleOpenEditModal('project')}
@@ -573,7 +821,8 @@ export default function App() {
           onExportJson={() => handleOpenEditModal('json_backup')}
           onImportJson={() => handleOpenEditModal('json_backup')}
           onResetDefaults={handleResetDefaults}
-          onLockMode={() => handleSetOwnerMode(false)}
+          onLockMode={handleRequestCloseOwnerMode}
+          hasUnsavedChanges={hasUnsavedOwnerChanges}
         />
       )}
 
@@ -590,15 +839,15 @@ export default function App() {
       />
 
       {/* Main Content - Tab-specific with smooth motion transitions and zero negative space */}
-      <main className="min-h-[calc(100vh-140px)]">
+      <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.28, ease: 'easeOut' }}
-            className="w-full"
+            initial={{ opacity: 0, y: 16, scale: 0.992 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.995 }}
+            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full flex-1 flex flex-col"
           >
             {/* On-Point Add Section Top Button in Owner Mode */}
             {isOwnerMode && (
@@ -638,6 +887,8 @@ export default function App() {
                 onPlayReel={() => handlePlayInReel(0)}
                 onExploreProjects={() => handleNavigate('projects')}
                 onJumpToChapter={handleJumpToChapter}
+                onOpenResume={() => handleNavigate('resume')}
+                onOpenContact={() => handleNavigate('contact')}
                 canMoveUp={canMoveUp}
                 canMoveDown={canMoveDown}
                 onMoveUp={onMoveUp}
@@ -723,23 +974,6 @@ export default function App() {
                 onEditModel={(m) => handleOpenEditModal('model', m)}
                 onSaveModel={handleSaveModel}
                 onDeleteModel={handleDeleteModel}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'proficiency') {
-            sectionNode = (
-              <ProficiencySection
-                key="proficiency"
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onEditSkills={() => handleOpenEditModal('skills')}
-                onContactClick={() => handleNavigate('contact')}
                 onUpdateDesignerInfo={handleSaveDesignerInfo}
                 canMoveUp={canMoveUp}
                 canMoveDown={canMoveDown}
@@ -893,6 +1127,7 @@ export default function App() {
         onOpenOwnerAuth={() => setIsAuthModalOpen(true)}
         designerInfo={portfolioState.designerInfo}
         onEditOutro={() => handleOpenEditModal('footer')}
+        activeTab={activeTab}
       />
 
       {/* Deep Dive Project Modal */}
@@ -910,7 +1145,7 @@ export default function App() {
         currentPasscode={ownerPasscode}
         onUpdatePasscode={handleChangePasscode}
         isAlreadyOwner={isOwnerMode}
-        onLockOwnerMode={() => handleSetOwnerMode(false)}
+        onLockOwnerMode={handleRequestCloseOwnerMode}
       />
 
       {/* Universal Owner Edit Modal */}
@@ -928,6 +1163,104 @@ export default function App() {
         onImportState={handleImportState}
       />
 
-    </div>
+      {/* Save Prompt Modal on Closing Owner Mode */}
+      <AnimatePresence>
+        {isExitConfirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="owner-exit-save-title"
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+            onClick={() => setIsExitConfirmOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-md rounded-2xl bg-zinc-950 border border-amber-500/40 p-6 sm:p-7 shadow-2xl space-y-5"
+            >
+              <button
+                type="button"
+                onClick={() => setIsExitConfirmOpen(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Cancel and stay in Owner Mode"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-start gap-3.5 pr-6">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2
+                    id="owner-exit-save-title"
+                    className="text-lg font-heading font-black text-white uppercase tracking-tight"
+                  >
+                    Save Changes Before Closing?
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                    You made edits while in Owner Mode. Save your updates before switching back to
+                    visitor view, or discard changes from this session.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSaveAndExitOwnerMode}
+                  className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg shadow-amber-500/20"
+                >
+                  <Save className="w-4 h-4 stroke-[2.2]" />
+                  <span>Save &amp; Close Owner Mode</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDiscardAndExitOwnerMode}
+                  className="w-full py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-red-950/70 text-red-400 border border-zinc-800 hover:border-red-500/40 font-semibold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Discard Changes &amp; Exit</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsExitConfirmOpen(false)}
+                  className="w-full py-2 px-4 rounded-xl bg-transparent hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Keep Editing
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Subtle Owner Action Confirmation Toast */}
+      <AnimatePresence>
+        {saveToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.96 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-5 right-5 z-[115] px-4 py-2.5 rounded-xl bg-zinc-950/95 border border-amber-500/45 text-xs font-mono text-zinc-100 shadow-2xl flex items-center gap-2 backdrop-blur-md"
+          >
+            <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{saveToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      </div>
+    </MotionConfig>
   );
 }

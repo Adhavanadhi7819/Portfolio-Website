@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { Play, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
@@ -26,7 +27,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between">
+    <motion.div
+      whileHover={{ y: -5 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+      className="group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
+    >
       
       {/* Top Image & Overlays */}
       <div>
@@ -82,7 +87,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                         onDelete?.(project.id);
                         setConfirmDelete(false);
                       }}
-                      className="px-2 py-1 rounded-md bg-red-600 text-white font-mono text-[10px] font-bold uppercase transition-all shadow-lg animate-pulse cursor-pointer"
+                      className="px-2 py-1 rounded-md bg-red-600 text-white font-mono text-[10px] font-bold uppercase transition-all shadow-lg cursor-pointer"
                       title="Click to permanently confirm delete"
                     >
                       Confirm Delete?
@@ -177,6 +182,6 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         )}
       </div>
 
-    </div>
+    </motion.div>
   );
 };

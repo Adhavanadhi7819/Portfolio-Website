@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Menu, X, Mail, Lock, Unlock } from 'lucide-react';
-import { DESIGNER_INFO } from '../data/portfolioData';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Menu, X, Mail, Unlock } from 'lucide-react';
 import { PortfolioSectionConfig } from '../types/portfolio';
 
 interface NavbarProps {
@@ -15,59 +14,45 @@ interface NavbarProps {
   onOpenSectionManager?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ 
+export const Navbar: React.FC<NavbarProps> = ({
   activeTab: propActiveTab,
   onSelectTab,
   onNavigate,
   isOwnerMode,
   onOpenOwnerAuth,
-  sections,
-  onOpenSectionManager
+  sections
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [localActiveTab, setLocalActiveTab] = useState<string>('hero');
   const currentTab = propActiveTab || localActiveTab;
 
-  // Exact requested 5 tabs: Home, Work, About, Resume, Contact
-  const defaultTabs = [
-    { label: 'Home', id: 'hero' },
-    { label: 'Work', id: 'projects' },
-    { label: 'About', id: 'about' },
-    { label: 'Resume', id: 'resume' },
-    { label: 'Contact', id: 'contact' }
-  ];
+  const navLinks = useMemo(() => {
+    const defaultTabs = [
+      { label: 'Home', id: 'hero' },
+      { label: 'Work', id: 'projects' },
+      { label: 'About', id: 'about' },
+      { label: 'Resume', id: 'resume' },
+      { label: 'Contact', id: 'contact' }
+    ];
 
-  // If user has custom added sections (isCustom: true), we can also include them
-  const customSections = sections
-    ? sections.filter(s => s.enabled && s.isCustom).map(s => ({ label: s.label || s.title, id: s.id }))
-    : [];
+    const customSections = sections
+      ? sections
+          .filter((s) => s.enabled && s.isCustom)
+          .map((s) => ({ label: s.label || s.title, id: s.id }))
+      : [];
 
-  const navLinks = [...defaultTabs, ...customSections];
+    return [...defaultTabs, ...customSections];
+  }, [sections]);
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-
-      const tabIds = navLinks.map(l => l.id);
-      const scrollPos = window.scrollY + 180;
-      let current = tabIds[0];
-      for (const id of tabIds) {
-        const el = document.getElementById(id);
-        if (el) {
-          const top = el.offsetTop;
-          if (scrollPos >= top) {
-            current = id;
-          }
-        }
-      }
-      setLocalActiveTab(current);
+      setIsScrolled(window.scrollY > 12);
     };
-
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [navLinks]);
+  }, []);
 
   const handleLinkClick = (id: string) => {
     setLocalActiveTab(id);
@@ -76,118 +61,175 @@ export const Navbar: React.FC<NavbarProps> = ({
     onNavigate(id);
   };
 
+  const handleTabKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const next = navLinks[(idx + 1) % navLinks.length];
+      handleLinkClick(next.id);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const prev = navLinks[(idx - 1 + navLinks.length) % navLinks.length];
+      handleLinkClick(prev.id);
+    }
+  };
+
   return (
     <header
-      className={`fixed left-0 right-0 z-40 transition-all duration-300 ${
+      className={`fixed left-0 right-0 z-40 transition-all duration-300 border-b ${
         isOwnerMode ? 'top-[44px]' : 'top-0'
       } ${
         isScrolled
-          ? 'bg-[#070709]/95 backdrop-blur-md border-b border-zinc-800/80 py-3 shadow-2xl shadow-black/80'
-          : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent py-4'
+          ? 'bg-[#070709]/95 backdrop-blur-md border-zinc-800/90 shadow-xl shadow-black/60'
+          : 'bg-[#070709]/85 backdrop-blur-md border-zinc-800/60'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          
-          {/* Left: Tab Section (Home, Work, About, Resume, Contact) with smooth interactive gliding tab */}
-          <nav className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-zinc-950/40 border border-zinc-800/50 backdrop-blur-md" role="tablist">
-            {navLinks.map((link) => {
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+        <div className="flex items-center justify-between gap-4">
+          {/* Desktop Interactive Navigation Tabs */}
+          <nav
+            className="hidden md:flex items-center gap-7 text-xs font-mono tracking-wider uppercase text-zinc-400 font-medium"
+            role="tablist"
+            aria-label="Primary Portfolio Navigation"
+          >
+            {navLinks.map((link, idx) => {
               const isActive = currentTab === link.id;
               return (
                 <button
                   key={link.id}
                   onClick={() => handleLinkClick(link.id)}
+                  onKeyDown={(e) => handleTabKeyDown(e, idx)}
                   tabIndex={0}
                   role="tab"
                   aria-selected={isActive}
-                  className={`relative px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold uppercase tracking-wider rounded-xl transition-all cursor-pointer font-heading focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-                    isActive ? 'text-black font-bold' : 'text-zinc-300 hover:text-amber-400 hover:bg-zinc-800/40'
+                  className={`relative py-1.5 transition-colors duration-200 cursor-pointer whitespace-nowrap focus:outline-none focus-visible:text-amber-400 ${
+                    isActive ? 'text-white font-bold' : 'hover:text-zinc-200'
                   }`}
                 >
+                  <span>{link.label}</span>
                   {isActive && (
                     <motion.span
-                      layoutId="nav-active-pill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 rounded-xl shadow-lg shadow-amber-500/30"
+                      layoutId="nav-active-underline"
+                      transition={{ type: 'spring', stiffness: 450, damping: 34 }}
+                      className="absolute -bottom-1 left-0 right-0 h-0.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(192,169,223,0.85)]"
                     />
                   )}
-                  <span className="relative z-10">{link.label}</span>
                 </button>
               );
             })}
           </nav>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
+          {/* Compact Mobile Quick Tab Bar */}
+          <nav
+            className="flex md:hidden items-center gap-1 overflow-x-auto scrollbar-none text-[11px] font-mono uppercase tracking-wider"
+            role="tablist"
+            aria-label="Mobile Portfolio Navigation"
+          >
+            {navLinks.slice(0, 5).map((link) => {
+              const isActive = currentTab === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => handleLinkClick(link.id)}
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`relative px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'text-black font-bold bg-amber-500'
+                      : 'text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  {link.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Right Actions: Get In Touch + Owner Access + Mobile Drawer Toggle */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 26 }}
               onClick={() => handleLinkClick('contact')}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-lg shadow-amber-500/20 hover:shadow-amber-500/35 transition-all cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-black bg-amber-500 hover:bg-amber-400 rounded-xl transition-colors duration-200 whitespace-nowrap shrink-0 shadow-md shadow-amber-500/25 cursor-pointer"
             >
               <Mail className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Get In Touch</span>
-              <span className="xs:hidden">Contact</span>
-            </button>
+              <span>Get In Touch</span>
+            </motion.button>
 
-            {/* Mobile menu trigger */}
+            {isOwnerMode && (
+              <button
+                onClick={onOpenOwnerAuth}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer whitespace-nowrap shrink-0 bg-amber-500/15 text-amber-400 border-amber-500/50"
+                title="Owner Studio Mode Active - Click to Manage"
+                aria-label="Owner Mode Active"
+              >
+                <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden lg:inline">Owner</span>
+              </button>
+            )}
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
+              className="md:hidden p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
               aria-label="Toggle Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-
-            {/* Owner Access Button */}
-            <button
-              onClick={onOpenOwnerAuth}
-              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
-                isOwnerMode 
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/20'
-                  : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
-              }`}
-              title={isOwnerMode ? 'Owner Studio Mode Active - Click to Manage' : 'Owner Edit Access (Passcode required)'}
-              aria-label={isOwnerMode ? 'Owner Mode Active' : 'Owner Login'}
-            >
-              {isOwnerMode ? <Unlock className="w-3.5 h-3.5 text-amber-400" /> : <Lock className="w-3.5 h-3.5 text-zinc-400" />}
-              <span className="hidden lg:inline">{isOwnerMode ? 'Owner' : 'Owner'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-[#0c0c10] border-b border-zinc-800 px-4 pt-3 pb-6 mt-3 space-y-2 animate-in fade-in duration-200">
-          {navLinks.map((link) => (
-            <button
-              key={link.id}
-              onClick={() => handleLinkClick(link.id)}
-              className="w-full text-left px-3 py-2.5 text-base text-zinc-300 hover:text-amber-400 hover:bg-zinc-800/40 rounded-lg transition-colors font-medium"
-            >
-              {link.label}
-            </button>
-          ))}
-          <div className="pt-3 border-t border-zinc-800 flex flex-col gap-2">
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenOwnerAuth();
-              }}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-700 font-semibold text-xs uppercase tracking-wider"
-            >
-              {isOwnerMode ? <Unlock className="w-4 h-4 text-amber-400" /> : <Lock className="w-4 h-4" />}
-              <span>{isOwnerMode ? 'Owner Studio Active (Settings)' : 'Owner Access & Edit Mode'}</span>
-            </button>
-            <button
-              onClick={() => handleLinkClick('contact')}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-amber-500 text-black font-semibold text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20"
-            >
-              <Mail className="w-4 h-4" />
-              <span>Get In Touch</span>
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="md:hidden overflow-hidden border-t border-zinc-800 bg-[#050507]/98 px-5 py-4 space-y-2 font-mono text-sm text-zinc-300"
+          >
+            {navLinks.map((link) => {
+              const isActive = currentTab === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => handleLinkClick(link.id)}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                    isActive
+                      ? 'text-amber-400 font-bold bg-zinc-900/80'
+                      : 'hover:text-amber-400 hover:bg-zinc-900/50'
+                  }`}
+                >
+                  {link.label}
+                </button>
+              );
+            })}
+            <div className="pt-2 border-t border-zinc-800 space-y-2">
+              {isOwnerMode && (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenOwnerAuth();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-900 text-amber-400 border border-amber-500/40 font-semibold text-xs uppercase tracking-wider cursor-pointer"
+                >
+                  <Unlock className="w-4 h-4 text-amber-400" />
+                  <span>Owner Studio Active</span>
+                </button>
+              )}
+              <button
+                onClick={() => handleLinkClick('contact')}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500 text-black font-bold text-xs uppercase tracking-wider cursor-pointer"
+              >
+                <Mail className="w-4 h-4" />
+                <span>Get In Touch</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };

@@ -33,6 +33,21 @@ export function findCurrentChapter(currentTime: number, chapters: VideoChapter[]
 export function filterProjects(projects: ProjectItem[], category: ProjectCategory): ProjectItem[] {
   if (!projects) return [];
   if (category === 'all') return projects;
+  if (category === 'game-design') {
+    return projects.filter(item =>
+      item.category === 'game-design' ||
+      item.category === 'flagship-game' ||
+      item.category === 'level-design' ||
+      item.category === 'vehicle-rigging'
+    );
+  }
+  if (category === '3d-arts') {
+    return projects.filter(item =>
+      item.category === '3d-arts' ||
+      item.category === 'environment' ||
+      item.category === 'maya-3d'
+    );
+  }
   return projects.filter(item => item.category === category);
 }
 

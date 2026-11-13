@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, CheckCircle2, Sparkles, Box, Sliders, ExternalLink } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { X, Play, CheckCircle2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
 
@@ -31,20 +32,28 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  if (!project) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-8"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {project && (
+        <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 14 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 14 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+            className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
         {/* Modal Header */}
         <div className="px-6 py-4 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -207,7 +216,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           )}
         </div>
 
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

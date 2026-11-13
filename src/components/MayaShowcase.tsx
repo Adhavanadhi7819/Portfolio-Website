@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Sparkles, CheckCircle2, Play, Eye, Layers, Plus, Edit3, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Box, Play, CheckCircle2, Plus, Edit3, Trash2 } from 'lucide-react';
 import { MAYA_MODELS } from '../data/portfolioData';
 import { MayaModelItem, DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
@@ -123,17 +124,24 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
             <div className="relative aspect-[16/10] rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
               
               {/* Asset Image with simulated render shader modes */}
-              <img
-                src={selectedModel.thumbnail}
-                alt={selectedModel.title}
-                className={`w-full h-full object-cover transition-all duration-300 ${
-                  viewMode === 'wireframe'
-                    ? 'filter contrast-200 invert hue-rotate-180 brightness-90'
-                    : viewMode === 'clay'
-                    ? 'filter grayscale contrast-125 brightness-110'
-                    : 'filter brightness-100'
-                }`}
-              />
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={`${selectedModel.id}-${viewMode}`}
+                  src={selectedModel.thumbnail}
+                  alt={selectedModel.title}
+                  initial={{ opacity: 0.4, scale: 1.02 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0.4 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className={`w-full h-full object-cover transition-all duration-300 ${
+                    viewMode === 'wireframe'
+                      ? 'filter contrast-200 invert hue-rotate-180 brightness-90'
+                      : viewMode === 'clay'
+                      ? 'filter grayscale contrast-125 brightness-110'
+                      : 'filter brightness-100'
+                  }`}
+                />
+              </AnimatePresence>
               
               {/* Direct In-place 3D Render Upload for Owner */}
               <MediaUploadOverlay
@@ -156,7 +164,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
               {/* Viewport Top Bar */}
               <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
                 <span className="px-2.5 py-1 rounded bg-black/75 backdrop-blur-md text-[11px] font-mono text-amber-400 border border-zinc-700">
-                  AUTODESK MAYA VIEWPORT // {selectedModel.specs.category}
+                  Autodesk Maya · {selectedModel.specs.category}
                 </span>
 
                 {/* Shader mode switcher */}

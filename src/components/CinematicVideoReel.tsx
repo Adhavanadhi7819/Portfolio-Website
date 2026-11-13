@@ -393,29 +393,31 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Universal Video Upload Option */}
-            <label 
-              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Upload your MP4 video reel file from your computer"
-            >
-              <Upload className="w-3.5 h-3.5 text-amber-400" />
-              <span>Upload Reel (MP4)</span>
-              <input
-                type="file"
-                accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const objectUrl = URL.createObjectURL(file);
-                  onUploadVideo?.(objectUrl);
-                  setHasVideoError(false);
-                  setTimeout(() => {
-                    attemptPlay();
-                  }, 120);
-                }}
-              />
-            </label>
+            {/* Owner-Only Video Upload Option */}
+            {isOwnerMode && (
+              <label 
+                className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Upload your MP4 video reel file from your computer"
+              >
+                <Upload className="w-3.5 h-3.5 text-amber-400" />
+                <span>Upload Reel (MP4)</span>
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const objectUrl = URL.createObjectURL(file);
+                    onUploadVideo?.(objectUrl);
+                    setHasVideoError(false);
+                    setTimeout(() => {
+                      attemptPlay();
+                    }, 120);
+                  }}
+                />
+              </label>
+            )}
 
             <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest hidden sm:inline">
               <InlineEdit
@@ -498,11 +500,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
 
                 {/* Inspecting Scene HUD Badge */}
                 <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
-                  <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-mono font-black text-[11px] tracking-wider uppercase shadow-md flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
-                    <span>INSPECTING SCENE</span>
-                  </span>
-                  <span className="px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-zinc-700/80 text-amber-400 font-mono text-[11px] uppercase tracking-wide">
+                  <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-mono font-bold text-[11px] tracking-wider uppercase shadow-md">
                     {activeChapter.category}
                   </span>
                   <span className="hidden sm:inline-block px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-zinc-700/80 text-zinc-300 font-mono text-[11px]">

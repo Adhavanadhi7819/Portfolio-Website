@@ -50,7 +50,7 @@ export const SectionControls: React.FC<SectionControlsProps> = ({
         
         {/* Left: Section Identity */}
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block animate-pulse shadow-sm shadow-amber-500/50"></span>
+          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
           <span className="text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-amber-400" />
             <span>Section:</span>

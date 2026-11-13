@@ -78,7 +78,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
   ];
 
   return (
-    <section id="proficiency" className="py-10 sm:py-12 md:py-14 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="proficiency" className="py-12 relative bg-[#09090c] border-b border-zinc-800/80">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (

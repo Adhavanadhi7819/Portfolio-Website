@@ -28,6 +28,7 @@ interface OwnerAdminBarProps {
   onImportJson: () => void;
   onResetDefaults: () => void;
   onLockMode: () => void;
+  hasUnsavedChanges?: boolean;
 }
 
 export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
@@ -41,7 +42,8 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onExportJson,
   onImportJson,
   onResetDefaults,
-  onLockMode
+  onLockMode,
+  hasUnsavedChanges = false
 }) => {
   return (
     <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
@@ -49,16 +51,15 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
         
         {/* Left: Status badge */}
         <div className="flex items-center gap-2.5">
-          <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-          </span>
+          <span className="inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
           <div>
             <span className="font-heading font-black tracking-wider uppercase text-amber-400 text-xs sm:text-sm">
               OWNER EDIT MODE
             </span>
             <span className="text-zinc-400 font-mono text-[10px] ml-2 hidden md:inline">
-              All changes are autosaved to your browser
+              {hasUnsavedChanges
+                ? 'Edits detected · Prompt to save on close'
+                : 'Make edits, then click Lock when done'}
             </span>
           </div>
         </div>
@@ -119,9 +120,8 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
               <option value="" disabled>Edit Section...</option>
               <option value="hero">👤 Hero, Title & Stats</option>
               <option value="video_reel">🎞️ Video Reel & Source</option>
-              <option value="flagship">🏴‍☠️ Flagship RPG & Shots</option>
-              <option value="skills">⚡ Skills & Toolbelt</option>
-              <option value="about">📖 About & Stills</option>
+              <option value="flagship">🏴‍☠️ Latest Project & Media</option>
+              <option value="about">📖 About & Timeline</option>
               <option value="resume">📄 Resume / CV</option>
               <option value="contact">✉️ Contact & Slide Photo</option>
             </select>

@@ -1,25 +1,21 @@
-import React, { useState } from 'react';
-import { 
-  Mail, 
-  Phone, 
-  Linkedin, 
-  Copy, 
-  Check, 
-  Send, 
-  Sparkles, 
-  MessageSquare,
-  ArrowRight,
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Mail,
+  Phone,
+  Copy,
+  Check,
+  Send,
   ShieldCheck,
   Edit3,
-  ExternalLink,
-  Palette
+  MessageSquare,
+  ExternalLink
 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
 import { ContactFormData, ContactFormErrors, DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
-import { MediaUploadOverlay } from './MediaUploadOverlay';
 
 interface ContactSectionProps {
   designerInfo?: DesignerInfo;
@@ -32,6 +28,69 @@ interface ContactSectionProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+}
+
+const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+// Official Latest Brand SVG Logos (Icon-Only)
+const LinkedInLogo = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+  </svg>
+);
+
+const ArtStationLogo = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M1.77 16.88L3.89 20.5a2.1 2.1 0 001.82 1.05h11.02l-2.69-4.67H1.77zm18.7-1.66L13.7 3.5a2.1 2.1 0 00-1.82-1.05H8.56l10.22 17.71 1.69-2.94a2.1 2.1 0 000-2zm-7.53-.65L9.06 7.83 5.17 14.57h7.77z" />
+  </svg>
+);
+
+const InstagramLogo = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+  </svg>
+);
+
+const YouTubeLogo = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
+
+const WhatsAppLogo = ({ className = 'w-5 h-5' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M12.031 2c-5.516 0-9.969 4.453-9.969 9.969 0 1.766.469 3.484 1.344 5l-1.406 5.156 5.281-1.375a9.92 9.92 0 004.75 1.219h.004c5.516 0 9.969-4.453 9.969-9.969 0-2.656-1.031-5.156-2.906-7.031A9.93 9.93 0 0012.031 2zm5.813 14.125c-.25.703-1.438 1.344-2 1.422-.516.078-1.172.109-1.891-.125-.438-.141-1-.328-1.719-.641-3.031-1.313-5-4.375-5.156-4.578-.156-.203-1.234-1.641-1.234-3.125 0-1.484.781-2.219 1.063-2.516.281-.297.609-.375.813-.375.203 0 .406 0 .578.016.188.016.438-.078.688.516.25.609.859 2.094.938 2.25.078.156.125.344.031.547-.094.203-.141.328-.281.5-.141.172-.297.375-.422.5-.141.141-.297.297-.125.594.172.297.766 1.266 1.641 2.047 1.125 1 2.078 1.313 2.375 1.469.297.156.469.125.641-.078.172-.203.734-.859.938-1.156.203-.297.406-.25.672-.141.266.109 1.703.813 2 .953.297.141.484.219.563.344.078.125.078.734-.172 1.438z" />
+  </svg>
+);
+
+interface IstTimeParts {
+  hours: string;
+  minutes: string;
+  seconds: string;
+  period: string;
+}
+
+function getIstTimeParts(): IstTimeParts {
+  const now = new Date();
+  const timeParts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }).formatToParts(now);
+
+  const hour = timeParts.find((p) => p.type === 'hour')?.value || '12';
+  const minute = timeParts.find((p) => p.type === 'minute')?.value || '00';
+  const second = timeParts.find((p) => p.type === 'second')?.value || '00';
+  const period = (timeParts.find((p) => p.type === 'dayPeriod')?.value || 'AM').toUpperCase();
+
+  return {
+    hours: hour,
+    minutes: minute,
+    seconds: second,
+    period
+  };
 }
 
 export const ContactSection: React.FC<ContactSectionProps> = ({
@@ -50,13 +109,21 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   const [formData, setFormData] = useState<ContactFormData>({
     name: '',
     email: '',
-    projectType: 'Game Studio Position',
+    projectType: 'Game Design & Core Mechanics (Loops & Pacing)',
     message: ''
   });
 
   const [formErrors, setFormErrors] = useState<ContactFormErrors>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [istTime, setIstTime] = useState<IstTimeParts>(() => getIstTimeParts());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIstTime(getIstTimeParts());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -83,8 +150,6 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       setFormErrors(result.errors);
       return;
     }
-
-    // Successfully validated
     setIsSubmitted(true);
     setFormErrors({});
   };
@@ -93,15 +158,58 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     setFormData({
       name: '',
       email: '',
-      projectType: 'Game Studio Position',
+      projectType: 'Game Design & Core Mechanics (Loops & Pacing)',
       message: ''
     });
     setIsSubmitted(false);
   };
 
+  const displayPhone = info.phone?.startsWith('+')
+    ? info.phone
+    : info.phone?.length === 10
+    ? `+91 ${info.phone}`
+    : info.phone;
+
+  const socialPlatforms = [
+    {
+      id: 'linkedin',
+      label: 'LinkedIn',
+      url: info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p',
+      icon: <LinkedInLogo className="w-4.5 h-4.5" />
+    },
+    {
+      id: 'artstation',
+      label: 'ArtStation',
+      url: info.artstationUrl || 'https://www.artstation.com/adhavan7819',
+      icon: <ArtStationLogo className="w-4.5 h-4.5" />
+    },
+    {
+      id: 'instagram',
+      label: 'Instagram',
+      url: info.instagramUrl || 'https://www.instagram.com/',
+      icon: <InstagramLogo className="w-4.5 h-4.5" />
+    },
+    {
+      id: 'youtube',
+      label: 'YouTube',
+      url: info.youtubeUrl || 'https://www.youtube.com/',
+      icon: <YouTubeLogo className="w-4.5 h-4.5" />
+    },
+    {
+      id: 'whatsapp',
+      label: 'WhatsApp',
+      url:
+        info.whatsappUrl ||
+        'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!',
+      icon: <WhatsAppLogo className="w-4.5 h-4.5" />
+    }
+  ];
+
   return (
-    <section id="contact" className="pt-20 sm:pt-24 pb-12 sm:pb-16 relative bg-[#09090c] min-h-[calc(100vh-140px)]">
-      
+    <section
+      id="contact"
+      className="pt-20 sm:pt-24 pb-10 sm:pb-12 relative bg-[#050507] flex-1 flex flex-col justify-center"
+    >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
         <SectionControls
@@ -117,465 +225,436 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         />
       )}
 
-      {/* Background glow */}
-      <div className="absolute bottom-0 left-1/3 w-[600px] h-[400px] bg-amber-500/10 blur-[150px] rounded-full pointer-events-none"></div>
+      {/* Subtle Ambient Monochromatic Glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[560px] h-[340px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
-          <div className="max-w-3xl">
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
-              <Mail className="w-3.5 h-3.5 text-amber-400" />
-              <InlineEdit
-                value={info.contactBadge || 'Connect & Collaborate'}
-                onSave={(val) => onUpdateDesignerInfo?.({ contactBadge: val })}
-                isOwnerMode={isOwnerMode}
-                className="text-amber-500 font-mono font-bold"
-              />
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
-              <InlineEdit
-                value={info.contactHeading || 'GET IN TOUCH'}
-                onSave={(val) => onUpdateDesignerInfo?.({ contactHeading: val })}
-                isOwnerMode={isOwnerMode}
-                className="text-white font-black"
-              />
-            </h2>
-            <div className="flex items-start gap-2 mt-2">
-              <p className="text-zinc-400 text-sm sm:text-base leading-relaxed">
-                <InlineEdit
-                  value={info.contactSubheading || 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.'}
-                  onSave={(val) => onUpdateDesignerInfo?.({ contactSubheading: val })}
-                  isOwnerMode={isOwnerMode}
-                  multiline={true}
-                  className="text-zinc-400"
-                />
-              </p>
-              {isOwnerMode && (
-                <button
-                  onClick={onEditContact}
-                  className="p-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black transition-colors cursor-pointer shrink-0 mt-0.5"
-                  title="Edit contact text"
-                >
-                  <Edit3 className="w-3 h-3" />
-                </button>
-              )}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 space-y-8">
+        {/* 1. Centered Hero Title Block + Compact Live IST Pill */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
+          className="text-center max-w-2xl mx-auto space-y-3"
+        >
+          <div className="text-xs font-mono tracking-[0.2em] text-amber-400 uppercase font-semibold">
+            <InlineEdit
+              value={info.contactBadge || 'GET IN TOUCH'}
+              onSave={(val) => onUpdateDesignerInfo?.({ contactBadge: val })}
+              isOwnerMode={isOwnerMode}
+              className="text-amber-400 font-mono font-semibold"
+            />
+          </div>
+
+          <h1 className="text-4xl sm:text-5xl font-heading font-black text-white tracking-tight">
+            <InlineEdit
+              value={info.contactHeading || "Let's Work Together"}
+              onSave={(val) => onUpdateDesignerInfo?.({ contactHeading: val })}
+              isOwnerMode={isOwnerMode}
+              className="text-white font-black"
+            />
+          </h1>
+
+          <p className="text-sm sm:text-base text-zinc-400 leading-relaxed max-w-lg mx-auto">
+            <InlineEdit
+              value={
+                info.contactSubheading ||
+                "Have a project in mind? I'd love to hear about it. Reach out for collaborations, freelance work, or just to say hello."
+              }
+              onSave={(val) => onUpdateDesignerInfo?.({ contactSubheading: val })}
+              isOwnerMode={isOwnerMode}
+              multiline={true}
+              className="text-zinc-400"
+            />
+          </p>
+
+          {/* Compact Centered Live IST Time Pill with Animated Seconds */}
+          <div className="pt-3 flex justify-center">
+            <div className="inline-flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 shadow-lg">
+              <div className="flex items-center gap-2 text-[11px] font-mono tracking-wider uppercase text-zinc-300">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(192,169,223,0.9)]" />
+                <span className="font-semibold text-zinc-200">LIVE IST TIME</span>
+                <span className="text-zinc-500 text-[10px] hidden sm:inline">(UTC+05:30)</span>
+              </div>
+
+              <span className="h-3.5 w-px bg-zinc-800" />
+
+              <div className="flex items-baseline font-mono font-bold text-base sm:text-lg tracking-wider tabular-nums">
+                <span className="text-white">{istTime.hours}</span>
+                <span className="text-amber-400 mx-0.5">:</span>
+                <span className="text-white">{istTime.minutes}</span>
+                <span className="text-amber-400 mx-0.5">:</span>
+                <span className="relative inline-flex justify-center min-w-[2.1ch] overflow-hidden align-bottom">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                      key={istTime.seconds}
+                      initial={{ y: -10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: 10, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="text-amber-400 inline-block"
+                    >
+                      {istTime.seconds}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+                <span className="ml-1.5 text-[11px] text-zinc-400 font-semibold">
+                  {istTime.period}
+                </span>
+              </div>
             </div>
           </div>
 
           {isOwnerMode && (
-            <button
-              onClick={onEditContact}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md shrink-0"
-              title="Edit email, phone, LinkedIn, heading, and subtitle"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Contact Section & Text</span>
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-          
-          {/* Left Column: Direct Verified Contact Cards from Slide */}
-          <div className="lg:col-span-5 space-y-5">
-            
-            {/* Quick Connected Profile Badges */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950/90 border border-amber-500/30 shadow-xl shadow-amber-500/5 space-y-3">
-              <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Connected Direct Links</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* ArtStation ↗ */}
-                <a
-                  href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-amber-500/60 transition-all group/link"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover/link:scale-110 transition-transform">
-                      <Palette className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-bold tracking-tight">ArtStation</span>
-                  </div>
-                  <span className="text-amber-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
-                </a>
-
-                {/* LinkedIn ↗ */}
-                <a
-                  href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-sky-500/60 transition-all group/link"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover/link:scale-110 transition-transform">
-                      <Linkedin className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-bold tracking-tight">LinkedIn</span>
-                  </div>
-                  <span className="text-sky-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
-                </a>
-
-                {/* WhatsApp ↗ */}
-                <a
-                  href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-emerald-500/60 transition-all group/link"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover/link:scale-110 transition-transform">
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-bold tracking-tight">WhatsApp</span>
-                  </div>
-                  <span className="text-emerald-400 font-mono text-sm font-bold group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform">↗</span>
-                </a>
-              </div>
+            <div className="pt-1">
+              <button
+                onClick={onEditContact}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Contact Details &amp; Social URLs</span>
+              </button>
             </div>
+          )}
+        </motion.div>
 
-            <div className="space-y-3">
-              
-              {/* ArtStation Direct Card */}
-              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Palette className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      3D Art & Showreel
-                    </span>
-                    <a
-                      href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>ArtStation Portfolio</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                    </a>
-                  </div>
-                </div>
-
-                <a
-                  href={info.artstationUrl || 'https://www.artstation.com/adhavan7819'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
-                >
-                  <span>Open ↗</span>
-                </a>
-              </div>
-
-              {/* LinkedIn Direct Card */}
-              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Linkedin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      Professional Network
-                    </span>
-                    <a
-                      href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>{info.linkedin || 'Adhavan P'}</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                    </a>
-                  </div>
-                </div>
-
-                <a
-                  href={info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500 text-sky-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
-                >
-                  <span>Open ↗</span>
-                </a>
-              </div>
-
-              {/* WhatsApp Direct Chat Card */}
-              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-emerald-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
-                    <MessageSquare className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      Instant Chat
-                    </span>
-                    <a
-                      href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-white hover:text-emerald-400 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>WhatsApp Direct</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                    </a>
-                  </div>
-                </div>
-
-                <a
-                  href={info.whatsappUrl || 'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-black font-semibold text-xs transition-colors flex items-center gap-1 shrink-0"
-                >
-                  <span>Chat ↗</span>
-                </a>
-              </div>
-
-              {/* Email Card */}
-              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      Email Address
-                    </span>
-                    <a
-                      href={`mailto:${info.email}`}
-                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors break-all"
-                    >
-                      {info.email}
-                    </a>
-                  </div>
+        {/* 2. Two Equal Side-by-Side Contact Cards (Email + Phone / WhatsApp) */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.08, ease: EASE_OUT_EXPO }}
+          className="grid grid-cols-1 md:grid-cols-2 gap-5"
+        >
+          {/* Left Card: Email */}
+          <motion.div
+            whileHover={{ y: -2 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-6 flex flex-col justify-between gap-6 transition-colors shadow-xl"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                  <Mail className="w-5 h-5" />
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => copyToClipboard(info.email, 'email')}
-                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white transition-colors cursor-pointer"
                   aria-label="Copy email address"
-                  title="Copy to clipboard"
                 >
                   {copiedField === 'email' ? (
-                    <Check className="w-4 h-4 text-emerald-400" />
+                    <>
+                      <Check className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-amber-400">Copied</span>
+                    </>
                   ) : (
-                    <Copy className="w-4 h-4" />
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </>
                   )}
                 </button>
               </div>
 
-              {/* Phone Card */}
-              <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/50 transition-colors flex items-center justify-between gap-4 group">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform shrink-0">
-                    <Phone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      Phone Number
-                    </span>
-                    <a
-                      href={`tel:${info.phone}`}
-                      className="text-sm font-semibold text-white hover:text-amber-400 transition-colors"
-                    >
-                      {info.phone}
-                    </a>
-                  </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 block mb-1">
+                  Email
+                </span>
+                <a
+                  href={`mailto:${info.email}`}
+                  className="text-base sm:text-lg font-heading font-bold text-white hover:text-amber-400 transition-colors break-all"
+                >
+                  {info.email}
+                </a>
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                  Best for project inquiries and collaborations. I typically respond within 24–48 hours.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+              <a
+                href={`mailto:${info.email}`}
+                className="text-amber-400 hover:text-amber-300 transition-colors inline-flex items-center gap-1.5 font-medium"
+              >
+                <span>Compose Mail</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <span className="text-zinc-500 text-[11px]">Fast Turnaround</span>
+            </div>
+          </motion.div>
+
+          {/* Right Card: Phone / WhatsApp */}
+          <motion.div
+            whileHover={{ y: -2 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-6 flex flex-col justify-between gap-6 transition-colors shadow-xl"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
+                  <Phone className="w-5 h-5" />
                 </div>
 
                 <button
-                  onClick={() => copyToClipboard(info.phone, 'phone')}
-                  className="p-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  type="button"
+                  onClick={() => copyToClipboard(displayPhone, 'phone')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white transition-colors cursor-pointer"
                   aria-label="Copy phone number"
-                  title="Copy to clipboard"
                 >
                   {copiedField === 'phone' ? (
-                    <Check className="w-4 h-4 text-emerald-400" />
+                    <>
+                      <Check className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-amber-400">Copied</span>
+                    </>
                   ) : (
-                    <Copy className="w-4 h-4" />
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </>
                   )}
                 </button>
               </div>
 
-            </div>
-
-            {/* Video Slide Visual Reference Staging */}
-            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/90 overflow-hidden relative">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
-                  Showcase Stills from Get In Touch Slide:
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 block mb-1">
+                  Phone / WhatsApp
                 </span>
-                {isOwnerMode && (
-                  <button
-                    onClick={onEditContact}
-                    className="p-1 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                    title="Change Slide Photo URL"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                    <span className="text-[10px]">Edit Photo</span>
-                  </button>
-                )}
-              </div>
-              <div className="relative aspect-[16/9] rounded-xl overflow-hidden border border-zinc-800">
-                <img
-                  src={info.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
-                  alt="Get In Touch Slide Showcase"
-                  className="w-full h-full object-cover"
-                />
-
-                {/* Direct In-place Slide Photo Upload for Owner */}
-                <MediaUploadOverlay
-                  currentUrl={info.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
-                  mediaType="image"
-                  isOwnerMode={isOwnerMode}
-                  onMediaUploaded={(newUrl) => onUpdateDesignerInfo?.({ contactSlidePhotoUrl: newUrl })}
-                  label="Upload Slide Photo"
-                  position="top-right"
-                />
+                <a
+                  href={`tel:${info.phone}`}
+                  className="text-base sm:text-lg font-heading font-bold text-white hover:text-amber-400 transition-colors"
+                >
+                  {displayPhone}
+                </a>
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                  For urgent matters or quick calls. Available during IST business hours.
+                </p>
               </div>
             </div>
 
+            <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+              <a
+                href={
+                  info.whatsappUrl ||
+                  'https://wa.me/918072647909?text=Hi%20Adhavan%2C%20I%20saw%20your%20Game%20Designer%20portfolio!'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 hover:text-amber-300 transition-colors inline-flex items-center gap-1.5 font-medium"
+              >
+                <span>Direct Dial / WhatsApp</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <span className="text-zinc-500 text-[11px]">IST Business Hours</span>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        {/* 3. Centered Direct Message Form Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.14, ease: EASE_OUT_EXPO }}
+          className="max-w-2xl mx-auto rounded-2xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl"
+        >
+          <div className="flex items-center gap-2.5 mb-6">
+            <MessageSquare className="w-4 h-4 text-amber-400" />
+            <h2 className="text-base sm:text-lg font-heading font-bold text-white">
+              Send Direct Message
+            </h2>
           </div>
 
-          {/* Right Column: Interactive Inquiry Form */}
-          <div className="lg:col-span-7">
-            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl relative">
-              
-              <div className="border-b border-zinc-800 pb-4 mb-6">
-                <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold">
-                  Send Direct Inquiry
-                </span>
-                <h3 className="text-2xl font-heading font-black text-white mt-1">
-                  Message Adhavan
-                </h3>
-              </div>
-
-              {isSubmitted ? (
-                <div className="py-12 text-center space-y-4 animate-in fade-in duration-300">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
-                    <ShieldCheck className="w-8 h-8" />
-                  </div>
-                  <h4 className="text-xl font-bold text-white">Thank You For Your Message!</h4>
-                  <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
-                    Your inquiry has been received. You can also reach out directly via email at <strong className="text-amber-400">{info.email}</strong> or call <strong className="text-amber-400">{info.phone}</strong>.
-                  </p>
-                  <button
-                    onClick={resetForm}
-                    className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                  >
-                    Send Another Message
-                  </button>
+          <AnimatePresence mode="wait">
+            {isSubmitted ? (
+              <motion.div
+                key="submitted"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.25 }}
+                className="py-10 text-center space-y-4"
+              >
+                <div className="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-7 h-7" />
                 </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Name */}
-                    <div>
-                      <label htmlFor="name" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                        Your Name *
-                      </label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        placeholder="e.g. Alex Mercer"
-                        className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
-                          formErrors.name ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
-                        }`}
-                      />
-                      {formErrors.name && (
-                        <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>
-                      )}
-                    </div>
-
-                    {/* Email */}
-                    <div>
-                      <label htmlFor="email" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                        Your Email *
-                      </label>
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        placeholder="e.g. alex@gamestudio.com"
-                        className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
-                          formErrors.email ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
-                        }`}
-                      />
-                      {formErrors.email && (
-                        <p className="text-xs text-red-400 mt-1">{formErrors.email}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Project Type */}
+                <h4 className="text-lg font-bold text-white">Message Received!</h4>
+                <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
+                  Thank you for reaching out. You can also connect directly via email at{' '}
+                  <strong className="text-amber-400">{info.email}</strong> or WhatsApp.
+                </p>
+                <button
+                  onClick={resetForm}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Send Another Message
+                </button>
+              </motion.div>
+            ) : (
+              <motion.form
+                key="form"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onSubmit={handleSubmit}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="projectType" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Subject / Opportunity Type
-                    </label>
-                    <select
-                      id="projectType"
-                      name="projectType"
-                      value={formData.projectType}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    <label
+                      htmlFor="name"
+                      className="block text-xs font-mono text-zinc-400 mb-1.5"
                     >
-                      <option value="Game Studio Position">Game Studio Role (Level Designer / Unreal Dev)</option>
-                      <option value="Freelance Environment Contract">Freelance Environment / Level Design Project</option>
-                      <option value="Vehicle Rigging & Mechanix">Vehicle Rigging & Physics Consultation</option>
-                      <option value="Maya 3D Modeling Request">3D Modeling Asset Request</option>
-                      <option value="General Inquiries">Other Inquiries / Mentorship</option>
-                    </select>
-                  </div>
-
-                  {/* Message */}
-                  <div>
-                    <label htmlFor="message" className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Your Message *
+                      Your Name
                     </label>
-                    <textarea
-                      id="message"
-                      name="message"
-                      rows={4}
-                      value={formData.message}
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      value={formData.name}
                       onChange={handleInputChange}
-                      placeholder="Tell me about the role, project scope, or level design challenges you'd like to collaborate on..."
-                      className={`w-full px-4 py-3 rounded-xl bg-zinc-900 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors resize-none ${
-                        formErrors.message ? 'border-red-500 focus:border-red-400' : 'border-zinc-800 focus:border-amber-500'
+                      placeholder="e.g. Alex Morgan"
+                      className={`w-full px-4 py-2.5 rounded-xl bg-zinc-900/90 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                        formErrors.name
+                          ? 'border-red-500 focus:border-red-400'
+                          : 'border-zinc-800 focus:border-amber-500'
                       }`}
                     />
-                    {formErrors.message && (
-                      <p className="text-xs text-red-400 mt-1">{formErrors.message}</p>
+                    {formErrors.name && (
+                      <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>
                     )}
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold uppercase tracking-wider text-xs shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4"
+                  <div>
+                    <label
+                      htmlFor="email"
+                      className="block text-xs font-mono text-zinc-400 mb-1.5"
+                    >
+                      Your Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      placeholder="alex@studio.com"
+                      className={`w-full px-4 py-2.5 rounded-xl bg-zinc-900/90 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                        formErrors.email
+                          ? 'border-red-500 focus:border-red-400'
+                          : 'border-zinc-800 focus:border-amber-500'
+                      }`}
+                    />
+                    {formErrors.email && (
+                      <p className="text-xs text-red-400 mt-1">{formErrors.email}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="projectType"
+                    className="block text-xs font-mono text-zinc-400 mb-1.5"
                   >
-                    <Send className="w-4 h-4 fill-black text-black" />
-                    <span>Send Message to Adhavan</span>
-                  </button>
+                    Project Focus / Role
+                  </label>
+                  <select
+                    id="projectType"
+                    name="projectType"
+                    value={formData.projectType}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors"
+                  >
+                    <option value="Game Design & Core Mechanics (Loops & Pacing)">
+                      Game Design &amp; Core Mechanics (Loops &amp; Pacing)
+                    </option>
+                    <option value="Unreal Engine Level Design & Environment Art">
+                      Unreal Engine Level Design &amp; Environment Art
+                    </option>
+                    <option value="Vehicle Rigging & Physics Simulation">
+                      Vehicle Rigging &amp; Physics Simulation
+                    </option>
+                    <option value="Autodesk Maya 3D Modeling & Props">
+                      Autodesk Maya 3D Modeling &amp; Props
+                    </option>
+                    <option value="Game Studio Role / Full-Time Inquiry">
+                      Game Studio Role / Full-Time Inquiry
+                    </option>
+                    <option value="Freelance / Collaboration Inquiry">
+                      Freelance / Collaboration Inquiry
+                    </option>
+                  </select>
+                </div>
 
-                </form>
-              )}
+                <div>
+                  <label
+                    htmlFor="message"
+                    className="block text-xs font-mono text-zinc-400 mb-1.5"
+                  >
+                    Project Details / Message
+                  </label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    rows={4}
+                    value={formData.message}
+                    onChange={handleInputChange}
+                    placeholder="Share a brief overview of your game, timeline, or requirements..."
+                    className={`w-full px-4 py-2.5 rounded-xl bg-zinc-900/90 border text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors resize-none ${
+                      formErrors.message
+                        ? 'border-red-500 focus:border-red-400'
+                        : 'border-zinc-800 focus:border-amber-500'
+                    }`}
+                  />
+                  {formErrors.message && (
+                    <p className="text-xs text-red-400 mt-1">{formErrors.message}</p>
+                  )}
+                </div>
 
-            </div>
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                  type="submit"
+                  className="w-full py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs tracking-wider uppercase shadow-lg shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Send className="w-3.5 h-3.5 text-black" />
+                  <span>Transmit Message</span>
+                </motion.button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        {/* 4. Centered Social Icon Dock at Bottom (Icon-Only Official Latest Logos) */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: EASE_OUT_EXPO }}
+          className="pt-2 text-center space-y-4"
+        >
+          <span className="block text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-500">
+            Connect On Social
+          </span>
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {socialPlatforms.map((platform) => (
+              <motion.a
+                key={platform.id}
+                href={platform.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={platform.label}
+                title={platform.label}
+                whileHover={{ scale: 1.1, y: -2 }}
+                whileTap={{ scale: 0.94 }}
+                transition={{ type: 'spring', stiffness: 460, damping: 24 }}
+                className="w-11 h-11 rounded-xl bg-zinc-950 hover:bg-amber-500 text-zinc-300 hover:text-black border border-zinc-800 hover:border-amber-400 flex items-center justify-center transition-colors shadow-lg hover:shadow-amber-500/25 cursor-pointer"
+              >
+                {platform.icon}
+              </motion.a>
+            ))}
           </div>
-
-        </div>
-
+        </motion.div>
       </div>
     </section>
   );

@@ -118,6 +118,8 @@ test('filterProjects filters by category or returns all', () => {
   ];
 
   assert.equal(filterProjects(dummyProjects, 'all').length, 3);
+  assert.equal(filterProjects(dummyProjects, 'game-design').length, 2);
+  assert.equal(filterProjects(dummyProjects, '3d-arts').length, 1);
   assert.equal(filterProjects(dummyProjects, 'environment').length, 1);
   assert.equal(filterProjects(dummyProjects, 'environment')[0].id, 'p1');
   assert.equal(filterProjects(dummyProjects, 'vehicle-rigging').length, 1);

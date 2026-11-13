@@ -1,5 +1,7 @@
 export type ProjectCategory = 
   | 'all' 
+  | 'game-design'
+  | '3d-arts'
   | 'level-design' 
   | 'environment' 
   | 'vehicle-rigging' 
@@ -116,6 +118,8 @@ export interface TimelineMilestone {
   description: string;
   status: 'completed' | 'current' | 'target';
   highlights?: string[];
+  photoUrl?: string;
+  photoCaption?: string;
 }
 
 export interface DesignerInfo {
@@ -132,6 +136,8 @@ export interface DesignerInfo {
   linkedinUrl: string;
   artstationUrl?: string;
   whatsappUrl?: string;
+  instagramUrl?: string;
+  youtubeUrl?: string;
   status: string;
   skills: DesignerSkill[];
   tools: string[];
@@ -147,6 +153,12 @@ export interface DesignerInfo {
   careerTimeline?: TimelineMilestone[];
   // Hero customizations
   heroPhotoUrl?: string;
+  heroPhotoAlign?: {
+    x: number;
+    y: number;
+    zoom: number;
+    fit: 'cover' | 'contain';
+  };
   heroEngineTags?: {
     engine: string;
     maya: string;
@@ -176,6 +188,12 @@ export interface DesignerInfo {
   flagshipHeading?: string;
   flagshipQuote?: string;
   flagshipRoadmapQuote?: string;
+  flagshipGameTitle?: string;
+  flagshipGameSpecs?: string;
+  flagshipSpecRows?: Array<{ label: string; value: string }>;
+  flagshipGameUrl?: string;
+  flagshipGameLabel?: string;
+  flagshipVideoUrl?: string;
   flagshipFeatureCards?: FlagshipFeatureCard[];
   flagshipScreenshots?: FlagshipScreenshotItem[];
   reelHeading?: string;

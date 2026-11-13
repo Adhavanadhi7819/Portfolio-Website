@@ -113,7 +113,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
                   className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                 />
                 {changeSuccess && (
-                  <p className="text-xs text-emerald-400">Passcode updated successfully!</p>
+                  <p className="text-xs text-amber-400">Passcode updated successfully!</p>
                 )}
                 {error && <p className="text-xs text-red-400">{error}</p>}
                 <div className="flex gap-2">

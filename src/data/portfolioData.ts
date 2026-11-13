@@ -3,8 +3,8 @@ import { ProjectItem, VideoChapter, MayaModelItem, DesignerInfo, PortfolioState,
 export const VIDEO_PATH = '/assets/aistudio/Portfolio_46956db1.mp4';
 
 export const DESIGNER_INFO: DesignerInfo = {
-  name: 'Adhavan',
-  title: 'Game Designer & 3D Environment Artist',
+  name: 'ADHAVAN',
+  title: 'Game Designer | 3D Artist',
   tagline: 'Crafting immersive Unreal Engine worlds, cinematic camera sequences, and stylized gameplay mechanics.',
   aboutIntro: 'I am an aspiring game designer currently working with Unreal Engine to develop interactive and engaging gameplay experiences. Through my projects, I have explored level design, basic mechanics, and environment creation. I am continuously learning and improving my skills to create better and more immersive games.',
   aboutGoals: 'I am a passionate game design student with hands-on experience in Unreal Engine, seeking an opportunity to apply my skills in a professional environment. I have worked on projects involving level design, gameplay mechanics, and environment creation, and I am eager to learn from industry professionals while contributing creatively to game development.',
@@ -12,8 +12,10 @@ export const DESIGNER_INFO: DesignerInfo = {
   phone: '8072647909',
   linkedin: 'Adhavan P',
   linkedinUrl: 'https://www.linkedin.com/in/adhavan-p',
-  artstationUrl: 'https://www.artstation.com/adhavan',
+  artstationUrl: 'https://www.artstation.com/adhavan7819',
   whatsappUrl: 'https://wa.me/918072647909',
+  instagramUrl: 'https://www.instagram.com/',
+  youtubeUrl: 'https://www.youtube.com/',
   status: 'Open to Game Studio Roles & Freelance Design',
   skills: [
     { name: 'Unreal Engine 5 (Lumen, Nanite, Sequencer)', pct: 90, desc: 'Environment blockout, post-process color grading, camera sequencer', category: 'Engine & Workflows' },
@@ -32,7 +34,7 @@ export const DESIGNER_INFO: DesignerInfo = {
     'Substance / Texturing',
     'Blueprints'
   ],
-  resumeSummary: 'Passionate game design student with hands-on development experience in Unreal Engine 5 and Autodesk Maya. Specializes in 3D level blockouts, third-person character locomotion, vehicle rigging, and cinematic sequencing. Eager to contribute to game development teams as a Junior Game Designer, Level Designer, or 3D Environment Artist.',
+  resumeSummary: 'Passionate game design student with hands-on development experience in Unreal Engine 5 and Autodesk Maya. Specializes in 3D level blockouts, third-person character locomotion, vehicle rigging, and cinematic sequencing. Eager to contribute to game development teams as a Junior Game Designer, Level Designer, or 3D Artist.',
   resumeExperiences: [
     {
       role: 'Lead Game Designer & Level Artist',
@@ -84,13 +86,19 @@ export const DESIGNER_INFO: DesignerInfo = {
       details: 'Hard-surface 3D prop modeling, clean quad topology, PBR texturing pipelines, and real-time asset optimization.'
     }
   ],
-  contactHeading: 'GET IN TOUCH',
-  contactSubheading: 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.',
-  contactBadge: 'Connect & Collaborate',
+  contactHeading: "Let's Work Together",
+  contactSubheading: "Have a project in mind? I'd love to hear about it. Reach out for collaborations, freelance work, or just to say hello.",
+  contactBadge: 'GET IN TOUCH',
   contactSlidePhotoUrl: '/showcase/contact-slide.jpg',
   heroBadge: 'Unreal Engine & Autodesk Maya Portfolio',
   heroSubtitle: 'Crafting immersive Unreal Engine worlds, cinematic camera sequences, and stylized gameplay mechanics.',
-  heroPhotoUrl: '/showcase/hero-adhavan.jpg',
+  heroPhotoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png',
+  heroPhotoAlign: {
+    x: 50,
+    y: 50,
+    zoom: 1,
+    fit: 'cover'
+  },
   heroEngineTags: {
     engine: 'Unreal 5',
     maya: 'Maya',
@@ -164,7 +172,9 @@ export const DESIGNER_INFO: DesignerInfo = {
       period: '2021 - 2022',
       description: 'Mastered clean subdivision quad modeling, topology optimization, prop kit creation, and turntable rendering for real-time engines.',
       status: 'completed',
-      highlights: ['Sub-D Quad Modeling', 'Prop & Instrument Art', 'Modular Interior Assets', 'UV Mapping']
+      highlights: ['Sub-D Quad Modeling', 'Prop & Instrument Art', 'Modular Interior Assets', 'UV Mapping'],
+      photoUrl: '/showcase/maya-models.jpg',
+      photoCaption: 'Hard-surface prop modeling & studio turntable renders in Autodesk Maya'
     },
     {
       id: 'timeline_2',
@@ -173,34 +183,51 @@ export const DESIGNER_INFO: DesignerInfo = {
       period: '2023 - 2024',
       description: 'Designed atmospheric 3D environments, tuning Post-Process Volumes, screen-space reflections, volumetric fog, and day vs night lighting dualities.',
       status: 'completed',
-      highlights: ['Lumen & Nanite Workflows', 'Volumetric Fog', 'Post-Process Color Grading', 'Level Composition']
+      highlights: ['Lumen & Nanite Workflows', 'Volumetric Fog', 'Post-Process Color Grading', 'Level Composition'],
+      photoUrl: '/showcase/temple-upside.jpg',
+      photoCaption: 'Atmospheric temple lighting duality & Lumen scene composition in UE5'
     },
     {
       id: 'timeline_3',
-      phase: 'PHASE 03 // ACTIVE',
+      phase: 'PHASE 03 · ACTIVE',
       title: 'Flagship Pirate RPG & Vehicle Rigging Mechanics',
       period: '2024 - PRESENT',
       description: 'Developing full third-person character locomotion, sprint/jump arcs, obstacle-aware chase camera, Chaos vehicle physics, and stylized maritime hub layout.',
       status: 'current',
-      highlights: ['Locomotion Physics', 'Chaos Vehicle Tuning', 'Flagship Port Hub', 'Blueprint Logic']
+      highlights: ['Locomotion Physics', 'Chaos Vehicle Tuning', 'Flagship Port Hub', 'Blueprint Logic'],
+      photoUrl: '/showcase/pirate-village-hero.jpg',
+      photoCaption: 'Flagship Stylized Pirate Port RPG hub level blockout & locomotion test'
     },
     {
       id: 'timeline_4',
-      phase: 'PHASE 04 // TARGET',
+      phase: 'PHASE 04 · TARGET',
       title: 'Studio Objective: Junior Game & Level Designer',
       period: '2025 & BEYOND',
       description: 'Seeking an opportunity to apply skills in a professional game studio environment—ready to white-box levels, balance gameplay traversal, and contribute creatively under lead design guidance.',
       status: 'target',
-      highlights: ['Level White-Boxing', 'Player Pacing & Guidance', 'Studio Teamwork', 'Fast Creative Learning']
+      highlights: ['Level White-Boxing', 'Player Pacing & Guidance', 'Studio Teamwork', 'Fast Creative Learning'],
+      photoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png',
+      photoCaption: 'Studio readiness: combining level layout, mechanics tuning & visual craft'
     }
   ],
   aboutCalloutTitle: 'Looking for a Dedicated Game Designer?',
-  aboutCalloutText: 'Available for Junior Game Designer, Level Designer, or 3D Environment Artist roles with game studios worldwide.',
+  aboutCalloutText: 'Available for Junior Game Designer, Level Designer, or 3D Artist roles with game studios worldwide.',
   resumeHeading: 'GAME DESIGNER RESUME',
   resumeSubheading: 'Comprehensive overview of credentials, engine proficiencies, and in-engine game development deliverables.',
   flagshipHeading: 'MY LATEST PROJECT',
-  flagshipQuote: '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”',
-  flagshipRoadmapQuote: '“Soon Final out of the game will be posted.” Core level blockout and movement mechanics complete; currently tuning quest triggers and sound design.',
+  flagshipQuote: 'Recorded gameplay footage, playable build download, and game specifications.',
+  flagshipRoadmapQuote: '',
+  flagshipGameTitle: 'Game Specifications',
+  flagshipGameSpecs: 'Add your game overview, core gameplay mechanics, controls, and build notes here.',
+  flagshipSpecRows: [
+    { label: 'Engine', value: 'Unreal Engine 5' },
+    { label: 'Genre', value: 'To Be Updated' },
+    { label: 'Platform', value: 'Windows PC Build' },
+    { label: 'Status', value: 'Playable Build In Progress' }
+  ],
+  flagshipGameUrl: '',
+  flagshipGameLabel: 'Download Playable Build',
+  flagshipVideoUrl: '',
   flagshipScreenshots: [
     {
       title: 'Vibrant Town Square Hub',
@@ -248,8 +275,8 @@ export const DESIGNER_INFO: DesignerInfo = {
   projectsSubheading: 'Explorations spanning Unreal Engine level layout, dynamic vehicle rigging, lighting duality concepts, and Autodesk Maya models.',
   mayaHeading: '3D Modeling & Assets',
   mayaSubheading: '“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.',
-  outroTitle: 'THANK YOU For Your Attention',
-  outroText: '“Soon Final out of the game will be posted.” Stay tuned for upcoming gameplay footage and interactive builds.'
+  outroTitle: '',
+  outroText: ''
 };
 
 export const VIDEO_CHAPTERS: VideoChapter[] = [
@@ -581,10 +608,9 @@ export const DEFAULT_PORTFOLIO_SECTIONS: PortfolioSectionConfig[] = [
   { id: 'flagship', title: 'Flagship Pirate RPG', label: 'Flagship', enabled: true, order: 2 },
   { id: 'projects', title: 'Curated Works & Levels', label: 'Projects', enabled: true, order: 3 },
   { id: 'maya', title: 'Maya 3D Models', label: '3D Models', enabled: true, order: 4 },
-  { id: 'proficiency', title: 'Proficiency & Toolbelt', label: 'Proficiency', enabled: true, order: 5 },
-  { id: 'about', title: 'About & Design Philosophy', label: 'About', enabled: true, order: 6 },
-  { id: 'resume', title: 'Game Designer Resume', label: 'Resume', enabled: true, order: 7 },
-  { id: 'contact', title: 'Contact & Inquiry', label: 'Contact', enabled: true, order: 8 },
+  { id: 'about', title: 'About & Design Philosophy', label: 'About', enabled: true, order: 5 },
+  { id: 'resume', title: 'Game Designer Resume', label: 'Resume', enabled: true, order: 6 },
+  { id: 'contact', title: 'Contact & Inquiry', label: 'Contact', enabled: true, order: 7 },
 ];
 
 export const INITIAL_PORTFOLIO_STATE: PortfolioState = {

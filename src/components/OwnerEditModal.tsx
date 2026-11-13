@@ -205,6 +205,8 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     }
     const categoryLabels: Record<ProjectCategory, string> = {
       'all': 'Showcase',
+      'game-design': 'Game Design',
+      '3d-arts': '3D Arts',
       'level-design': 'Level Design & Post-Process',
       'environment': 'Environment Art',
       'vehicle-rigging': 'Vehicle Rigging',
@@ -335,11 +337,10 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   const navTabs: { id: EditModalMode; label: string; icon: React.ReactNode }[] = [
     { id: 'hero', label: 'Hero & Stats', icon: <User className="w-3.5 h-3.5" /> },
     { id: 'video_reel', label: 'Video Reel', icon: <Film className="w-3.5 h-3.5" /> },
-    { id: 'flagship', label: 'Flagship Game', icon: <Gamepad2 className="w-3.5 h-3.5" /> },
+    { id: 'flagship', label: 'Latest Project', icon: <Gamepad2 className="w-3.5 h-3.5" /> },
     { id: 'project', label: 'Projects', icon: <Layers className="w-3.5 h-3.5" /> },
     { id: 'model', label: 'Maya 3D', icon: <Box className="w-3.5 h-3.5" /> },
-    { id: 'skills', label: 'Skills & Toolbelt', icon: <Sliders className="w-3.5 h-3.5" /> },
-    { id: 'about', label: 'About & Stills', icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { id: 'about', label: 'About & Timeline', icon: <Sparkles className="w-3.5 h-3.5" /> },
     { id: 'resume', label: 'Resume / CV', icon: <FileText className="w-3.5 h-3.5" /> },
     { id: 'contact', label: 'Contact', icon: <Mail className="w-3.5 h-3.5" /> },
     { id: 'json_backup', label: 'Backup / JSON', icon: <FileJson className="w-3.5 h-3.5" /> },
@@ -360,7 +361,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
         {/* Header */}
         <div className="px-5 py-3.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
             <h2 id="owner-modal-title" className="text-base sm:text-lg font-heading font-black text-white uppercase tracking-wider">
               OWNER STUDIO EDITOR — EDIT ANY LINE, PHOTO OR VIDEO
             </h2>
@@ -398,8 +399,8 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
 
         {/* Success Alert Banner */}
         {savedSuccessMessage && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono font-semibold flex items-center gap-2 animate-in fade-in duration-200">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-mono font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+            <Check className="w-4 h-4 text-amber-400 shrink-0" />
             <span>{savedSuccessMessage}</span>
           </div>
         )}
@@ -470,11 +471,155 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={bioForm.heroPhotoUrl || '/showcase/hero-adhavan.jpg'}
+                    value={bioForm.heroPhotoUrl || '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png'}
                     onChange={(e) => setBioForm({ ...bioForm, heroPhotoUrl: e.target.value })}
-                    placeholder="/showcase/hero-adhavan.jpg"
+                    placeholder="/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                   />
+                </div>
+
+                {/* Photo Alignment, Fit & Zoom Framing */}
+                <div className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                      Portrait Photo Alignment &amp; Framing
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBioForm({
+                          ...bioForm,
+                          heroPhotoAlign: { x: 50, y: 50, zoom: 1, fit: 'cover' }
+                        })
+                      }
+                      className="text-[10px] font-mono text-zinc-400 hover:text-amber-400 cursor-pointer"
+                    >
+                      Reset Center
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBioForm({
+                          ...bioForm,
+                          heroPhotoAlign: {
+                            x: bioForm.heroPhotoAlign?.x ?? 50,
+                            y: bioForm.heroPhotoAlign?.y ?? 50,
+                            zoom: bioForm.heroPhotoAlign?.zoom ?? 1,
+                            fit: 'cover'
+                          }
+                        })
+                      }
+                      className={`py-1.5 rounded-lg text-[11px] font-mono font-bold uppercase cursor-pointer border transition-colors ${
+                        (bioForm.heroPhotoAlign?.fit || 'cover') === 'cover'
+                          ? 'bg-amber-500 text-black border-amber-400'
+                          : 'bg-zinc-900 text-zinc-300 border-zinc-800'
+                      }`}
+                    >
+                      Fill Frame (Cover)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBioForm({
+                          ...bioForm,
+                          heroPhotoAlign: {
+                            x: bioForm.heroPhotoAlign?.x ?? 50,
+                            y: bioForm.heroPhotoAlign?.y ?? 50,
+                            zoom: 1,
+                            fit: 'contain'
+                          }
+                        })
+                      }
+                      className={`py-1.5 rounded-lg text-[11px] font-mono font-bold uppercase cursor-pointer border transition-colors ${
+                        bioForm.heroPhotoAlign?.fit === 'contain'
+                          ? 'bg-amber-500 text-black border-amber-400'
+                          : 'bg-zinc-900 text-zinc-300 border-zinc-800'
+                      }`}
+                    >
+                      Show Full Photo (Fit)
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] font-mono">
+                    <div>
+                      <div className="flex justify-between text-zinc-400 mb-1">
+                        <span>Horizontal X</span>
+                        <span className="text-amber-400">{bioForm.heroPhotoAlign?.x ?? 50}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={bioForm.heroPhotoAlign?.x ?? 50}
+                        onChange={(e) =>
+                          setBioForm({
+                            ...bioForm,
+                            heroPhotoAlign: {
+                              x: Number(e.target.value),
+                              y: bioForm.heroPhotoAlign?.y ?? 50,
+                              zoom: bioForm.heroPhotoAlign?.zoom ?? 1,
+                              fit: bioForm.heroPhotoAlign?.fit ?? 'cover'
+                            }
+                          })
+                        }
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-zinc-400 mb-1">
+                        <span>Vertical Y</span>
+                        <span className="text-amber-400">{bioForm.heroPhotoAlign?.y ?? 50}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={bioForm.heroPhotoAlign?.y ?? 50}
+                        onChange={(e) =>
+                          setBioForm({
+                            ...bioForm,
+                            heroPhotoAlign: {
+                              x: bioForm.heroPhotoAlign?.x ?? 50,
+                              y: Number(e.target.value),
+                              zoom: bioForm.heroPhotoAlign?.zoom ?? 1,
+                              fit: bioForm.heroPhotoAlign?.fit ?? 'cover'
+                            }
+                          })
+                        }
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-zinc-400 mb-1">
+                        <span>Scale / Zoom</span>
+                        <span className="text-amber-400">{(bioForm.heroPhotoAlign?.zoom ?? 1).toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.8}
+                        max={1.8}
+                        step={0.05}
+                        value={bioForm.heroPhotoAlign?.zoom ?? 1}
+                        onChange={(e) =>
+                          setBioForm({
+                            ...bioForm,
+                            heroPhotoAlign: {
+                              x: bioForm.heroPhotoAlign?.x ?? 50,
+                              y: bioForm.heroPhotoAlign?.y ?? 50,
+                              zoom: Number(e.target.value),
+                              fit: bioForm.heroPhotoAlign?.fit ?? 'cover'
+                            }
+                          })
+                        }
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -535,51 +680,79 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
               </div>
 
-              {/* 4 Stat Counters */}
+              {/* Dynamic Stat Counters (Add / Edit / Remove) */}
               <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
-                <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold block">
-                  Hero Bottom Stat Counters (4 Items)
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(bioForm.heroStats || [
-                    { number: '6+', label: 'Unreal Environments & Levels' },
-                    { number: '3D RPG', label: 'Flagship Game In Progress' },
-                    { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
-                    { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                  ]).map((stat, sIdx) => (
-                    <div key={sIdx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex gap-2">
-                      <input
-                        type="text"
-                        value={stat.number}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.heroStats || [
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    Hero Bottom Stat Counters
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const curr = Array.isArray(bioForm.heroStats)
+                        ? bioForm.heroStats
+                        : [
                             { number: '6+', label: 'Unreal Environments & Levels' },
                             { number: '3D RPG', label: 'Flagship Game In Progress' },
                             { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
                             { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                          ])];
+                          ];
+                      setBioForm({
+                        ...bioForm,
+                        heroStats: [...curr, { number: 'New', label: 'Stat description' }]
+                      });
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3 h-3 stroke-[2.5]" />
+                    <span>Add Stat</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(Array.isArray(bioForm.heroStats)
+                    ? bioForm.heroStats
+                    : [
+                        { number: '6+', label: 'Unreal Environments & Levels' },
+                        { number: '3D RPG', label: 'Flagship Game In Progress' },
+                        { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
+                        { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
+                      ]
+                  ).map((stat, sIdx, allStats) => (
+                    <div key={sIdx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={stat.number}
+                        onChange={(e) => {
+                          const curr = [...allStats];
                           curr[sIdx] = { ...curr[sIdx], number: e.target.value };
                           setBioForm({ ...bioForm, heroStats: curr });
                         }}
                         placeholder="e.g. 6+"
-                        className="w-24 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-amber-400 font-bold font-mono text-xs"
+                        className="w-20 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-amber-400 font-bold font-mono text-xs"
                       />
                       <input
                         type="text"
                         value={stat.label}
                         onChange={(e) => {
-                          const curr = [...(bioForm.heroStats || [
-                            { number: '6+', label: 'Unreal Environments & Levels' },
-                            { number: '3D RPG', label: 'Flagship Game In Progress' },
-                            { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
-                            { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                          ])];
+                          const curr = [...allStats];
                           curr[sIdx] = { ...curr[sIdx], label: e.target.value };
                           setBioForm({ ...bioForm, heroStats: curr });
                         }}
                         placeholder="Label"
-                        className="flex-1 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-zinc-200 text-xs font-mono"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-zinc-200 text-xs font-mono"
                       />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = allStats.filter((_, i) => i !== sIdx);
+                          setBioForm({ ...bioForm, heroStats: next });
+                        }}
+                        className="p-1.5 rounded bg-zinc-950 hover:bg-red-950 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer shrink-0"
+                        title="Remove this stat"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -727,13 +900,13 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
           {/* TAB: FLAGSHIP GAME FEATURE */}
           {/* ======================================================== */}
           {activeTab === 'flagship' && (
-            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Flagship Game details & screenshots updated!')} className="space-y-6">
+            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Latest Project details updated!')} className="space-y-6">
               <div className="border-b border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider font-mono">
-                  Flagship In-Progress Game Showcase
+                  Latest Project Showcase (Gameplay Video &amp; Specs)
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Edit the showcase heading, quotes, 4 gameplay screenshots, and 4 architecture feature cards.
+                  Configure your recorded gameplay video, playable build download link, and game specifications.
                 </p>
               </div>
 
@@ -751,140 +924,181 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Main Quote Text
+                    Section Subtitle
                   </label>
                   <input
                     type="text"
-                    value={bioForm.flagshipQuote || '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”'}
+                    value={bioForm.flagshipQuote || 'Recorded gameplay footage, playable build download, and game specifications.'}
                     onChange={(e) => setBioForm({ ...bioForm, flagshipQuote: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Roadmap / Production Notice Quote
-                </label>
-                <textarea
-                  rows={2}
-                  value={bioForm.flagshipRoadmapQuote || '“Soon Final out of the game will be posted.” Core level blockout and movement mechanics complete; currently tuning quest triggers and sound design.'}
-                  onChange={(e) => setBioForm({ ...bioForm, flagshipRoadmapQuote: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              {/* 4 Gameplay Screenshots */}
-              <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+              {/* Game Download Link & Build Video */}
+              <div className="p-4 rounded-xl bg-zinc-900/60 border border-amber-500/30 space-y-4">
                 <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold block">
-                  4 Interactive Gameplay Screenshots (Photos & Titles)
+                  Playable Build Download Link &amp; Recorded Gameplay Video
                 </span>
-                <div className="space-y-3">
-                  {(bioForm.flagshipScreenshots || [
-                    { title: 'Vibrant Town Square Hub', subtitle: 'Overhead third-person perspective showing stone pavers, market canopies, and level pathing.', image: '/showcase/shot-town-01.jpg' },
-                    { title: 'Harbor Docks & Pier Walkway', subtitle: 'Waterfront boardwalk featuring moored boats, fish racks, barrel clusters, and ocean sightlines.', image: '/showcase/shot-dock-02.jpg' },
-                    { title: 'Marketplace Stalls & Castle Overlook', subtitle: 'Lush village green surrounded by multi-tier timber houses, windmill landmarks, and hilltop citadel walls.', image: '/showcase/shot-market-03.jpg' },
-                    { title: 'Canopy Alley & Stone Staircases', subtitle: 'Narrow cobblestone street navigation testing vertical elevation, market canopies, and ambient lighting.', image: '/showcase/shot-tavern-04.jpg' }
-                  ]).map((shot, idx) => (
-                    <div key={idx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                      <input
-                        type="text"
-                        value={shot.title}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.flagshipScreenshots || [
-                            { title: 'Vibrant Town Square Hub', subtitle: 'Overhead third-person perspective showing stone pavers, market canopies, and level pathing.', image: '/showcase/shot-town-01.jpg' },
-                            { title: 'Harbor Docks & Pier Walkway', subtitle: 'Waterfront boardwalk featuring moored boats, fish racks, barrel clusters, and ocean sightlines.', image: '/showcase/shot-dock-02.jpg' },
-                            { title: 'Marketplace Stalls & Castle Overlook', subtitle: 'Lush village green surrounded by multi-tier timber houses, windmill landmarks, and hilltop citadel walls.', image: '/showcase/shot-market-03.jpg' },
-                            { title: 'Canopy Alley & Stone Staircases', subtitle: 'Narrow cobblestone street navigation testing vertical elevation, market canopies, and ambient lighting.', image: '/showcase/shot-tavern-04.jpg' }
-                          ])];
-                          curr[idx] = { ...curr[idx], title: e.target.value };
-                          setBioForm({ ...bioForm, flagshipScreenshots: curr });
-                        }}
-                        placeholder={`Shot ${idx + 1} Title`}
-                        className="px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-white font-bold"
-                      />
-                      <input
-                        type="text"
-                        value={shot.image}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.flagshipScreenshots || [
-                            { title: 'Vibrant Town Square Hub', subtitle: 'Overhead third-person perspective showing stone pavers, market canopies, and level pathing.', image: '/showcase/shot-town-01.jpg' },
-                            { title: 'Harbor Docks & Pier Walkway', subtitle: 'Waterfront boardwalk featuring moored boats, fish racks, barrel clusters, and ocean sightlines.', image: '/showcase/shot-dock-02.jpg' },
-                            { title: 'Marketplace Stalls & Castle Overlook', subtitle: 'Lush village green surrounded by multi-tier timber houses, windmill landmarks, and hilltop citadel walls.', image: '/showcase/shot-market-03.jpg' },
-                            { title: 'Canopy Alley & Stone Staircases', subtitle: 'Narrow cobblestone street navigation testing vertical elevation, market canopies, and ambient lighting.', image: '/showcase/shot-tavern-04.jpg' }
-                          ])];
-                          curr[idx] = { ...curr[idx], image: e.target.value };
-                          setBioForm({ ...bioForm, flagshipScreenshots: curr });
-                        }}
-                        placeholder="Image URL / Path"
-                        className="px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-amber-400 font-mono"
-                      />
-                      <input
-                        type="text"
-                        value={shot.subtitle}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.flagshipScreenshots || [
-                            { title: 'Vibrant Town Square Hub', subtitle: 'Overhead third-person perspective showing stone pavers, market canopies, and level pathing.', image: '/showcase/shot-town-01.jpg' },
-                            { title: 'Harbor Docks & Pier Walkway', subtitle: 'Waterfront boardwalk featuring moored boats, fish racks, barrel clusters, and ocean sightlines.', image: '/showcase/shot-dock-02.jpg' },
-                            { title: 'Marketplace Stalls & Castle Overlook', subtitle: 'Lush village green surrounded by multi-tier timber houses, windmill landmarks, and hilltop citadel walls.', image: '/showcase/shot-market-03.jpg' },
-                            { title: 'Canopy Alley & Stone Staircases', subtitle: 'Narrow cobblestone street navigation testing vertical elevation, market canopies, and ambient lighting.', image: '/showcase/shot-tavern-04.jpg' }
-                          ])];
-                          curr[idx] = { ...curr[idx], subtitle: e.target.value };
-                          setBioForm({ ...bioForm, flagshipScreenshots: curr });
-                        }}
-                        placeholder="Short caption description"
-                        className="px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-zinc-300"
-                      />
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
+                      Playable Build URL (itch.io, Drive, Download Link)
+                    </label>
+                    <input
+                      type="text"
+                      value={bioForm.flagshipGameUrl || ''}
+                      onChange={(e) => setBioForm({ ...bioForm, flagshipGameUrl: e.target.value })}
+                      placeholder="https://itch.io/... or Drive/Download URL"
+                      className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
+                      Download Button Text
+                    </label>
+                    <input
+                      type="text"
+                      value={bioForm.flagshipGameLabel || 'Download Playable Build'}
+                      onChange={(e) => setBioForm({ ...bioForm, flagshipGameLabel: e.target.value })}
+                      placeholder="Download Playable Build"
+                      className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
+                    Recorded Gameplay Video URL / Path
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.flagshipVideoUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, flagshipVideoUrl: e.target.value })}
+                    placeholder="Upload directly on the Latest Project video slot or paste MP4 URL"
+                    className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-amber-400 font-mono focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
-              {/* 4 Feature Cards */}
-              <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+              {/* Game Specifications Editor */}
+              <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-4">
                 <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold block">
-                  4 Architectural & Mechanics Breakdown Cards
+                  Game Specifications &amp; Build Overview
                 </span>
-                <div className="space-y-3">
-                  {(bioForm.flagshipFeatureCards || [
-                    { title: 'Fluid Player Locomotion', description: 'Custom third-person character movement with sprint acceleration, directional jump arc, and smooth slope alignment across stairs and docks.' },
-                    { title: 'Handcrafted Port Village Level', description: 'Designed with natural sightlines, landmark orientation (windmill & watchtower), multi-tier bridges, and vibrant marketplace stalls.' },
-                    { title: 'Pirate UI & Choice Systems', description: 'Thematic pirate skull & crossbones interface with interactive prompt dialogs, character customization cards, and player feedback.' },
-                    { title: 'Environmental Dressing', description: 'Lush pumpkin patches, burning blacksmith braziers, hay wagons, barrels, and wooden pier structures bringing the maritime world to life.' }
-                  ]).map((card, cIdx) => (
-                    <div key={cIdx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2">
-                      <input
-                        type="text"
-                        value={card.title}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.flagshipFeatureCards || [
-                            { title: 'Fluid Player Locomotion', description: 'Custom third-person character movement with sprint acceleration, directional jump arc, and smooth slope alignment across stairs and docks.' },
-                            { title: 'Handcrafted Port Village Level', description: 'Designed with natural sightlines, landmark orientation (windmill & watchtower), multi-tier bridges, and vibrant marketplace stalls.' },
-                            { title: 'Pirate UI & Choice Systems', description: 'Thematic pirate skull & crossbones interface with interactive prompt dialogs, character customization cards, and player feedback.' },
-                            { title: 'Environmental Dressing', description: 'Lush pumpkin patches, burning blacksmith braziers, hay wagons, barrels, and wooden pier structures bringing the maritime world to life.' }
-                          ])];
-                          curr[cIdx] = { ...curr[cIdx], title: e.target.value };
-                          setBioForm({ ...bioForm, flagshipFeatureCards: curr });
-                        }}
-                        className="w-full px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-white font-bold text-xs"
-                      />
-                      <textarea
-                        rows={2}
-                        value={card.description}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.flagshipFeatureCards || [
-                            { title: 'Fluid Player Locomotion', description: 'Custom third-person character movement with sprint acceleration, directional jump arc, and smooth slope alignment across stairs and docks.' },
-                            { title: 'Handcrafted Port Village Level', description: 'Designed with natural sightlines, landmark orientation (windmill & watchtower), multi-tier bridges, and vibrant marketplace stalls.' },
-                            { title: 'Pirate UI & Choice Systems', description: 'Thematic pirate skull & crossbones interface with interactive prompt dialogs, character customization cards, and player feedback.' },
-                            { title: 'Environmental Dressing', description: 'Lush pumpkin patches, burning blacksmith braziers, hay wagons, barrels, and wooden pier structures bringing the maritime world to life.' }
-                          ])];
-                          curr[cIdx] = { ...curr[cIdx], description: e.target.value };
-                          setBioForm({ ...bioForm, flagshipFeatureCards: curr });
-                        }}
-                        className="w-full px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-zinc-300 text-xs"
-                      />
-                    </div>
-                  ))}
+
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
+                    Game Title / Specs Heading
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.flagshipGameTitle || 'Game Specifications'}
+                    onChange={(e) => setBioForm({ ...bioForm, flagshipGameTitle: e.target.value })}
+                    placeholder="e.g. Project Name — Game Specifications"
+                    className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-white font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
+                    About The Game &amp; Build Notes
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={bioForm.flagshipGameSpecs || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, flagshipGameSpecs: e.target.value })}
+                    placeholder="Add your game overview, core gameplay mechanics, controls, and build notes here..."
+                    className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-300">
+                      Technical Specification Rows
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBioForm({
+                          ...bioForm,
+                          flagshipSpecRows: [
+                            ...(bioForm.flagshipSpecRows || [
+                              { label: 'Engine', value: 'Unreal Engine 5' },
+                              { label: 'Genre', value: 'To Be Updated' },
+                              { label: 'Platform', value: 'Windows PC Build' },
+                              { label: 'Status', value: 'Playable Build In Progress' }
+                            ]),
+                            { label: 'Spec', value: 'Value' }
+                          ]
+                        })
+                      }
+                      className="text-[11px] font-mono text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Row</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {(bioForm.flagshipSpecRows || [
+                      { label: 'Engine', value: 'Unreal Engine 5' },
+                      { label: 'Genre', value: 'To Be Updated' },
+                      { label: 'Platform', value: 'Windows PC Build' },
+                      { label: 'Status', value: 'Playable Build In Progress' }
+                    ]).map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <input
+                          type="text"
+                          value={row.label}
+                          onChange={(e) => {
+                            const curr = [...(bioForm.flagshipSpecRows || [
+                              { label: 'Engine', value: 'Unreal Engine 5' },
+                              { label: 'Genre', value: 'To Be Updated' },
+                              { label: 'Platform', value: 'Windows PC Build' },
+                              { label: 'Status', value: 'Playable Build In Progress' }
+                            ])];
+                            curr[idx] = { ...curr[idx], label: e.target.value };
+                            setBioForm({ ...bioForm, flagshipSpecRows: curr });
+                          }}
+                          placeholder="Label"
+                          className="col-span-4 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-xs text-zinc-300 font-mono"
+                        />
+                        <input
+                          type="text"
+                          value={row.value}
+                          onChange={(e) => {
+                            const curr = [...(bioForm.flagshipSpecRows || [
+                              { label: 'Engine', value: 'Unreal Engine 5' },
+                              { label: 'Genre', value: 'To Be Updated' },
+                              { label: 'Platform', value: 'Windows PC Build' },
+                              { label: 'Status', value: 'Playable Build In Progress' }
+                            ])];
+                            curr[idx] = { ...curr[idx], value: e.target.value };
+                            setBioForm({ ...bioForm, flagshipSpecRows: curr });
+                          }}
+                          placeholder="Value"
+                          className="col-span-7 px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-xs text-white font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const curr = bioForm.flagshipSpecRows || [];
+                            if (curr.length <= 1) return;
+                            setBioForm({
+                              ...bioForm,
+                              flagshipSpecRows: curr.filter((_, i) => i !== idx)
+                            });
+                          }}
+                          className="col-span-1 p-1.5 rounded bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 flex items-center justify-center cursor-pointer"
+                          title="Remove spec row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -893,7 +1107,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Flagship Showcase Changes</span>
+                <span>Save Latest Project Changes</span>
               </button>
             </form>
           )}
@@ -934,10 +1148,12 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                     Category *
                   </label>
                   <select
-                    value={projectForm.category || 'level-design'}
+                    value={projectForm.category || 'game-design'}
                     onChange={(e) => setProjectForm({ ...projectForm, category: e.target.value as ProjectCategory })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                   >
+                    <option value="game-design">Game Design</option>
+                    <option value="3d-arts">3D Arts</option>
                     <option value="level-design">Level Design & Post-Process</option>
                     <option value="environment">Environment Art</option>
                     <option value="vehicle-rigging">Vehicle Rigging</option>
@@ -1475,7 +1691,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
             <form onSubmit={(e) => handleSaveBioGeneric(e, 'About section & stills updated!')} className="space-y-6">
               <div className="border-b border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider font-mono">
-                  About Section, Quotes & In-Engine Stills
+                  About Section, Quotes &amp; Design Pillars
                 </h3>
               </div>
 
@@ -1486,7 +1702,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={bioForm.aboutHeading || 'About Adhavan'}
+                    value={bioForm.aboutHeading || 'About ADHAVAN'}
                     onChange={(e) => setBioForm({ ...bioForm, aboutHeading: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
@@ -1518,7 +1734,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
 
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Career Objective & Studio Focus
+                  Career Objective &amp; Studio Focus
                 </label>
                 <textarea
                   rows={3}
@@ -1526,50 +1742,6 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   onChange={(e) => setBioForm({ ...bioForm, aboutGoals: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                 />
-              </div>
-
-              {/* 2 In-Engine Reel Still Photos */}
-              <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
-                <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold block">
-                  2 In-Engine Reel Still Photos (Right Side)
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(bioForm.aboutReelStills || [
-                    { title: 'Robot Rig Study', label: 'Unreal & Maya', image: '/showcase/slide-robot.jpg' },
-                    { title: 'UE5 Lighting Staging', label: 'Porsche GT3 RS Dual Car Render', image: '/showcase/slide-porsche.jpg' }
-                  ]).map((still, idx) => (
-                    <div key={idx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2 text-xs">
-                      <input
-                        type="text"
-                        value={still.title}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.aboutReelStills || [
-                            { title: 'Robot Rig Study', label: 'Unreal & Maya', image: '/showcase/slide-robot.jpg' },
-                            { title: 'UE5 Lighting Staging', label: 'Porsche GT3 RS Dual Car Render', image: '/showcase/slide-porsche.jpg' }
-                          ])];
-                          curr[idx] = { ...curr[idx], title: e.target.value };
-                          setBioForm({ ...bioForm, aboutReelStills: curr });
-                        }}
-                        placeholder="Caption Title"
-                        className="w-full px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-white font-bold"
-                      />
-                      <input
-                        type="text"
-                        value={still.image}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.aboutReelStills || [
-                            { title: 'Robot Rig Study', label: 'Unreal & Maya', image: '/showcase/slide-robot.jpg' },
-                            { title: 'UE5 Lighting Staging', label: 'Porsche GT3 RS Dual Car Render', image: '/showcase/slide-porsche.jpg' }
-                          ])];
-                          curr[idx] = { ...curr[idx], image: e.target.value };
-                          setBioForm({ ...bioForm, aboutReelStills: curr });
-                        }}
-                        placeholder="Image URL / Path"
-                        className="w-full px-2.5 py-1.5 rounded bg-black border border-zinc-700 text-amber-400 font-mono"
-                      />
-                    </div>
-                  ))}
-                </div>
               </div>
 
               {/* 3 Philosophy Pillars */}
@@ -1631,11 +1803,93 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
           {/* TAB: RESUME / CV */}
           {/* ======================================================== */}
           {activeTab === 'resume' && (
-            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Resume credentials updated!')} className="space-y-6">
+            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Resume settings & file updated!')} className="space-y-6">
               <div className="border-b border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider font-mono">
-                  Game Designer Resume & CV
+                  Upload Custom Downloadable Resume
                 </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Upload your own PDF or DOCX resume file here so visitors can preview and download it on the Resume tab.
+                </p>
+              </div>
+
+              {/* Custom Resume File Upload Box */}
+              <div className="p-5 rounded-xl bg-zinc-900/70 border border-amber-500/40 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold block">
+                      {bioForm.resumePdfUrl ? 'Active Uploaded Resume' : 'No Resume Uploaded Yet'}
+                    </span>
+                    <p className="text-xs text-zinc-300 mt-0.5 font-mono">
+                      {bioForm.resumePdfUrl
+                        ? `${bioForm.resumeFileName || 'Resume.pdf'}${bioForm.resumeFileSize ? ` · ${bioForm.resumeFileSize}` : ''}`
+                        : 'Select a PDF or DOCX resume file to enable downloads'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{bioForm.resumePdfUrl ? 'Replace File' : 'Upload Resume (PDF/DOCX)'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.doc,application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const dataUrl = reader.result as string;
+                            const k = 1024;
+                            const sizes = ['Bytes', 'KB', 'MB'];
+                            const i = file.size > 0 ? Math.floor(Math.log(file.size) / Math.log(k)) : 0;
+                            const formattedSize =
+                              file.size > 0
+                                ? parseFloat((file.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+                                : 'Ready';
+                            const nextFields = {
+                              resumePdfUrl: dataUrl,
+                              resumeFileName: file.name,
+                              resumeUploadDate: new Date().toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              }),
+                              resumeFileSize: formattedSize
+                            };
+                            setBioForm((prev) => ({ ...prev, ...nextFields }));
+                            onSaveDesignerInfo(nextFields);
+                            triggerSuccess(`Uploaded "${file.name}" for visitors to download!`);
+                          };
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {bioForm.resumePdfUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cleared = {
+                            resumePdfUrl: undefined,
+                            resumeFileName: undefined,
+                            resumeUploadDate: undefined,
+                            resumeFileSize: undefined
+                          };
+                          setBioForm((prev) => ({ ...prev, ...cleared }));
+                          onSaveDesignerInfo(cleared);
+                          triggerSuccess('Uploaded resume removed.');
+                        }}
+                        className="p-2 rounded-xl bg-zinc-800 hover:bg-red-950/70 text-zinc-400 hover:text-red-400 border border-zinc-700 transition-colors cursor-pointer"
+                        title="Remove uploaded resume"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1645,126 +1899,21 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={bioForm.resumeHeading || 'GAME DESIGNER RESUME'}
+                    value={bioForm.resumeHeading || 'RESUME'}
                     onChange={(e) => setBioForm({ ...bioForm, resumeHeading: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Status / Availability Pill
+                    Resume Subtitle
                   </label>
                   <input
                     type="text"
-                    value={bioForm.status || 'Open to Game Studio Roles & Freelance Design'}
-                    onChange={(e) => setBioForm({ ...bioForm, status: e.target.value })}
+                    value={bioForm.resumeSubheading || 'Download my custom resume document directly for studio roles and collaboration inquiries.'}
+                    onChange={(e) => setBioForm({ ...bioForm, resumeSubheading: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Professional Summary
-                </label>
-                <textarea
-                  rows={3}
-                  value={bioForm.resumeSummary || ''}
-                  onChange={(e) => setBioForm({ ...bioForm, resumeSummary: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
-                />
-              </div>
-
-              {/* Experiences Manager */}
-              <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
-                    Project Experiences (CV Experience Entries)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const curr = [...(bioForm.resumeExperiences || [])];
-                      curr.unshift({
-                        role: 'Game Designer',
-                        project: 'New Project / Studio',
-                        period: '2024 - Present',
-                        description: 'Detailed development and design contributions...',
-                        tools: ['Unreal Engine 5']
-                      });
-                      setBioForm({ ...bioForm, resumeExperiences: curr });
-                    }}
-                    className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Add Experience</span>
-                  </button>
-                </div>
-
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {(bioForm.resumeExperiences || []).map((exp, eIdx) => (
-                    <div key={eIdx} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2 text-xs">
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="text"
-                          value={exp.role}
-                          onChange={(e) => {
-                            const curr = [...(bioForm.resumeExperiences || [])];
-                            curr[eIdx] = { ...curr[eIdx], role: e.target.value };
-                            setBioForm({ ...bioForm, resumeExperiences: curr });
-                          }}
-                          placeholder="Role"
-                          className="px-2 py-1 rounded bg-black border border-zinc-700 text-white font-bold"
-                        />
-                        <input
-                          type="text"
-                          value={exp.project}
-                          onChange={(e) => {
-                            const curr = [...(bioForm.resumeExperiences || [])];
-                            curr[eIdx] = { ...curr[eIdx], project: e.target.value };
-                            setBioForm({ ...bioForm, resumeExperiences: curr });
-                          }}
-                          placeholder="Project / Studio"
-                          className="px-2 py-1 rounded bg-black border border-zinc-700 text-amber-400"
-                        />
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={exp.period}
-                            onChange={(e) => {
-                              const curr = [...(bioForm.resumeExperiences || [])];
-                              curr[eIdx] = { ...curr[eIdx], period: e.target.value };
-                              setBioForm({ ...bioForm, resumeExperiences: curr });
-                            }}
-                            placeholder="Period (e.g. 2024)"
-                            className="flex-1 px-2 py-1 rounded bg-black border border-zinc-700 text-zinc-300 font-mono"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const curr = [...(bioForm.resumeExperiences || [])];
-                              curr.splice(eIdx, 1);
-                              setBioForm({ ...bioForm, resumeExperiences: curr });
-                            }}
-                            className="p-1 rounded text-zinc-500 hover:text-red-400"
-                            title="Delete Experience"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <textarea
-                        rows={2}
-                        value={exp.description}
-                        onChange={(e) => {
-                          const curr = [...(bioForm.resumeExperiences || [])];
-                          curr[eIdx] = { ...curr[eIdx], description: e.target.value };
-                          setBioForm({ ...bioForm, resumeExperiences: curr });
-                        }}
-                        className="w-full px-2 py-1 rounded bg-black border border-zinc-700 text-zinc-300"
-                      />
-                    </div>
-                  ))}
                 </div>
               </div>
 
@@ -1773,7 +1922,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Resume Changes</span>
+                <span>Save Resume Section Settings</span>
               </button>
             </form>
           )}
@@ -1782,10 +1931,10 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
           {/* TAB: CONTACT */}
           {/* ======================================================== */}
           {activeTab === 'contact' && (
-            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Contact details & slide photo updated!')} className="space-y-4">
+            <form onSubmit={(e) => handleSaveBioGeneric(e, 'Contact details & social URLs updated!')} className="space-y-4">
               <div className="border-b border-zinc-800 pb-3">
                 <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider font-mono">
-                  Direct Contact Information & Showcase Slide
+                  Direct Contact Information &amp; Social Platforms
                 </h3>
               </div>
 
@@ -1803,13 +1952,13 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Contact Slide Showcase Photo URL / Path
+                    Studio Availability Status
                   </label>
                   <input
                     type="text"
-                    value={bioForm.contactSlidePhotoUrl || '/showcase/contact-slide.jpg'}
-                    onChange={(e) => setBioForm({ ...bioForm, contactSlidePhotoUrl: e.target.value })}
-                    placeholder="/showcase/contact-slide.jpg"
+                    value={bioForm.status || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, status: e.target.value })}
+                    placeholder="Open to Game Studio Roles & Freelance Design"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
                 </div>
@@ -1817,10 +1966,10 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
 
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold mb-1.5">
-                  Contact Subheading & Message Statement *
+                  Contact Subheading &amp; Message Statement *
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={bioForm.contactSubheading !== undefined ? bioForm.contactSubheading : 'Interested in my game design work, level layouts, or vehicle mechanics? Let’s discuss studio positions, freelance inquiries, or creative collaborations.'}
                   onChange={(e) => setBioForm({ ...bioForm, contactSubheading: e.target.value })}
                   placeholder="e.g. Interested in my game design work..."
@@ -1857,12 +2006,13 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    LinkedIn Handle
+                    ArtStation Profile URL
                   </label>
                   <input
                     type="text"
-                    value={bioForm.linkedin || ''}
-                    onChange={(e) => setBioForm({ ...bioForm, linkedin: e.target.value })}
+                    value={bioForm.artstationUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, artstationUrl: e.target.value })}
+                    placeholder="https://artstation.com/..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
                 </div>
@@ -1881,29 +2031,42 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    ArtStation Profile URL
-                  </label>
-                  <input
-                    type="text"
-                    value={bioForm.artstationUrl || ''}
-                    onChange={(e) => setBioForm({ ...bioForm, artstationUrl: e.target.value })}
-                    placeholder="https://artstation.com/..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    WhatsApp Chat URL / Number
+                    WhatsApp URL
                   </label>
                   <input
                     type="text"
                     value={bioForm.whatsappUrl || ''}
                     onChange={(e) => setBioForm({ ...bioForm, whatsappUrl: e.target.value })}
                     placeholder="https://wa.me/918072647909"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Instagram URL
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.instagramUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, instagramUrl: e.target.value })}
+                    placeholder="https://instagram.com/..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
+                    YouTube Channel URL
+                  </label>
+                  <input
+                    type="text"
+                    value={bioForm.youtubeUrl || ''}
+                    onChange={(e) => setBioForm({ ...bioForm, youtubeUrl: e.target.value })}
+                    placeholder="https://youtube.com/@..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white"
                   />
                 </div>
@@ -1914,7 +2077,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Contact Details & Slide</span>
+                <span>Save Contact &amp; Social URLs</span>
               </button>
             </form>
           )}
@@ -1947,7 +2110,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   onClick={copyJsonToClipboard}
                   className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white flex items-center gap-1.5 cursor-pointer"
                 >
-                  {copiedJson ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+                  {copiedJson ? <Check className="w-3.5 h-3.5 text-amber-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
                   <span>{copiedJson ? 'Copied!' : 'Copy to Clipboard'}</span>
                 </button>
               </div>

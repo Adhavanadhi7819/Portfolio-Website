@@ -1,19 +1,23 @@
 import React from 'react';
-import { Play, Sparkles, ChevronDown, Compass, Box, Flame, ArrowUpRight, Edit3 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ArrowUpRight, Download, Edit3, Compass, Mail, Plus, Trash2 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
+import { PhotoAdjustOverlay, DEFAULT_PHOTO_ALIGN } from './PhotoAdjustOverlay';
 
 interface HeroSectionProps {
   designerInfo?: DesignerInfo;
   isOwnerMode?: boolean;
   onEditHero?: () => void;
   onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
-  onPlayReel: () => void;
+  onPlayReel?: () => void;
   onExploreProjects: () => void;
-  onJumpToChapter: (chapterId: string) => void;
+  onJumpToChapter?: (chapterId: string) => void;
+  onOpenResume?: () => void;
+  onOpenContact?: () => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   onMoveUp?: () => void;
@@ -22,14 +26,16 @@ interface HeroSectionProps {
   onAddSectionBelow?: () => void;
 }
 
+const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 export const HeroSection: React.FC<HeroSectionProps> = ({
   designerInfo = DESIGNER_INFO,
   isOwnerMode = false,
   onEditHero,
   onUpdateDesignerInfo,
-  onPlayReel,
   onExploreProjects,
-  onJumpToChapter,
+  onOpenResume,
+  onOpenContact,
   canMoveUp,
   canMoveDown,
   onMoveUp,
@@ -37,21 +43,47 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onHide,
   onAddSectionBelow
 }) => {
-  return (
-    <section id="hero" className="relative pt-20 sm:pt-24 pb-12 sm:pb-16 min-h-[calc(100vh-140px)] flex flex-col justify-center overflow-hidden">
-      {/* Background radial gradient & ambient glow */}
-      <div className="absolute inset-0 bg-radial-vignette pointer-events-none"></div>
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-amber-500/10 blur-[140px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-10 right-10 w-96 h-96 bg-orange-600/10 blur-[120px] rounded-full pointer-events-none"></div>
+  const defaultStats = [
+    { number: '6+', label: 'Unreal Environments & Levels' },
+    { number: '3D RPG', label: 'Flagship Game In Progress' },
+    { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
+    { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
+  ];
 
-      {/* Grid pattern overlay */}
-      <div 
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: 'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)',
-          backgroundSize: '48px 48px'
-        }}
-      ></div>
+  const stats = Array.isArray(designerInfo.heroStats)
+    ? designerInfo.heroStats.filter(
+        (s) => isOwnerMode || Boolean(s.number?.trim() || s.label?.trim())
+      )
+    : defaultStats;
+
+  const portraitUrl =
+    designerInfo.heroPhotoUrl ||
+    '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png';
+
+  const photoAlign = designerInfo.heroPhotoAlign || DEFAULT_PHOTO_ALIGN;
+
+  const handleAddStat = () => {
+    const next = [...stats, { number: 'New', label: 'Add stat description' }];
+    onUpdateDesignerInfo?.({ heroStats: next });
+  };
+
+  const handleRemoveStat = (removeIdx: number) => {
+    const next = stats.filter((_, i) => i !== removeIdx);
+    onUpdateDesignerInfo?.({ heroStats: next });
+  };
+
+  return (
+    <section
+      id="hero"
+      className="relative pt-20 sm:pt-24 pb-8 sm:pb-10 flex-1 flex flex-col justify-center overflow-hidden bg-[#050507]"
+    >
+      {/* Subtle atmospheric glow */}
+      <div className="absolute inset-0 bg-radial-vignette pointer-events-none" />
+      <motion.div
+        animate={{ opacity: [0.65, 1, 0.65], scale: [1, 1.04, 1] }}
+        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[420px] bg-amber-500/8 blur-[140px] rounded-full pointer-events-none"
+      />
 
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -68,45 +100,62 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         />
       )}
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
-          
-          {/* Left Column: Bio & Title */}
-          <div className="lg:col-span-7 space-y-4">
-            
-            {/* Main Title Styled faithfully to the user's video title card */}
-            <div className="space-y-1">
-              <span className="block text-amber-500 font-serif italic text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
-                Game
-              </span>
-              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-heading font-black tracking-tighter uppercase text-white leading-none">
-                DESIGNER
-              </h1>
-              <div className="pt-2 flex items-center gap-3">
-                <InlineEdit
-                  value={designerInfo.name}
-                  onSave={(val) => onUpdateDesignerInfo?.({ name: val })}
-                  isOwnerMode={isOwnerMode}
-                  label="Designer Name"
-                  className="text-xl sm:text-2xl font-mono tracking-widest text-zinc-300 font-semibold uppercase"
-                >
-                  <span className="text-xl sm:text-2xl font-mono tracking-widest text-zinc-300 font-semibold uppercase">
-                    {designerInfo.name.toUpperCase()}
-                  </span>
-                </InlineEdit>
-                <span className="h-0.5 w-12 bg-amber-500/60 inline-block"></span>
-                <InlineEdit
-                  value={designerInfo.title}
-                  onSave={(val) => onUpdateDesignerInfo?.({ title: val })}
-                  isOwnerMode={isOwnerMode}
-                  label="Role / Title"
-                  className="text-xs tracking-wider uppercase text-amber-400/90 font-mono"
-                />
-              </div>
-            </div>
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-4 sm:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+          {/* Left Column: Kicker, Headline, Lead Copy, Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: EASE_OUT_EXPO }}
+            className="lg:col-span-7 space-y-5"
+          >
+            {/* Clean Unboxed Kicker Line */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.05, ease: EASE_OUT_EXPO }}
+              className="flex flex-wrap items-center gap-2 text-xs font-mono uppercase tracking-widest text-amber-400 font-semibold"
+            >
+              <InlineEdit
+                value={designerInfo.name || 'ADHAVAN'}
+                onSave={(val) => onUpdateDesignerInfo?.({ name: val })}
+                isOwnerMode={isOwnerMode}
+                label="Designer Name"
+                className="text-white font-bold"
+              />
+              <span className="text-zinc-600">—</span>
+              <InlineEdit
+                value={designerInfo.heroBadge || 'Unreal Engine 5 & Autodesk Maya'}
+                onSave={(val) => onUpdateDesignerInfo?.({ heroBadge: val })}
+                isOwnerMode={isOwnerMode}
+                label="Hero Kicker Subtitle"
+                className="text-amber-400"
+              />
+            </motion.div>
 
-            {/* Description / Tagline */}
-            <div className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed">
+            {/* Primary Display Headline */}
+            <motion.h1
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.1, ease: EASE_OUT_EXPO }}
+              className="text-4xl sm:text-5xl lg:text-6xl font-heading font-black tracking-tight text-white leading-[1.06]"
+            >
+              <InlineEdit
+                value={designerInfo.title || 'Game Designer | 3D Artist'}
+                onSave={(val) => onUpdateDesignerInfo?.({ title: val })}
+                isOwnerMode={isOwnerMode}
+                label="Role / Hero Headline"
+                as="span"
+              />
+            </motion.h1>
+
+            {/* Lead Narrative Copy */}
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.16, ease: EASE_OUT_EXPO }}
+              className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed font-normal"
+            >
               <InlineEdit
                 value={designerInfo.tagline}
                 onSave={(val) => onUpdateDesignerInfo?.({ tagline: val })}
@@ -115,258 +164,271 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 label="Hero Tagline"
                 as="p"
               />
-            </div>
+            </motion.div>
 
-            {/* Call to Actions */}
-            <div className="pt-2 flex flex-wrap items-center gap-4">
-              <button
-                onClick={onPlayReel}
-                className="flex items-center gap-3 px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold uppercase tracking-wider text-sm shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-105 transition-all cursor-pointer group"
-              >
-                <div className="w-7 h-7 rounded-full bg-black/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Play className="w-4 h-4 fill-black text-black ml-0.5" />
-                </div>
-                <span>Play Showcase Reel</span>
-                <span className="text-xs bg-black/20 text-black px-2 py-0.5 rounded font-mono font-medium">4:52</span>
-              </button>
-
-              <button
+            {/* Action Buttons Row */}
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.22, ease: EASE_OUT_EXPO }}
+              className="pt-2 flex flex-wrap items-center gap-3.5"
+            >
+              <motion.button
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                 onClick={onExploreProjects}
-                className="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-700/80 hover:border-zinc-500 font-semibold uppercase tracking-wider text-sm transition-all cursor-pointer backdrop-blur-md"
+                className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-sm transition-colors flex items-center gap-2.5 shadow-lg shadow-amber-500/25 cursor-pointer"
               >
-                <Compass className="w-4 h-4 text-amber-400" />
-                <span>Explore Projects</span>
-              </button>
+                <Compass className="w-4 h-4 text-black" />
+                <span>Explore Works</span>
+                <ArrowUpRight className="w-4 h-4" />
+              </motion.button>
 
-              {/* Owner Edit Button */}
+              {designerInfo.resumePdfUrl ? (
+                <motion.a
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                  href={designerInfo.resumePdfUrl}
+                  download={
+                    designerInfo.resumeFileName ||
+                    `${designerInfo.name.replace(/\s+/g, '_')}_Resume.pdf`
+                  }
+                  className="px-5 py-3 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 rounded-xl text-sm transition-colors flex items-center gap-2 font-mono cursor-pointer"
+                  title="Download Resume"
+                >
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span>Download Resume</span>
+                </motion.a>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                  onClick={() => onOpenResume?.()}
+                  className="px-5 py-3 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 rounded-xl text-sm transition-colors flex items-center gap-2 font-mono cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span>View Resume</span>
+                </motion.button>
+              )}
+
+              {onOpenContact && (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                  onClick={onOpenContact}
+                  className="px-5 py-3 bg-zinc-950 hover:bg-zinc-900 text-amber-300 border border-amber-500/35 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Mail className="w-4 h-4 text-amber-400" />
+                  <span>Get In Touch</span>
+                </motion.button>
+              )}
+
               {isOwnerMode && (
                 <button
                   onClick={onEditHero}
-                  className="flex items-center gap-2 px-4 py-3.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold uppercase tracking-wider text-xs transition-all cursor-pointer"
-                  title="Edit Hero Title, Tagline & Info"
+                  className="px-3.5 py-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Edit3 className="w-4 h-4" />
-                  <span>Edit Hero & Bio</span>
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Edit Hero</span>
                 </button>
               )}
-            </div>
+            </motion.div>
 
-            {/* Quick jump highlights */}
-            <div className="pt-4 border-t border-zinc-800/80">
-              <span className="text-xs uppercase tracking-wider text-zinc-400 block mb-3 font-mono">
-                Featured Showreel Segments:
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: '🏴‍☠️ Pirate Village RPG', id: 'flagship-rpg' },
-                  { label: '🏎️ AE86 Speedrun Drift', id: 'ae86-speedrun' },
-                  { label: '⛽ Gas Station Night Scene', id: 'gas-station' },
-                  { label: '🏛️ Temple Duality', id: 'temple-upside' },
-                  { label: '🎸 Maya 3D Assets', id: 'maya-3d' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => onJumpToChapter(item.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-zinc-900/70 hover:bg-amber-500/10 text-zinc-300 hover:text-amber-400 border border-zinc-800 hover:border-amber-500/40 transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>{item.label}</span>
-                    <ArrowUpRight className="w-3 h-3 opacity-60" />
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Clean Typographic Specializations Quick-Links */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.28, ease: EASE_OUT_EXPO }}
+              className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-mono"
+            >
+              <span className="text-zinc-500 uppercase tracking-wider">Focus Disciplines:</span>
+              {['Game Design', 'Level Layout', 'Vehicle Rigging', '3D Arts (Maya)'].map(
+                (item, idx, arr) => (
+                  <React.Fragment key={item}>
+                    <button
+                      onClick={onExploreProjects}
+                      className="text-zinc-300 hover:text-amber-400 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{item}</span>
+                      <ArrowUpRight className="w-3 h-3 opacity-60" />
+                    </button>
+                    {idx < arr.length - 1 && <span className="text-zinc-700">/</span>}
+                  </React.Fragment>
+                )
+              )}
+            </motion.div>
+          </motion.div>
 
-          </div>
+          {/* Right Column: Clean Portrait Card (Photo Only — No Video Player Overlay) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.12, ease: EASE_OUT_EXPO }}
+            className="lg:col-span-5"
+          >
+            <div className="relative group max-w-sm sm:max-w-md lg:max-w-none mx-auto">
+              <div className="absolute -inset-1 bg-gradient-to-tr from-amber-500/20 via-zinc-800/10 to-amber-500/25 rounded-3xl blur-xl opacity-70 group-hover:opacity-100 transition duration-500" />
 
-          {/* Right Column: Hero Visual Asset Card */}
-          <div className="lg:col-span-5 relative">
-            <div className="relative mx-auto max-w-md lg:max-w-none group">
-              
-              {/* Outer Glow Halo */}
-              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/40 via-orange-500/20 to-amber-600/40 blur-xl opacity-75 group-hover:opacity-100 transition duration-500"></div>
-
-              {/* Card Container */}
-              <div className="relative rounded-2xl bg-zinc-950 border border-zinc-800/90 overflow-hidden shadow-2xl">
-                
-                {/* Header bar of visual card */}
-                <div className="px-4 py-2.5 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between text-xs font-mono text-zinc-400">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
-                    <span className="ml-2 text-zinc-300 font-semibold tracking-wide">ADHAVAN // SHOWCASE</span>
+              <div className="relative bg-zinc-900/80 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
+                {/* Clean Unobstructed Portrait Photo Frame */}
+                <div className="relative aspect-[4/4] sm:aspect-[4/4.1] w-full overflow-hidden bg-zinc-950">
+                  <div className="w-full h-full group-hover:scale-[1.03] transition-transform duration-700 ease-out">
+                    <img
+                      src={portraitUrl}
+                      alt={`${designerInfo.name} — ${designerInfo.title}`}
+                      style={{
+                        objectPosition: `${photoAlign.x}% ${photoAlign.y}%`,
+                        transform: `scale(${photoAlign.zoom})`
+                      }}
+                      className={`w-full h-full transition-all duration-300 ${
+                        photoAlign.fit === 'contain' ? 'object-contain' : 'object-cover'
+                      }`}
+                    />
                   </div>
-                  <span className="text-amber-400 font-bold uppercase tracking-wider text-[11px]">PORTFOLIO</span>
-                </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-transparent to-transparent pointer-events-none" />
 
-                {/* Primary Photo from user's video intro */}
-                <div className="relative aspect-[4/3] overflow-hidden bg-black">
-                  <img
-                    src={designerInfo.heroPhotoUrl || '/showcase/hero-adhavan.jpg'}
-                    alt="Adhavan Game Designer Title Shot"
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                  {/* Owner Photo Alignment & Zoom Editor */}
+                  <PhotoAdjustOverlay
+                    align={photoAlign}
+                    isOwnerMode={isOwnerMode}
+                    onChange={(next) => onUpdateDesignerInfo?.({ heroPhotoAlign: next })}
+                    positionClass="top-3 left-3"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
 
-                  {/* Play Button Overlay */}
-                  <button
-                    onClick={onPlayReel}
-                    className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/10 transition-colors group/play"
-                    aria-label="Play Reel"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-2xl shadow-amber-500/50 group-hover/play:scale-110 transition-transform">
-                      <Play className="w-7 h-7 fill-black text-black ml-1" />
-                    </div>
-                  </button>
-
-                  {/* Direct In-place Media Upload for Owner */}
+                  {/* Owner Direct Photo Upload */}
                   <MediaUploadOverlay
-                    currentUrl={designerInfo.heroPhotoUrl || '/showcase/hero-adhavan.jpg'}
+                    currentUrl={portraitUrl}
                     mediaType="image"
                     isOwnerMode={isOwnerMode}
                     onMediaUploaded={(newUrl) => onUpdateDesignerInfo?.({ heroPhotoUrl: newUrl })}
                     label="Upload Hero Photo"
                     position="top-right"
                   />
+                </div>
 
-                  {/* Bottom caption overlay */}
-                  <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-mono uppercase tracking-widest text-amber-400 font-semibold block">
-                        Featured Reel
-                      </span>
-                      <p className="text-white font-bold text-sm">
-                        Unreal Engine Gameplay & Environment Showcase
-                      </p>
+                {/* Clean Card Footer: Subtle Availability Watermark + Direct Inquiry */}
+                <div className="px-4 sm:px-5 py-3.5 bg-zinc-950/95 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs font-mono">
+                  <span className="text-[11px] text-zinc-400/55 tracking-wide truncate select-none min-w-0">
+                    {designerInfo.status || 'Open to Game Studio Roles & Freelance Design'}
+                  </span>
+                  <button
+                    onClick={() => (onOpenContact ? onOpenContact() : onExploreProjects())}
+                    className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium cursor-pointer shrink-0"
+                  >
+                    <span>Direct Inquiry</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Full-Width Auto-Aligning Benchmark KPI Row (Scales Cleanly for Any Item Count) */}
+        {(stats.length > 0 || isOwnerMode) && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.34, ease: EASE_OUT_EXPO }}
+            className="mt-7 sm:mt-8 pt-6 border-t border-zinc-800/80 relative"
+          >
+            {isOwnerMode && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <span className="text-[11px] font-mono text-zinc-500">
+                  Auto-aligns row width cleanly as stats are added or removed
+                </span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={handleAddStat}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                    title="Add a new stat block"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Add Stat</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onEditHero}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                    title="Edit all stat counters"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Stats</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {stats.length > 0 ? (
+              <div className="grid gap-3.5 sm:gap-4 grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] text-zinc-400 font-mono text-xs">
+                {stats.map((stat, idx) => (
+                  <motion.div
+                    key={idx}
+                    whileHover={{ y: -2 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                    className={`relative group/stat px-5 py-3.5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/40 transition-colors flex flex-col justify-center min-w-0 ${
+                      isOwnerMode ? 'pr-10' : ''
+                    }`}
+                  >
+                    {isOwnerMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStat(idx)}
+                        className="absolute top-2.5 right-2.5 p-1 rounded-md bg-zinc-900 hover:bg-red-950 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer"
+                        title="Remove this stat"
+                        aria-label={`Remove stat ${stat.number || idx + 1}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <div
+                      className={`text-xl sm:text-2xl font-bold font-heading tabular-nums truncate ${
+                        idx % 2 === 1 ? 'text-amber-400' : 'text-white'
+                      }`}
+                    >
+                      <InlineEdit
+                        value={stat.number}
+                        onSave={(val) => {
+                          const next = [...stats];
+                          next[idx] = { ...next[idx], number: val };
+                          onUpdateDesignerInfo?.({ heroStats: next });
+                        }}
+                        isOwnerMode={isOwnerMode}
+                        label="Stat Value"
+                        as="span"
+                      />
                     </div>
-                    <span className="text-xs bg-black/80 backdrop-blur-md px-2.5 py-1 rounded text-zinc-300 font-mono border border-zinc-700">
-                      04:52
-                    </span>
-                  </div>
-                </div>
-
-                {/* Engine Stacks in card footer */}
-                <div className="p-4 bg-zinc-900/60 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
-                    <span className="block text-xs font-mono text-zinc-400 uppercase">Engine</span>
-                    <InlineEdit
-                      value={designerInfo.heroEngineTags?.engine || 'Unreal 5'}
-                      onSave={(val) => onUpdateDesignerInfo?.({
-                        heroEngineTags: {
-                          engine: val,
-                          maya: designerInfo.heroEngineTags?.maya || 'Maya',
-                          focus: designerInfo.heroEngineTags?.focus || 'Mechanics'
-                        }
-                      })}
-                      isOwnerMode={isOwnerMode}
-                      label="Engine"
-                      className="text-sm text-white font-semibold block"
-                    />
-                  </div>
-                  <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
-                    <span className="block text-xs font-mono text-zinc-400 uppercase">3D Modeling</span>
-                    <InlineEdit
-                      value={designerInfo.heroEngineTags?.maya || 'Maya'}
-                      onSave={(val) => onUpdateDesignerInfo?.({
-                        heroEngineTags: {
-                          engine: designerInfo.heroEngineTags?.engine || 'Unreal 5',
-                          maya: val,
-                          focus: designerInfo.heroEngineTags?.focus || 'Mechanics'
-                        }
-                      })}
-                      isOwnerMode={isOwnerMode}
-                      label="3D Modeling Software"
-                      className="text-sm text-amber-400 font-semibold block"
-                    />
-                  </div>
-                  <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
-                    <span className="block text-xs font-mono text-zinc-400 uppercase">Focus</span>
-                    <InlineEdit
-                      value={designerInfo.heroEngineTags?.focus || 'Mechanics'}
-                      onSave={(val) => onUpdateDesignerInfo?.({
-                        heroEngineTags: {
-                          engine: designerInfo.heroEngineTags?.engine || 'Unreal 5',
-                          maya: designerInfo.heroEngineTags?.maya || 'Maya',
-                          focus: val
-                        }
-                      })}
-                      isOwnerMode={isOwnerMode}
-                      label="Design Focus"
-                      className="text-sm text-white font-semibold block"
-                    />
-                  </div>
-                </div>
-
+                    <div className="text-zinc-400 mt-0.5 leading-snug">
+                      <InlineEdit
+                        value={stat.label}
+                        onSave={(val) => {
+                          const next = [...stats];
+                          next[idx] = { ...next[idx], label: val };
+                          onUpdateDesignerInfo?.({ heroStats: next });
+                        }}
+                        isOwnerMode={isOwnerMode}
+                        label="Stat Label"
+                        as="span"
+                      />
+                    </div>
+                  </motion.div>
+                ))}
               </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Floating Stat Counters Bar */}
-        <div className="mt-8 pt-5 border-t border-zinc-800/80 relative">
-          {isOwnerMode && (
-            <div className="absolute -top-3 right-0">
-              <button
-                onClick={onEditHero}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
-                title="Edit Stat Counters"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Edit Stats</span>
-              </button>
-            </div>
-          )}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4">
-            {(designerInfo.heroStats && designerInfo.heroStats.length > 0
-              ? designerInfo.heroStats
-              : [
-                  { number: '6+', label: 'Unreal Environments & Levels' },
-                  { number: '3D RPG', label: 'Flagship Game In Progress' },
-                  { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
-                  { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                ]
-            ).map((stat, idx) => (
-              <div key={idx} className="p-3 sm:p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
-                <InlineEdit
-                  value={stat.number}
-                  onSave={(val) => {
-                    const currentStats = designerInfo.heroStats || [
-                      { number: '6+', label: 'Unreal Environments & Levels' },
-                      { number: '3D RPG', label: 'Flagship Game In Progress' },
-                      { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
-                      { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                    ];
-                    const next = [...currentStats];
-                    next[idx] = { ...next[idx], number: val };
-                    onUpdateDesignerInfo?.({ heroStats: next });
-                  }}
-                  isOwnerMode={isOwnerMode}
-                  label="Stat Number"
-                  className={`text-3xl font-heading font-black block ${idx % 2 === 0 ? 'text-amber-400' : 'text-white'}`}
-                />
-                <InlineEdit
-                  value={stat.label}
-                  onSave={(val) => {
-                    const currentStats = designerInfo.heroStats || [
-                      { number: '6+', label: 'Unreal Environments & Levels' },
-                      { number: '3D RPG', label: 'Flagship Game In Progress' },
-                      { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
-                      { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
-                    ];
-                    const next = [...currentStats];
-                    next[idx] = { ...next[idx], label: val };
-                    onUpdateDesignerInfo?.({ heroStats: next });
-                  }}
-                  isOwnerMode={isOwnerMode}
-                  label="Stat Label"
-                  className="text-xs text-zinc-400 font-mono uppercase tracking-wider block mt-1"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
+            ) : (
+              isOwnerMode && (
+                <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center text-xs font-mono text-zinc-500">
+                  All stat items removed. Click <strong className="text-amber-400">+ Add Stat</strong> above to add one anytime.
+                </div>
+              )
+            )}
+          </motion.div>
+        )}
       </div>
     </section>
   );
