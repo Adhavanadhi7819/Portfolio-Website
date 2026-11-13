@@ -29,6 +29,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [otpauthUri, setOtpauthUri] = useState<string | null>(null);
+  const [isPaired, setIsPaired] = useState(true);
   const [canShowFirstTimeSetup, setCanShowFirstTimeSetup] = useState(false);
   const [showSetupQr, setShowSetupQr] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(() => getTotpSecondsRemaining());
@@ -43,8 +44,9 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     fetchServerAuthStatus()
       .then((status) => {
         if (!active) return;
-        setCanShowFirstTimeSetup(!isAlreadyOwner && status.canShowInitialSetupQr);
-        setOtpauthUri(status.otpauthUri || null);
+        setIsPaired(status.isPaired);
+        setCanShowFirstTimeSetup(!isAlreadyOwner && !status.isPaired && status.canShowInitialSetupQr);
+        setOtpauthUri(!status.isPaired ? status.otpauthUri || null : null);
       })
       .catch(() => {
         if (!active) return;
@@ -62,7 +64,10 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   }, [isOpen, isAlreadyOwner]);
 
   useEffect(() => {
-    if (!isOpen || !otpauthUri || (!showSetupQr && !isAlreadyOwner)) return;
+    if (!isOpen || isPaired || !otpauthUri || !showSetupQr) {
+      setQrDataUrl('');
+      return;
+    }
     QRCode.toDataURL(otpauthUri, {
       width: 220,
       margin: 2,
@@ -73,7 +78,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     })
       .then(setQrDataUrl)
       .catch((err) => console.error('Failed to render 2FA QR code:', err));
-  }, [isOpen, otpauthUri, showSetupQr, isAlreadyOwner]);
+  }, [isOpen, isPaired, otpauthUri, showSetupQr]);
 
   if (!isOpen) return null;
 
@@ -90,7 +95,9 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     try {
       const result = await verifyOwnerTotpWithServer(cleaned);
       if (result.ok) {
-        if (result.otpauthUri) setOtpauthUri(result.otpauthUri);
+        setIsPaired(true);
+        setOtpauthUri(null);
+        setQrDataUrl('');
         setCanShowFirstTimeSetup(false);
         setShowSetupQr(false);
         setTotpCode('');
@@ -152,43 +159,9 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-amber-400" />
               <span>
-                Authenticated as <strong>Adhavan</strong> with 2FA server sync active.
+                Authenticated as <strong>Adhavan</strong> with 2FA Authenticator protection linked.
               </span>
             </div>
-
-            {showSetupQr && qrDataUrl ? (
-              <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3 text-center">
-                <p className="text-xs font-mono text-zinc-300">
-                  Scan once with Google Authenticator, Authy, or Microsoft Authenticator:
-                </p>
-                <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
-                  <img
-                    src={qrDataUrl}
-                    alt="2FA Authenticator QR Code"
-                    className="w-44 h-44 block"
-                  />
-                </div>
-                <p className="text-[11px] font-mono text-zinc-400">
-                  Your 6-digit rolling code refreshes every 30s ({secondsLeft}s remaining).
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowSetupQr(false)}
-                  className="text-xs font-mono text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                >
-                  Hide QR Code
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowSetupQr(true)}
-                className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold uppercase tracking-wider border border-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <QrCode className="w-4 h-4 text-amber-400" />
-                <span>Show 2FA Authenticator QR Code</span>
-              </button>
-            )}
 
             <button
               type="button"
@@ -204,7 +177,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleVerifyTotp} className="space-y-4">
-            {canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
+            {!isPaired && canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
               <div className="p-3 rounded-xl bg-zinc-900/70 border border-amber-500/30 flex items-center justify-between gap-3">
                 <div className="text-[11px] text-zinc-300 font-mono">
                   First time on this app? Scan the setup QR once.
@@ -220,7 +193,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
               </div>
             )}
 
-            {canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
+            {!isPaired && canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
               <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
                 <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
                   One-Time Authenticator Pairing

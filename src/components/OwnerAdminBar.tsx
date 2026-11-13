@@ -70,7 +70,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
               {syncStatus === 'saving'
                 ? 'Syncing changes to live server...'
                 : syncStatus === 'error'
-                ? 'Sync paused · Click 2FA QR to re-verify'
+                ? 'Sync paused · Click 2FA to re-verify'
                 : syncStatus === 'saved'
                 ? 'Live · Synced across all devices'
                 : hasUnsavedChanges
@@ -196,11 +196,11 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           {onOpenSecurity && (
             <button
               onClick={onOpenSecurity}
-              title="2FA Authenticator Security & QR Setup"
+              title="2FA Authenticator Security"
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">2FA QR</span>
+              <span className="hidden sm:inline">2FA</span>
             </button>
           )}
 

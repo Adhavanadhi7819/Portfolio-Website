@@ -680,7 +680,7 @@ async function startServer(): Promise<void> {
       isAuthenticated: authenticated,
       isPaired: authStore.paired,
       canShowInitialSetupQr: showInitialSetupQr,
-      ...(authenticated || showInitialSetupQr
+      ...(showInitialSetupQr
         ? { otpauthUri: buildOtpAuthUri(authStore.secret) }
         : {})
     });
@@ -715,8 +715,7 @@ async function startServer(): Promise<void> {
     res.json({
       ok: true,
       token,
-      isPaired: true,
-      otpauthUri: buildOtpAuthUri(authStore.secret)
+      isPaired: true
     });
   });
 
