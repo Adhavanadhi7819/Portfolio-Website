@@ -10,11 +10,13 @@ const DATA_DIR = path.resolve(process.cwd(), 'portfolio-data');
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
+const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
 const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 
 const DEFAULT_TOTP_SECRET =
   process.env.OWNER_TOTP_SECRET || 'NBSWY3DPFQQHO33SNRSCC43FMNZGK5A4';
+const DEFAULT_CONTACT_EMAIL = 'prabuprabu906@gmail.com';
 const OWNER_TOTP_ISSUER = 'ADHAVAN Portfolio';
 const OWNER_TOTP_ACCOUNT = 'adhavanprabhu906@gmail.com';
 const SESSION_COOKIE_NAME = 'adhavan_owner_token';
@@ -37,6 +39,19 @@ interface AssetMeta {
   mimeType: string;
   originalFilename: string;
   size: number;
+}
+
+interface ContactMessage {
+  id: string;
+  name: string;
+  senderEmail: string;
+  projectType: string;
+  message: string;
+  recipientEmail: string;
+  createdAt: string;
+  read: boolean;
+  deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
+  deliveryNote: string;
 }
 
 fs.mkdirSync(ASSETS_DIR, { recursive: true });
@@ -400,6 +415,186 @@ function broadcastPortfolioUpdate(version: number, updatedAt: string): void {
   }
 }
 
+function broadcastInboxUpdate(unreadCount: number): void {
+  const payload = `event: message-received\ndata: ${JSON.stringify({ unreadCount })}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+function loadMessages(): ContactMessage[] {
+  try {
+    if (!fs.existsSync(MESSAGES_FILE)) return [];
+    const parsed = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? (parsed as ContactMessage[]) : [];
+  } catch (err) {
+    console.error('Failed to read messages file:', err);
+    return [];
+  }
+}
+
+function saveMessages(messages: ContactMessage[]): void {
+  writeAtomic(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+}
+
+function isValidEmailAddress(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+}
+
+function resolveRecipientEmail(fallbackEmail?: string): string {
+  try {
+    const saved = loadPortfolioState();
+    if (saved) {
+      const profiles = saved.portfolios as Array<{
+        id?: string;
+        state?: { designerInfo?: { email?: string } };
+      }>;
+      const active =
+        profiles.find((p) => p.id === saved.activePortfolioId) || profiles[0];
+      const configured = active?.state?.designerInfo?.email;
+      if (typeof configured === 'string' && isValidEmailAddress(configured)) {
+        return configured.trim();
+      }
+    }
+  } catch {}
+  if (fallbackEmail && isValidEmailAddress(fallbackEmail)) {
+    return fallbackEmail.trim();
+  }
+  return DEFAULT_CONTACT_EMAIL;
+}
+
+function getRequestOrigin(req: Request): string {
+  const origin = req.headers.origin;
+  if (typeof origin === 'string' && /^https?:\/\//i.test(origin)) {
+    return origin;
+  }
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+  if (host) {
+    return `${proto}://${host}`;
+  }
+  return process.env.APP_URL || 'http://localhost:3000';
+}
+
+async function dispatchEmailToOwner(
+  msg: {
+    name: string;
+    senderEmail: string;
+    projectType: string;
+    message: string;
+    recipientEmail: string;
+  },
+  originUrl: string
+): Promise<{ status: 'sent' | 'activation_pending' | 'stored_only'; note: string }> {
+  const subject = `Portfolio Inquiry (${msg.projectType}) — from ${msg.name}`;
+
+  // Tier 1: Resend API if configured
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM_EMAIL || 'Portfolio Contact <onboarding@resend.dev>',
+          to: [msg.recipientEmail],
+          reply_to: msg.senderEmail,
+          subject,
+          text: `From: ${msg.name} <${msg.senderEmail}>\nProject Focus: ${msg.projectType}\n\n${msg.message}`
+        })
+      });
+      if (resp.ok) {
+        return {
+          status: 'sent',
+          note: `Email delivered to ${msg.recipientEmail}`
+        };
+      }
+    } catch (err) {
+      console.error('Resend dispatch error:', err);
+    }
+  }
+
+  // Tier 2: Zero-config HTTPS FormSubmit JSON Relay
+  try {
+    const resp = await fetch(
+      `https://formsubmit.co/ajax/${encodeURIComponent(msg.recipientEmail)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Origin: originUrl,
+          Referer: `${originUrl}/`,
+          'User-Agent': 'Mozilla/5.0 (compatible; PortfolioContactRelay/1.0)'
+        },
+        body: JSON.stringify({
+          name: msg.name,
+          email: msg.senderEmail,
+          _replyto: msg.senderEmail,
+          _subject: subject,
+          Project_Focus: msg.projectType,
+          message: msg.message,
+          _template: 'table',
+          _captcha: 'false'
+        })
+      }
+    );
+
+    const data = (await resp.json().catch(() => ({}))) as {
+      success?: boolean | string;
+      message?: string;
+    };
+
+    if (resp.ok && (data.success === true || data.success === 'true')) {
+      return {
+        status: 'sent',
+        note: `Email forwarded to ${msg.recipientEmail}`
+      };
+    }
+
+    const relayMessage = String(data.message || '');
+    if (relayMessage.toLowerCase().includes('activat')) {
+      return {
+        status: 'activation_pending',
+        note: `Activation email sent to ${msg.recipientEmail}. Open that email once and click "Activate Form" to receive future messages in your inbox.`
+      };
+    }
+
+    return {
+      status: 'stored_only',
+      note: relayMessage || `Saved to Owner Inbox (relay HTTP ${resp.status})`
+    };
+  } catch (err) {
+    console.error('Email relay dispatch error:', err);
+    return {
+      status: 'stored_only',
+      note: 'Saved in Owner Inbox (email relay temporarily unreachable).'
+    };
+  }
+}
+
+const contactRateBuckets = new Map<string, number[]>();
+
+function isContactRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const recent = (contactRateBuckets.get(ip) || []).filter((t) => now - t < windowMs);
+  if (recent.length >= 12) {
+    contactRateBuckets.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  contactRateBuckets.set(ip, recent);
+  return false;
+}
+
 setInterval(() => {
   for (const client of sseClients) {
     try {
@@ -675,6 +870,133 @@ async function startServer(): Promise<void> {
       res.json({ ok: true, version: nextVersion, updatedAt });
     }
   );
+
+  // --- Direct Contact & Owner Inbox Endpoints ---
+  app.post('/api/contact', express.json({ limit: '64kb' }), async (req: Request, res: Response) => {
+    const clientIp = req.ip || 'unknown';
+    if (isContactRateLimited(clientIp)) {
+      res.status(429).json({
+        ok: false,
+        error: 'Too many inquiries sent recently. Please try again in a few minutes.'
+      });
+      return;
+    }
+
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const senderEmail = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+    const projectType =
+      typeof req.body?.projectType === 'string' && req.body.projectType.trim()
+        ? req.body.projectType.trim().slice(0, 160)
+        : 'General Inquiry';
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+    const fallbackRecipient =
+      typeof req.body?.recipientEmail === 'string' ? req.body.recipientEmail.trim() : undefined;
+
+    if (name.length < 2 || name.length > 120) {
+      res.status(400).json({ ok: false, error: 'Please enter a valid name (2–120 characters).' });
+      return;
+    }
+    if (!isValidEmailAddress(senderEmail) || senderEmail.length > 160) {
+      res.status(400).json({ ok: false, error: 'Please enter a valid email address.' });
+      return;
+    }
+    if (message.length < 5 || message.length > 4000) {
+      res.status(400).json({ ok: false, error: 'Please enter a message (at least 5 characters).' });
+      return;
+    }
+
+    const recipientEmail = resolveRecipientEmail(fallbackRecipient);
+    const originUrl = getRequestOrigin(req);
+    const dispatchResult = await dispatchEmailToOwner(
+      { name, senderEmail, projectType, message, recipientEmail },
+      originUrl
+    );
+
+    const record: ContactMessage = {
+      id: `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      name,
+      senderEmail,
+      projectType,
+      message,
+      recipientEmail,
+      createdAt: new Date().toISOString(),
+      read: false,
+      deliveryStatus: dispatchResult.status,
+      deliveryNote: dispatchResult.note
+    };
+
+    const messages = [record, ...loadMessages()].slice(0, 500);
+    saveMessages(messages);
+    const unreadCount = messages.filter((m) => !m.read).length;
+    broadcastInboxUpdate(unreadCount);
+
+    res.status(201).json({
+      ok: true,
+      id: record.id,
+      recipientEmail,
+      deliveryStatus: record.deliveryStatus,
+      deliveryNote: record.deliveryNote
+    });
+  });
+
+  app.get('/api/contact/messages', requireOwnerAuth, (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const messages = loadMessages();
+    const unreadCount = messages.filter((m) => !m.read).length;
+    res.json({
+      ok: true,
+      messages,
+      unreadCount,
+      recipientEmail: resolveRecipientEmail()
+    });
+  });
+
+  app.patch(
+    '/api/contact/messages/:id',
+    requireOwnerAuth,
+    express.json({ limit: '16kb' }),
+    (req: Request, res: Response) => {
+      const id = String(req.params.id || '');
+      const read = typeof req.body?.read === 'boolean' ? req.body.read : true;
+      const messages = loadMessages().map((m) =>
+        id === 'all' || m.id === id ? { ...m, read } : m
+      );
+      saveMessages(messages);
+      const unreadCount = messages.filter((m) => !m.read).length;
+      broadcastInboxUpdate(unreadCount);
+      res.json({ ok: true, messages, unreadCount });
+    }
+  );
+
+  app.delete('/api/contact/messages/:id', requireOwnerAuth, (req: Request, res: Response) => {
+    const id = String(req.params.id || '');
+    const messages = loadMessages().filter((m) => m.id !== id);
+    saveMessages(messages);
+    const unreadCount = messages.filter((m) => !m.read).length;
+    broadcastInboxUpdate(unreadCount);
+    res.json({ ok: true, messages, unreadCount });
+  });
+
+  app.post('/api/contact/test-email', requireOwnerAuth, async (req: Request, res: Response) => {
+    const recipientEmail = resolveRecipientEmail();
+    const originUrl = getRequestOrigin(req);
+    const result = await dispatchEmailToOwner(
+      {
+        name: 'Portfolio Email Verification',
+        senderEmail: recipientEmail,
+        projectType: 'Email Delivery Test',
+        message: `Test inquiry sent from your portfolio at ${originUrl} to verify direct mail delivery to ${recipientEmail}.`,
+        recipientEmail
+      },
+      originUrl
+    );
+    res.json({
+      ok: true,
+      recipientEmail,
+      deliveryStatus: result.status,
+      deliveryNote: result.note
+    });
+  });
 
   // --- Frontend Mounting (Vite Dev vs Production Dist) ---
   const isDev = process.env.NODE_ENV === 'development' || !fs.existsSync(DIST_INDEX);

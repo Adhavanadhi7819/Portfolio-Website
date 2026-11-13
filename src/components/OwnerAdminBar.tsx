@@ -12,7 +12,8 @@ import {
   Gamepad2,
   FileCode,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Inbox
 } from 'lucide-react';
 
 import { EditModalMode } from './OwnerEditModal';
@@ -32,6 +33,8 @@ interface OwnerAdminBarProps {
   onOpenSecurity?: () => void;
   hasUnsavedChanges?: boolean;
   syncStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  onOpenInbox?: () => void;
+  unreadMessageCount?: number;
 }
 
 export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
@@ -48,7 +51,9 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onLockMode,
   onOpenSecurity,
   hasUnsavedChanges = false,
-  syncStatus = 'idle'
+  syncStatus = 'idle',
+  onOpenInbox,
+  unreadMessageCount = 0
 }) => {
   return (
     <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
@@ -171,6 +176,22 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
+
+          {onOpenInbox && (
+            <button
+              onClick={onOpenInbox}
+              title="View received Direct Messages & test email forwarding"
+              className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+            >
+              <Inbox className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Inbox</span>
+              {unreadMessageCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[10px] font-mono font-bold leading-tight">
+                  {unreadMessageCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {onOpenSecurity && (
             <button

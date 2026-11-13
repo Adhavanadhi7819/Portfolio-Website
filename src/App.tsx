@@ -19,6 +19,7 @@ import { Footer } from './components/Footer';
 import { OwnerAdminBar } from './components/OwnerAdminBar';
 import { OwnerAuthModal } from './components/OwnerAuthModal';
 import { OwnerEditModal, EditModalMode } from './components/OwnerEditModal';
+import { OwnerInboxModal } from './components/OwnerInboxModal';
 import { INITIAL_PORTFOLIO_STATE, DEFAULT_OWNER_PASSCODE, DEFAULT_PORTFOLIO_SECTIONS } from './data/portfolioData';
 import { 
   ProjectItem, 
@@ -54,7 +55,8 @@ import {
   saveServerPortfolio,
   resetServerPortfolio,
   logoutOwnerServer,
-  subscribeToPortfolioUpdates
+  subscribeToPortfolioUpdates,
+  fetchOwnerMessages
 } from './utils/portfolioServerSync';
 
 export default function App() {
@@ -222,6 +224,8 @@ export default function App() {
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   const serverVersionRef = useRef<number>(0);
   const isServerHydratedRef = useRef<boolean>(false);
@@ -501,6 +505,11 @@ export default function App() {
             if (activeP?.state) {
               setOwnerSessionSnapshot(JSON.stringify(activeP.state));
             }
+            fetchOwnerMessages()
+              .then((inbox) => {
+                if (active) setUnreadMessageCount(inbox.unreadCount || 0);
+              })
+              .catch(() => {});
           }
           setSyncStatus('saved');
         } else if (authStatus?.isAuthenticated) {
@@ -509,6 +518,11 @@ export default function App() {
             p.id === activePortfolioId ? { ...p, state: portfolioState } : p
           );
           await pushStateToServer(seededPortfolios, activePortfolioId);
+          fetchOwnerMessages()
+            .then((inbox) => {
+              if (active) setUnreadMessageCount(inbox.unreadCount || 0);
+            })
+            .catch(() => {});
         }
       } finally {
         if (active) {
@@ -540,11 +554,16 @@ export default function App() {
       } catch {}
     };
 
-    const unsubscribeSse = subscribeToPortfolioUpdates(({ version }) => {
-      if (version > serverVersionRef.current && !activeSyncPromiseRef.current && !hasPendingSaveRef.current) {
-        syncLatestIfNewer();
+    const unsubscribeSse = subscribeToPortfolioUpdates(
+      ({ version }) => {
+        if (version > serverVersionRef.current && !activeSyncPromiseRef.current && !hasPendingSaveRef.current) {
+          syncLatestIfNewer();
+        }
+      },
+      ({ unreadCount }) => {
+        setUnreadMessageCount(unreadCount);
       }
-    });
+    );
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -659,6 +678,9 @@ export default function App() {
         );
         void pushStateToServer(merged, activePortfolioId);
       }
+      fetchOwnerMessages()
+        .then((inbox) => setUnreadMessageCount(inbox.unreadCount || 0))
+        .catch(() => {});
     } else {
       setOwnerSessionSnapshot(null);
       setIsExitConfirmOpen(false);
@@ -1084,6 +1106,8 @@ export default function App() {
           onOpenSecurity={() => setIsAuthModalOpen(true)}
           hasUnsavedChanges={hasUnsavedOwnerChanges}
           syncStatus={syncStatus}
+          onOpenInbox={() => setIsInboxOpen(true)}
+          unreadMessageCount={unreadMessageCount}
         />
       )}
 
@@ -1422,6 +1446,13 @@ export default function App() {
         onSaveVideoPath={handleSaveVideoPath}
         currentPortfolioState={portfolioState}
         onImportState={handleImportState}
+      />
+
+      {/* Owner Direct Messages Inbox Modal */}
+      <OwnerInboxModal
+        isOpen={isInboxOpen}
+        onClose={() => setIsInboxOpen(false)}
+        onUnreadCountChange={setUnreadMessageCount}
       />
 
       {/* Save Prompt Modal on Closing Owner Mode */}

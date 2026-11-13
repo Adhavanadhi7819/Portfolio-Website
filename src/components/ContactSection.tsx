@@ -12,13 +12,16 @@ import {
   ExternalLink,
   X,
   Plus,
-  Trash2
+  Trash2,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
 import { ContactFormData, ContactFormErrors, DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
+import { submitContactMessage } from '../utils/portfolioServerSync';
 
 interface ContactSectionProps {
   designerInfo?: DesignerInfo;
@@ -129,6 +132,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   });
 
   const [formErrors, setFormErrors] = useState<ContactFormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submittedDetails, setSubmittedDetails] = useState<{
+    recipientEmail: string;
+    subject: string;
+    body: string;
+  } | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [istTime, setIstTime] = useState<IstTimeParts>(() => getIstTimeParts());
@@ -170,15 +180,38 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     const result = validateContactForm(formData);
     if (!result.isValid) {
       setFormErrors(result.errors);
       return;
     }
-    setIsSubmitted(true);
-    setFormErrors({});
+
+    setIsSubmitting(true);
+    try {
+      const response = await submitContactMessage({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        projectType: formData.projectType,
+        message: formData.message.trim(),
+        recipientEmail: info.email
+      });
+      setSubmittedDetails({
+        recipientEmail: response.recipientEmail || info.email,
+        subject: `Portfolio Inquiry: ${formData.projectType} — ${formData.name.trim()}`,
+        body: `Name: ${formData.name.trim()}\nEmail: ${formData.email.trim()}\nFocus: ${formData.projectType}\n\n${formData.message.trim()}`
+      });
+      setIsSubmitted(true);
+      setFormErrors({});
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'Unable to send message right now. Please try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -189,6 +222,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       message: ''
     });
     setIsSubmitted(false);
+    setSubmittedDetails(null);
+    setSubmitError(null);
   };
 
   const handleUpdateInquiryOption = (idx: number, val: string) => {
@@ -554,17 +589,33 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 <div className="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
                   <ShieldCheck className="w-7 h-7" />
                 </div>
-                <h4 className="text-lg font-bold text-white">Message Received!</h4>
+                <h4 className="text-lg font-bold text-white">Message Sent!</h4>
                 <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
-                  Thank you for reaching out. You can also connect directly via email at{' '}
-                  <strong className="text-amber-400">{info.email}</strong> or WhatsApp.
+                  Your message has been sent to{' '}
+                  <strong className="text-amber-400">
+                    {submittedDetails?.recipientEmail || info.email}
+                  </strong>{' '}
+                  and saved in Adhavan&apos;s inbox.
                 </p>
-                <button
-                  onClick={resetForm}
-                  className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                >
-                  Send Another Message
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                  <button
+                    onClick={resetForm}
+                    className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Send Another Message
+                  </button>
+                  {submittedDetails && (
+                    <a
+                      href={`mailto:${submittedDetails.recipientEmail}?subject=${encodeURIComponent(
+                        submittedDetails.subject
+                      )}&body=${encodeURIComponent(submittedDetails.body)}`}
+                      className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-mono text-xs inline-flex items-center gap-1.5 transition-colors"
+                    >
+                      <span>Open in Mail App</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
               </motion.div>
             ) : (
               <motion.form
@@ -743,15 +794,32 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   )}
                 </div>
 
+                {submitError && (
+                  <div className="p-3 rounded-xl bg-red-950/60 border border-red-700/60 text-red-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
+
                 <motion.button
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.985 }}
+                  whileHover={{ scale: isSubmitting ? 1 : 1.01 }}
+                  whileTap={{ scale: isSubmitting ? 1 : 0.985 }}
                   transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                   type="submit"
-                  className="w-full py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs tracking-wider uppercase shadow-lg shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed text-black font-bold text-xs tracking-wider uppercase shadow-lg shadow-amber-500/20 transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <Send className="w-3.5 h-3.5 text-black" />
-                  <span>Transmit Message</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 text-black animate-spin" />
+                      <span>Transmitting Message...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5 text-black" />
+                      <span>Transmit Message</span>
+                    </>
+                  )}
                 </motion.button>
               </motion.form>
             )}

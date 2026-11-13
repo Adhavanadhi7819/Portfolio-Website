@@ -175,8 +175,136 @@ export async function uploadAssetToServer(
   return data as UploadedAssetResponse;
 }
 
+export interface ContactMessageRecord {
+  id: string;
+  name: string;
+  senderEmail: string;
+  projectType: string;
+  message: string;
+  recipientEmail: string;
+  createdAt: string;
+  read: boolean;
+  deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
+  deliveryNote: string;
+}
+
+export async function submitContactMessage(payload: {
+  name: string;
+  email: string;
+  projectType: string;
+  message: string;
+  recipientEmail?: string;
+}): Promise<{
+  ok: boolean;
+  id: string;
+  recipientEmail: string;
+  deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
+  deliveryNote: string;
+}> {
+  const res = await fetch('/api/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    id?: string;
+    recipientEmail?: string;
+    deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+    deliveryNote?: string;
+    error?: string;
+  };
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || 'Could not send message. Please try again.');
+  }
+  return {
+    ok: true,
+    id: data.id || '',
+    recipientEmail: data.recipientEmail || payload.recipientEmail || '',
+    deliveryStatus: data.deliveryStatus || 'stored_only',
+    deliveryNote: data.deliveryNote || ''
+  };
+}
+
+export async function fetchOwnerMessages(): Promise<{
+  messages: ContactMessageRecord[];
+  unreadCount: number;
+  recipientEmail: string;
+}> {
+  const res = await fetch('/api/contact/messages', {
+    method: 'GET',
+    cache: 'no-store',
+    credentials: 'include',
+    headers: buildAuthHeaders()
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error(`Failed to fetch messages (${res.status})`);
+  }
+  const data = (await res.json()) as {
+    messages: ContactMessageRecord[];
+    unreadCount: number;
+    recipientEmail: string;
+  };
+  return data;
+}
+
+export async function markOwnerMessageRead(
+  id: string,
+  read = true
+): Promise<{ messages: ContactMessageRecord[]; unreadCount: number }> {
+  const res = await fetch(`/api/contact/messages/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ read })
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to update message status');
+  }
+  return (await res.json()) as { messages: ContactMessageRecord[]; unreadCount: number };
+}
+
+export async function deleteOwnerMessage(
+  id: string
+): Promise<{ messages: ContactMessageRecord[]; unreadCount: number }> {
+  const res = await fetch(`/api/contact/messages/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: buildAuthHeaders()
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to delete message');
+  }
+  return (await res.json()) as { messages: ContactMessageRecord[]; unreadCount: number };
+}
+
+export async function sendTestOwnerEmail(): Promise<{
+  recipientEmail: string;
+  deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
+  deliveryNote: string;
+}> {
+  const res = await fetch('/api/contact/test-email', {
+    method: 'POST',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to trigger test email');
+  }
+  return (await res.json()) as {
+    recipientEmail: string;
+    deliveryStatus: 'sent' | 'activation_pending' | 'stored_only';
+    deliveryNote: string;
+  };
+}
+
 export function subscribeToPortfolioUpdates(
-  onUpdate: (info: { version: number; updatedAt: string | null }) => void
+  onUpdate: (info: { version: number; updatedAt: string | null }) => void,
+  onMessageReceived?: (info: { unreadCount: number }) => void
 ): () => void {
   if (typeof EventSource === 'undefined') {
     return () => {};
@@ -210,6 +338,15 @@ export function subscribeToPortfolioUpdates(
         };
         if (typeof parsed.version === 'number') {
           onUpdate({ version: parsed.version, updatedAt: parsed.updatedAt ?? null });
+        }
+      } catch {}
+    });
+
+    source.addEventListener('message-received', (evt) => {
+      try {
+        const parsed = JSON.parse((evt as MessageEvent).data) as { unreadCount?: number };
+        if (typeof parsed.unreadCount === 'number') {
+          onMessageReceived?.({ unreadCount: parsed.unreadCount });
         }
       } catch {}
     });
