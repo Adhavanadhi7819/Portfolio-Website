@@ -829,6 +829,8 @@ async function startServer(): Promise<void> {
           ? req.body.recoveryKey.trim().toUpperCase()
           : '';
 
+      const relinkDevice = Boolean(req.body?.relinkDevice);
+
       if (emailCode) {
         if (!pendingRecoveryOtp || pendingRecoveryOtp.expiresAt < Date.now()) {
           pendingRecoveryOtp = null;
@@ -860,6 +862,27 @@ async function startServer(): Promise<void> {
           return;
         }
         pendingRecoveryOtp = null;
+        if (relinkDevice) {
+          saveAuthStore({ ...authStore, paired: false });
+          const token = createSessionToken();
+          const isSecure =
+            req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
+          res.cookie(SESSION_COOKIE_NAME, token, {
+            httpOnly: true,
+            sameSite: isSecure ? 'none' : 'lax',
+            secure: isSecure,
+            maxAge: SESSION_TTL_MS,
+            path: '/'
+          });
+          res.json({
+            ok: true,
+            token,
+            isPaired: false,
+            recoveredVia: 'email',
+            otpauthUri: buildOtpAuthUri(authStore.secret)
+          });
+          return;
+        }
         issueOwnerSession(req, res, { recoveredVia: 'email' });
         return;
       }
@@ -888,6 +911,27 @@ async function startServer(): Promise<void> {
           res.status(401).json({
             ok: false,
             error: 'Invalid Backup Recovery Key.'
+          });
+          return;
+        }
+        if (relinkDevice) {
+          saveAuthStore({ ...authStore, paired: false });
+          const token = createSessionToken();
+          const isSecure =
+            req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
+          res.cookie(SESSION_COOKIE_NAME, token, {
+            httpOnly: true,
+            sameSite: isSecure ? 'none' : 'lax',
+            secure: isSecure,
+            maxAge: SESSION_TTL_MS,
+            path: '/'
+          });
+          res.json({
+            ok: true,
+            token,
+            isPaired: false,
+            recoveredVia: 'recovery_key',
+            otpauthUri: buildOtpAuthUri(authStore.secret)
           });
           return;
         }

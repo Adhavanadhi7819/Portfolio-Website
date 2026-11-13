@@ -74,6 +74,8 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   const [isRelinkingDevice, setIsRelinkingDevice] = useState(false);
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
 
+  const [recoveryRelinkBanner, setRecoveryRelinkBanner] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
@@ -87,6 +89,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     setGeneratedBackupKey(null);
     setRelinkQrDataUrl(null);
     setSecurityNotice(null);
+    setRecoveryRelinkBanner(null);
 
     fetchServerAuthStatus()
       .then((status) => {
@@ -94,8 +97,11 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
         setIsPaired(status.isPaired);
         if (status.ownerEmailMasked) setOwnerEmailMasked(status.ownerEmailMasked);
         setHasRecoveryKey(Boolean(status.hasRecoveryKey));
-        setCanShowFirstTimeSetup(!isAlreadyOwner && !status.isPaired && status.canShowInitialSetupQr);
+        const shouldShowInitialQr =
+          !isAlreadyOwner && !status.isPaired && status.canShowInitialSetupQr && Boolean(status.otpauthUri);
+        setCanShowFirstTimeSetup(shouldShowInitialQr);
         setOtpauthUri(!status.isPaired ? status.otpauthUri || null : null);
+        setShowSetupQr(shouldShowInitialQr);
       })
       .catch(() => {
         if (!active) return;
@@ -201,11 +207,23 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     try {
       const payload =
         recoveryMethod === 'email'
-          ? { emailCode: emailRecoveryCode.replace(/\D/g, '') }
-          : { recoveryKey: backupRecoveryKeyInput.trim().toUpperCase() };
+          ? { emailCode: emailRecoveryCode.replace(/\D/g, ''), relinkDevice: true }
+          : { recoveryKey: backupRecoveryKeyInput.trim().toUpperCase(), relinkDevice: true };
 
       const result = await verifyOwnerRecoveryWithServer(payload);
       if (result.ok) {
+        if (result.otpauthUri) {
+          setIsPaired(false);
+          setCanShowFirstTimeSetup(true);
+          setOtpauthUri(result.otpauthUri);
+          setShowSetupQr(true);
+          setIsRecoveryMode(false);
+          setTotpCode('');
+          setRecoveryRelinkBanner(
+            'Recovery verified! Scan this QR code in your Authenticator app, then enter the 6-digit code below to finish connecting.'
+          );
+          return;
+        }
         setIsPaired(true);
         setIsRecoveryMode(false);
         onSuccess();
@@ -611,8 +629,13 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             {!isPaired && canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
               <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
                 <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
-                  One-Time Authenticator Pairing
+                  Connect Authenticator App
                 </div>
+                {recoveryRelinkBanner && (
+                  <p className="text-xs text-emerald-400 leading-relaxed font-medium">
+                    {recoveryRelinkBanner}
+                  </p>
+                )}
                 <p className="text-xs text-zinc-300 leading-relaxed">
                   Scan this QR code once in <strong>Google Authenticator</strong>,{' '}
                   <strong>Authy</strong>, or <strong>Microsoft Authenticator</strong>, then enter the
@@ -626,8 +649,20 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
                   />
                 </div>
                 <div className="text-[10px] font-mono text-zinc-500">
-                  After verification, this QR code stays hidden permanently across all devices.
+                  Once connected, this QR code stays hidden across all devices.
                 </div>
+                {recoveryRelinkBanner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSuccess();
+                      onClose();
+                    }}
+                    className="text-xs font-mono text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                  >
+                    Already scanned? Enter Owner Mode now
+                  </button>
+                )}
               </div>
             )}
 

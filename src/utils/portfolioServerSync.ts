@@ -178,7 +178,8 @@ export async function requestOwnerRecoveryEmail(): Promise<{
 export async function verifyOwnerRecoveryWithServer(payload: {
   emailCode?: string;
   recoveryKey?: string;
-}): Promise<{ ok: boolean; error?: string; recoveredVia?: string }> {
+  relinkDevice?: boolean;
+}): Promise<{ ok: boolean; error?: string; recoveredVia?: string; otpauthUri?: string }> {
   const res = await fetch('/api/auth/recovery/verify', {
     method: 'POST',
     credentials: 'include',
@@ -197,10 +198,15 @@ export async function verifyOwnerRecoveryWithServer(payload: {
     token?: string;
     error?: string;
     recoveredVia?: string;
+    otpauthUri?: string;
   };
   if (res.ok && data.ok && data.token) {
     setStoredOwnerToken(data.token);
-    return { ok: true, recoveredVia: data.recoveredVia };
+    return {
+      ok: true,
+      recoveredVia: data.recoveredVia,
+      otpauthUri: data.otpauthUri
+    };
   }
   return {
     ok: false,
