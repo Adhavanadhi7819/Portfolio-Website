@@ -1332,6 +1332,7 @@ async function startServer(): Promise<void> {
         next();
         return;
       }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.sendFile(DIST_INDEX);
     });
   }

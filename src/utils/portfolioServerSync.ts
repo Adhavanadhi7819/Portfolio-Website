@@ -84,12 +84,20 @@ export async function verifyOwnerTotpWithServer(
   code: string
 ): Promise<{ ok: boolean; error?: string; localOnly?: boolean }> {
   try {
-    const res = await fetch('/api/auth/verify', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
-    });
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? window.setTimeout(() => controller.abort(), 6000) : null;
+    let res: Response;
+    try {
+      res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+        ...(controller ? { signal: controller.signal } : {})
+      });
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    }
 
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
