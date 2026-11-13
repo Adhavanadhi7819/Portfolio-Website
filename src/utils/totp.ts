@@ -117,7 +117,7 @@ export async function verifyTotpCode(
   const normalized = inputCode.replace(/\s+/g, '').trim();
   if (!/^\d{6}$/.test(normalized)) return false;
 
-  for (const offset of [0, -1, 1]) {
+  for (const offset of [0, -1, 1, -2, 2]) {
     const candidate = await generateTotpCode(secret, timestampMs, offset);
     if (candidate === normalized) {
       return true;

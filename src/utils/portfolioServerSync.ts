@@ -1,4 +1,5 @@
 import { PortfolioProfile, PortfolioState } from '../types/portfolio';
+import { OWNER_TOTP_SECRET, verifyTotpCode } from './totp';
 
 const OWNER_TOKEN_KEY = 'adhavan_owner_token_v1';
 
@@ -6,6 +7,8 @@ export interface ServerAuthStatus {
   isAuthenticated: boolean;
   isPaired: boolean;
   canShowInitialSetupQr: boolean;
+  hasRecoveryKey?: boolean;
+  ownerEmailMasked?: string;
   otpauthUri?: string;
 }
 
@@ -52,41 +55,195 @@ function buildAuthHeaders(extra: Record<string, string> = {}): Record<string, st
 }
 
 export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
-  const res = await fetch('/api/auth/status', {
+  try {
+    const res = await fetch('/api/auth/status', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'include',
+      headers: buildAuthHeaders()
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      return {
+        isAuthenticated: false,
+        isPaired: true,
+        canShowInitialSetupQr: false
+      };
+    }
+    return (await res.json()) as ServerAuthStatus;
+  } catch {
+    return {
+      isAuthenticated: false,
+      isPaired: true,
+      canShowInitialSetupQr: false
+    };
+  }
+}
+
+export async function verifyOwnerTotpWithServer(
+  code: string
+): Promise<{ ok: boolean; error?: string; localOnly?: boolean }> {
+  try {
+    const res = await fetch('/api/auth/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        token?: string;
+        error?: string;
+      } | null;
+
+      if (res.ok && data?.ok && data?.token) {
+        setStoredOwnerToken(data.token);
+        return { ok: true };
+      }
+
+      if (data && !res.ok) {
+        return {
+          ok: false,
+          error: data.error || 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
+        };
+      }
+    }
+  } catch {
+    // Fall through to local WebCrypto TOTP verification if backend /api/auth/verify is unreachable or static
+  }
+
+  // Fallback for static/offline deployments where /api/* returns non-JSON 404 or is unreachable
+  const matchedLocally = await verifyTotpCode(OWNER_TOTP_SECRET, code);
+  if (matchedLocally) {
+    return { ok: true, localOnly: true };
+  }
+
+  return {
+    ok: false,
+    error: 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
+  };
+}
+
+export async function requestOwnerRecoveryEmail(): Promise<{
+  ok: boolean;
+  maskedEmail?: string;
+  deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+  deliveryNote?: string;
+  error?: string;
+}> {
+  const res = await fetch('/api/auth/recovery/request', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return {
+      ok: false,
+      error: 'Recovery email service is unavailable on static hosting.'
+    };
+  }
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    maskedEmail?: string;
+    deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+    deliveryNote?: string;
+    error?: string;
+  };
+  if (!res.ok || !data.ok) {
+    return {
+      ok: false,
+      error: data.error || 'Could not send recovery code right now.'
+    };
+  }
+  return {
+    ok: true,
+    maskedEmail: data.maskedEmail,
+    deliveryStatus: data.deliveryStatus,
+    deliveryNote: data.deliveryNote
+  };
+}
+
+export async function verifyOwnerRecoveryWithServer(payload: {
+  emailCode?: string;
+  recoveryKey?: string;
+}): Promise<{ ok: boolean; error?: string; recoveredVia?: string }> {
+  const res = await fetch('/api/auth/recovery/verify', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return {
+      ok: false,
+      error: 'Recovery verification endpoint is unavailable here.'
+    };
+  }
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    token?: string;
+    error?: string;
+    recoveredVia?: string;
+  };
+  if (res.ok && data.ok && data.token) {
+    setStoredOwnerToken(data.token);
+    return { ok: true, recoveredVia: data.recoveredVia };
+  }
+  return {
+    ok: false,
+    error: data.error || 'Recovery verification failed.'
+  };
+}
+
+export async function fetchRecoveryKeyStatus(): Promise<{
+  hasRecoveryKey: boolean;
+  ownerEmailMasked: string;
+}> {
+  const res = await fetch('/api/auth/recovery-key/status', {
     method: 'GET',
     cache: 'no-store',
     credentials: 'include',
     headers: buildAuthHeaders()
   });
   if (!res.ok) {
-    throw new Error(`Auth status request failed (${res.status})`);
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to load recovery status');
   }
-  return (await res.json()) as ServerAuthStatus;
+  return (await res.json()) as { hasRecoveryKey: boolean; ownerEmailMasked: string };
 }
 
-export async function verifyOwnerTotpWithServer(
-  code: string
-): Promise<{ ok: boolean; error?: string; otpauthUri?: string }> {
-  const res = await fetch('/api/auth/verify', {
+export async function regenerateRecoveryKey(): Promise<{ recoveryKey: string }> {
+  const res = await fetch('/api/auth/recovery-key/regenerate', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
   });
-  const data = (await res.json()) as {
-    ok?: boolean;
-    token?: string;
-    error?: string;
-    otpauthUri?: string;
-  };
-  if (res.ok && data.ok && data.token) {
-    setStoredOwnerToken(data.token);
-    return { ok: true, otpauthUri: data.otpauthUri };
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to generate recovery key');
   }
-  return {
-    ok: false,
-    error: data.error || 'Invalid or expired 2FA code. Please try again.'
-  };
+  return (await res.json()) as { recoveryKey: string };
+}
+
+export async function relinkAuthenticatorDevice(
+  rotateSecret = false
+): Promise<{ otpauthUri: string; rotated: boolean }> {
+  const res = await fetch('/api/auth/relink', {
+    method: 'POST',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ rotateSecret })
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to generate device link QR');
+  }
+  return (await res.json()) as { otpauthUri: string; rotated: boolean };
 }
 
 export async function logoutOwnerServer(): Promise<void> {

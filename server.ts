@@ -74,6 +74,7 @@ interface AuthStore {
   secret: string;
   paired: boolean;
   signingKey: string;
+  recoveryKeyHash?: string;
 }
 
 interface StoredPortfolioFile {
@@ -123,7 +124,10 @@ function loadOrCreateAuthStore(): AuthStore {
         return {
           secret: parsed.secret,
           paired: Boolean(parsed.paired),
-          signingKey: parsed.signingKey
+          signingKey: parsed.signingKey,
+          ...(typeof parsed.recoveryKeyHash === 'string'
+            ? { recoveryKeyHash: parsed.recoveryKeyHash }
+            : {})
         };
       }
     }
@@ -201,13 +205,48 @@ function verifyTotpCode(secret: string, inputCode: string): boolean {
   if (!/^\d{6}$/.test(normalized)) return false;
 
   const now = Date.now();
-  for (const offset of [0, -1, 1]) {
+  for (const offset of [0, -1, 1, -2, 2]) {
     const expected = generateTotpCode(secret, now, offset);
     if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(normalized))) {
       return true;
     }
   }
   return false;
+}
+
+function sha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function generateBackupRecoveryKey(): string {
+  const part = () => crypto.randomBytes(2).toString('hex').toUpperCase();
+  return `ADH-${part()}-${part()}-${part()}`;
+}
+
+function generateRandomBase32Secret(byteLength = 20): string {
+  const bytes = crypto.randomBytes(byteLength);
+  let bits = 0;
+  let value = 0;
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) {
+    out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  }
+  return out;
+}
+
+function maskEmailAddress(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return '***';
+  const visible = local.slice(0, 2);
+  return `${visible}${'*'.repeat(Math.max(3, local.length - 2))}@${domain}`;
 }
 
 function buildOtpAuthUri(secret: string): string {
@@ -669,33 +708,23 @@ async function startServer(): Promise<void> {
     res.json({ ok: true });
   });
 
-  // --- Auth Endpoints ---
-  app.get('/api/auth/status', (req: Request, res: Response) => {
-    const authenticated = isOwnerAuthenticated(req);
-    const preview = isPreviewRequest(req);
-    const showInitialSetupQr = !authStore.paired && preview;
+  let pendingRecoveryOtp: { hash: string; expiresAt: number; attempts: number } | null = null;
+  const recoveryRequestBuckets = new Map<string, number[]>();
 
-    res.setHeader('Cache-Control', 'no-store');
-    res.json({
-      isAuthenticated: authenticated,
-      isPaired: authStore.paired,
-      canShowInitialSetupQr: showInitialSetupQr,
-      ...(showInitialSetupQr
-        ? { otpauthUri: buildOtpAuthUri(authStore.secret) }
-        : {})
-    });
-  });
-
-  app.post('/api/auth/verify', express.json({ limit: '64kb' }), (req: Request, res: Response) => {
-    const code = typeof req.body?.code === 'string' ? req.body.code : '';
-    if (!verifyTotpCode(authStore.secret, code)) {
-      res.status(401).json({
-        ok: false,
-        error: 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
-      });
-      return;
+  function isRecoveryRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000;
+    const recent = (recoveryRequestBuckets.get(ip) || []).filter((t) => now - t < windowMs);
+    if (recent.length >= 6) {
+      recoveryRequestBuckets.set(ip, recent);
+      return true;
     }
+    recent.push(now);
+    recoveryRequestBuckets.set(ip, recent);
+    return false;
+  }
 
+  function issueOwnerSession(req: Request, res: Response, extra: Record<string, unknown> = {}): void {
     if (!authStore.paired) {
       saveAuthStore({ ...authStore, paired: true });
     }
@@ -715,9 +744,208 @@ async function startServer(): Promise<void> {
     res.json({
       ok: true,
       token,
-      isPaired: true
+      isPaired: true,
+      ...extra
+    });
+  }
+
+  // --- Auth Endpoints ---
+  app.get('/api/auth/status', (req: Request, res: Response) => {
+    const authenticated = isOwnerAuthenticated(req);
+    const preview = isPreviewRequest(req);
+    const showInitialSetupQr = !authStore.paired && preview;
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      isAuthenticated: authenticated,
+      isPaired: authStore.paired,
+      canShowInitialSetupQr: showInitialSetupQr,
+      hasRecoveryKey: Boolean(authStore.recoveryKeyHash || process.env.OWNER_RECOVERY_KEY),
+      ownerEmailMasked: maskEmailAddress(OWNER_TOTP_ACCOUNT),
+      ...(showInitialSetupQr
+        ? { otpauthUri: buildOtpAuthUri(authStore.secret) }
+        : {})
     });
   });
+
+  app.post('/api/auth/verify', express.json({ limit: '64kb' }), (req: Request, res: Response) => {
+    const code = typeof req.body?.code === 'string' ? req.body.code : '';
+    if (!verifyTotpCode(authStore.secret, code)) {
+      res.status(401).json({
+        ok: false,
+        error: 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
+      });
+      return;
+    }
+
+    issueOwnerSession(req, res);
+  });
+
+  app.post('/api/auth/recovery/request', async (req: Request, res: Response) => {
+    const clientIp = req.ip || 'unknown';
+    if (isRecoveryRateLimited(clientIp)) {
+      res.status(429).json({
+        ok: false,
+        error: 'Too many recovery requests. Please wait a few minutes and try again.'
+      });
+      return;
+    }
+
+    const recoveryCode = crypto.randomInt(100000, 1000000).toString();
+    pendingRecoveryOtp = {
+      hash: sha256Hex(recoveryCode),
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      attempts: 0
+    };
+
+    const originUrl = getRequestOrigin(req);
+    const dispatchResult = await dispatchEmailToOwner(
+      {
+        name: 'Portfolio 2FA Recovery',
+        senderEmail: OWNER_TOTP_ACCOUNT,
+        projectType: 'Owner 2FA Recovery Code',
+        message: `Your one-time Owner Mode recovery code is: ${recoveryCode}\n\nThis code expires in 10 minutes. Ignore this message if you did not request recovery.`,
+        recipientEmail: OWNER_TOTP_ACCOUNT
+      },
+      originUrl
+    );
+
+    res.json({
+      ok: true,
+      maskedEmail: maskEmailAddress(OWNER_TOTP_ACCOUNT),
+      deliveryStatus: dispatchResult.status,
+      deliveryNote: dispatchResult.note
+    });
+  });
+
+  app.post(
+    '/api/auth/recovery/verify',
+    express.json({ limit: '64kb' }),
+    (req: Request, res: Response) => {
+      const emailCode =
+        typeof req.body?.emailCode === 'string' ? req.body.emailCode.replace(/\s+/g, '').trim() : '';
+      const recoveryKey =
+        typeof req.body?.recoveryKey === 'string'
+          ? req.body.recoveryKey.trim().toUpperCase()
+          : '';
+
+      if (emailCode) {
+        if (!pendingRecoveryOtp || pendingRecoveryOtp.expiresAt < Date.now()) {
+          pendingRecoveryOtp = null;
+          res.status(401).json({
+            ok: false,
+            error: 'Recovery code has expired or was not requested. Send a fresh code.'
+          });
+          return;
+        }
+        pendingRecoveryOtp.attempts += 1;
+        if (pendingRecoveryOtp.attempts > 5) {
+          pendingRecoveryOtp = null;
+          res.status(429).json({
+            ok: false,
+            error: 'Too many failed attempts. Please request a new email recovery code.'
+          });
+          return;
+        }
+        const providedHash = Buffer.from(sha256Hex(emailCode));
+        const expectedHash = Buffer.from(pendingRecoveryOtp.hash);
+        if (
+          providedHash.length !== expectedHash.length ||
+          !crypto.timingSafeEqual(providedHash, expectedHash)
+        ) {
+          res.status(401).json({
+            ok: false,
+            error: 'Incorrect email recovery code. Check your inbox and try again.'
+          });
+          return;
+        }
+        pendingRecoveryOtp = null;
+        issueOwnerSession(req, res, { recoveredVia: 'email' });
+        return;
+      }
+
+      if (recoveryKey) {
+        const expectedHashHex =
+          authStore.recoveryKeyHash ||
+          (process.env.OWNER_RECOVERY_KEY
+            ? sha256Hex(process.env.OWNER_RECOVERY_KEY.trim().toUpperCase())
+            : '');
+
+        if (!expectedHashHex) {
+          res.status(400).json({
+            ok: false,
+            error: 'No backup recovery key has been generated yet. Use Email Recovery instead.'
+          });
+          return;
+        }
+
+        const providedHash = Buffer.from(sha256Hex(recoveryKey));
+        const expectedHash = Buffer.from(expectedHashHex);
+        if (
+          providedHash.length !== expectedHash.length ||
+          !crypto.timingSafeEqual(providedHash, expectedHash)
+        ) {
+          res.status(401).json({
+            ok: false,
+            error: 'Invalid Backup Recovery Key.'
+          });
+          return;
+        }
+        issueOwnerSession(req, res, { recoveredVia: 'recovery_key' });
+        return;
+      }
+
+      res.status(400).json({
+        ok: false,
+        error: 'Enter a 6-digit email recovery code or your Backup Recovery Key.'
+      });
+    }
+  );
+
+  app.get('/api/auth/recovery-key/status', requireOwnerAuth, (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      hasRecoveryKey: Boolean(authStore.recoveryKeyHash),
+      ownerEmailMasked: maskEmailAddress(OWNER_TOTP_ACCOUNT)
+    });
+  });
+
+  app.post(
+    '/api/auth/recovery-key/regenerate',
+    requireOwnerAuth,
+    (_req: Request, res: Response) => {
+      const nextKey = generateBackupRecoveryKey();
+      saveAuthStore({
+        ...authStore,
+        recoveryKeyHash: sha256Hex(nextKey)
+      });
+      res.json({
+        ok: true,
+        recoveryKey: nextKey
+      });
+    }
+  );
+
+  app.post(
+    '/api/auth/relink',
+    requireOwnerAuth,
+    express.json({ limit: '16kb' }),
+    (req: Request, res: Response) => {
+      const rotateSecret = Boolean(req.body?.rotateSecret);
+      const nextSecret = rotateSecret ? generateRandomBase32Secret(20) : authStore.secret;
+      saveAuthStore({
+        ...authStore,
+        secret: nextSecret,
+        paired: true
+      });
+      res.json({
+        ok: true,
+        rotated: rotateSecret,
+        otpauthUri: buildOtpAuthUri(nextSecret)
+      });
+    }
+  );
 
   app.post('/api/auth/logout', (_req: Request, res: Response) => {
     res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });

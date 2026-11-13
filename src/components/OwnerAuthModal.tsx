@@ -1,10 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, Unlock, X, QrCode, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import {
+  ShieldCheck,
+  Lock,
+  Unlock,
+  X,
+  QrCode,
+  ShieldAlert,
+  CheckCircle2,
+  Mail,
+  KeyRound,
+  Copy,
+  Check,
+  ArrowLeft,
+  RefreshCw,
+  Smartphone
+} from 'lucide-react';
 import QRCode from 'qrcode';
 import { getTotpSecondsRemaining } from '../utils/totp';
 import {
   fetchServerAuthStatus,
-  verifyOwnerTotpWithServer
+  verifyOwnerTotpWithServer,
+  requestOwnerRecoveryEmail,
+  verifyOwnerRecoveryWithServer,
+  fetchRecoveryKeyStatus,
+  regenerateRecoveryKey,
+  relinkAuthenticatorDevice
 } from '../utils/portfolioServerSync';
 
 interface OwnerAuthModalProps {
@@ -27,6 +47,8 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   const [totpCode, setTotpCode] = useState('');
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // One-time initial pairing (only shown when never paired yet in preview)
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [otpauthUri, setOtpauthUri] = useState<string | null>(null);
   const [isPaired, setIsPaired] = useState(true);
@@ -34,17 +56,44 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   const [showSetupQr, setShowSetupQr] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(() => getTotpSecondsRemaining());
 
+  // Unauthenticated Recovery Mode state
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [recoveryMethod, setRecoveryMethod] = useState<'email' | 'key'>('email');
+  const [ownerEmailMasked, setOwnerEmailMasked] = useState('ad***@gmail.com');
+  const [hasRecoveryKey, setHasRecoveryKey] = useState(false);
+  const [isSendingRecoveryEmail, setIsSendingRecoveryEmail] = useState(false);
+  const [recoveryEmailSentNote, setRecoveryEmailSentNote] = useState<string | null>(null);
+  const [emailRecoveryCode, setEmailRecoveryCode] = useState('');
+  const [backupRecoveryKeyInput, setBackupRecoveryKeyInput] = useState('');
+
+  // Authenticated Security Panel state (Backup Key & Re-Link Device)
+  const [generatedBackupKey, setGeneratedBackupKey] = useState<string | null>(null);
+  const [copiedBackupKey, setCopiedBackupKey] = useState(false);
+  const [isGeneratingBackupKey, setIsGeneratingBackupKey] = useState(false);
+  const [relinkQrDataUrl, setRelinkQrDataUrl] = useState<string | null>(null);
+  const [isRelinkingDevice, setIsRelinkingDevice] = useState(false);
+  const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
     setError('');
     setTotpCode('');
     setShowSetupQr(false);
+    setIsRecoveryMode(false);
+    setRecoveryEmailSentNote(null);
+    setEmailRecoveryCode('');
+    setBackupRecoveryKeyInput('');
+    setGeneratedBackupKey(null);
+    setRelinkQrDataUrl(null);
+    setSecurityNotice(null);
 
     fetchServerAuthStatus()
       .then((status) => {
         if (!active) return;
         setIsPaired(status.isPaired);
+        if (status.ownerEmailMasked) setOwnerEmailMasked(status.ownerEmailMasked);
+        setHasRecoveryKey(Boolean(status.hasRecoveryKey));
         setCanShowFirstTimeSetup(!isAlreadyOwner && !status.isPaired && status.canShowInitialSetupQr);
         setOtpauthUri(!status.isPaired ? status.otpauthUri || null : null);
       })
@@ -53,6 +102,16 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
         setCanShowFirstTimeSetup(false);
         setOtpauthUri(null);
       });
+
+    if (isAlreadyOwner) {
+      fetchRecoveryKeyStatus()
+        .then((res) => {
+          if (!active) return;
+          setHasRecoveryKey(res.hasRecoveryKey);
+          if (res.ownerEmailMasked) setOwnerEmailMasked(res.ownerEmailMasked);
+        })
+        .catch(() => {});
+    }
 
     const tick = setInterval(() => {
       setSecondsLeft(getTotpSecondsRemaining());
@@ -107,9 +166,97 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
         setError(result.error || 'Invalid or expired 2FA code. Check your Authenticator app and try again.');
       }
     } catch {
-      setError('Verification failed. Please check your connection and try again.');
+      setError('Invalid or expired 2FA code. Check your Authenticator app and try again.');
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleSendRecoveryEmail = async () => {
+    setIsSendingRecoveryEmail(true);
+    setError('');
+    setRecoveryEmailSentNote(null);
+    try {
+      const res = await requestOwnerRecoveryEmail();
+      if (res.ok) {
+        if (res.maskedEmail) setOwnerEmailMasked(res.maskedEmail);
+        setRecoveryEmailSentNote(
+          res.deliveryNote ||
+            `6-digit recovery code sent to ${res.maskedEmail || ownerEmailMasked}. Valid for 10 minutes.`
+        );
+      } else {
+        setError(res.error || 'Could not send recovery email right now.');
+      }
+    } catch {
+      setError('Could not contact recovery email service. Try Backup Recovery Key if saved.');
+    } finally {
+      setIsSendingRecoveryEmail(false);
+    }
+  };
+
+  const handleVerifyRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsVerifying(true);
+    try {
+      const payload =
+        recoveryMethod === 'email'
+          ? { emailCode: emailRecoveryCode.replace(/\D/g, '') }
+          : { recoveryKey: backupRecoveryKeyInput.trim().toUpperCase() };
+
+      const result = await verifyOwnerRecoveryWithServer(payload);
+      if (result.ok) {
+        setIsPaired(true);
+        setIsRecoveryMode(false);
+        onSuccess();
+        onClose();
+      } else {
+        setError(result.error || 'Recovery verification failed.');
+      }
+    } catch {
+      setError('Recovery verification failed. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleGenerateBackupKey = async () => {
+    setIsGeneratingBackupKey(true);
+    setSecurityNotice(null);
+    setError('');
+    try {
+      const res = await regenerateRecoveryKey();
+      setGeneratedBackupKey(res.recoveryKey);
+      setHasRecoveryKey(true);
+      setCopiedBackupKey(false);
+    } catch {
+      setError('Could not generate Backup Recovery Key. Re-verify your session and try again.');
+    } finally {
+      setIsGeneratingBackupKey(false);
+    }
+  };
+
+  const handleRelinkDevice = async (rotateSecret: boolean) => {
+    setIsRelinkingDevice(true);
+    setSecurityNotice(null);
+    setError('');
+    try {
+      const res = await relinkAuthenticatorDevice(rotateSecret);
+      const qr = await QRCode.toDataURL(res.otpauthUri, {
+        width: 210,
+        margin: 2,
+        color: { dark: '#050507', light: '#ffffff' }
+      });
+      setRelinkQrDataUrl(qr);
+      setSecurityNotice(
+        rotateSecret
+          ? 'Generated a new secret QR. Scan it on your replacement phone now—old phones are revoked.'
+          : 'Scan this QR on your replacement phone to sync your existing Authenticator code.'
+      );
+    } catch {
+      setError('Could not open device pairing. Please ensure your Owner session is active.');
+    } finally {
+      setIsRelinkingDevice(false);
     }
   };
 
@@ -122,7 +269,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8"
+        className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -145,12 +292,22 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             id="owner-auth-title"
             className="text-2xl font-heading font-black text-white uppercase tracking-tight"
           >
-            Owner <span className="text-amber-500">2FA Access</span>
+            {isRecoveryMode ? (
+              <>
+                2FA <span className="text-amber-500">Recovery Mode</span>
+              </>
+            ) : (
+              <>
+                Owner <span className="text-amber-500">2FA Access</span>
+              </>
+            )}
           </h2>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
             {isAlreadyOwner
-              ? '2FA Authenticator security is active for Owner Mode. All edits automatically sync to the live website.'
-              : 'Protected by Time-Based 2FA. Enter the 6-digit verification code from your Authenticator app.'}
+              ? '2FA Authenticator security is connected. Manage recovery backups or exit Owner Mode below.'
+              : isRecoveryMode
+              ? 'Recover access if your Authenticator device was lost or replaced.'
+              : 'Enter the 6-digit verification code from your connected Authenticator app.'}
           </p>
         </div>
 
@@ -159,9 +316,123 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-amber-400" />
               <span>
-                Authenticated as <strong>Adhavan</strong> with 2FA Authenticator protection linked.
+                Authenticated as <strong>Adhavan</strong>. Once linked, your Authenticator code unlocks Owner Mode from any device.
               </span>
             </div>
+
+            {/* Backup Recovery Key Section (Authenticated Owner Only) */}
+            <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-200 font-bold">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>Backup Recovery Key</span>
+                </div>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {hasRecoveryKey ? 'Configured' : 'Not set'}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                Save an offline Backup Recovery Key in case you ever lose your phone. You can also recover anytime via {ownerEmailMasked}.
+              </p>
+
+              {generatedBackupKey ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-black border border-amber-500/40 font-mono text-xs text-amber-300 font-bold tracking-wider">
+                    <span>{generatedBackupKey}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(generatedBackupKey);
+                        setCopiedBackupKey(true);
+                        setTimeout(() => setCopiedBackupKey(false), 2000);
+                      }}
+                      className="p-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 cursor-pointer"
+                      title="Copy recovery key"
+                    >
+                      {copiedBackupKey ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-mono text-amber-400/90">
+                    Save this key now — it is shown only once for security.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGenerateBackupKey}
+                  disabled={isGeneratingBackupKey}
+                  className="w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold uppercase tracking-wider border border-zinc-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isGeneratingBackupKey ? 'animate-spin' : ''}`} />
+                  <span>
+                    {hasRecoveryKey ? 'Rotate Backup Recovery Key' : 'Generate Backup Recovery Key'}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Switch / Replace Lost Phone (Authenticated Owner Only) */}
+            <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-200 font-bold">
+                <Smartphone className="w-4 h-4 text-amber-400" />
+                <span>Replace Lost / New Phone</span>
+              </div>
+
+              {relinkQrDataUrl ? (
+                <div className="space-y-2.5 text-center pt-1">
+                  {securityNotice && (
+                    <p className="text-[11px] text-amber-300 leading-relaxed">{securityNotice}</p>
+                  )}
+                  <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                    <img
+                      src={relinkQrDataUrl}
+                      alt="Authenticator Device Transfer QR"
+                      className="w-40 h-40 block"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRelinkQrDataUrl(null);
+                      setSecurityNotice(null);
+                    }}
+                    className="block mx-auto text-[11px] font-mono text-zinc-400 hover:text-white underline cursor-pointer"
+                  >
+                    Hide Device Transfer QR
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isRelinkingDevice}
+                    onClick={() => handleRelinkDevice(false)}
+                    className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-semibold uppercase tracking-wider border border-zinc-700 transition-colors cursor-pointer"
+                  >
+                    Add New Phone
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isRelinkingDevice}
+                    onClick={() => handleRelinkDevice(true)}
+                    className="py-2 px-3 rounded-lg bg-zinc-800 hover:bg-amber-950/60 text-amber-300 text-[11px] font-semibold uppercase tracking-wider border border-amber-500/30 transition-colors cursor-pointer"
+                  >
+                    Revoke Old &amp; Reset QR
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-400 flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>{error}</span>
+              </p>
+            )}
 
             <button
               type="button"
@@ -175,6 +446,150 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
               <span>Lock &amp; Exit Owner Mode</span>
             </button>
           </div>
+        ) : isRecoveryMode ? (
+          <form onSubmit={handleVerifyRecovery} className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-zinc-900 border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setRecoveryMethod('email');
+                  setError('');
+                }}
+                className={`py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  recoveryMethod === 'email'
+                    ? 'bg-amber-500 text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Email Code</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecoveryMethod('key');
+                  setError('');
+                }}
+                className={`py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  recoveryMethod === 'key'
+                    ? 'bg-amber-500 text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Backup Key</span>
+              </button>
+            </div>
+
+            {recoveryMethod === 'email' ? (
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2.5">
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    Send a one-time 6-digit recovery code to your owner email ({ownerEmailMasked}).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSendRecoveryEmail}
+                    disabled={isSendingRecoveryEmail}
+                    className="w-full py-2.5 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/35 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>
+                      {isSendingRecoveryEmail
+                        ? 'Sending Recovery Code...'
+                        : 'Send Recovery Code to Owner Email'}
+                    </span>
+                  </button>
+                  {recoveryEmailSentNote && (
+                    <p className="text-[11px] text-emerald-400 leading-relaxed">
+                      {recoveryEmailSentNote}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="owner-email-recovery-input"
+                    className="block text-xs font-mono text-zinc-300 uppercase tracking-wider mb-1.5"
+                  >
+                    6-Digit Email Recovery Code *
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    id="owner-email-recovery-input"
+                    value={emailRecoveryCode}
+                    onChange={(e) => {
+                      setEmailRecoveryCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      setError('');
+                    }}
+                    placeholder="000000"
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-xl font-mono font-bold tracking-[0.35em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label
+                  htmlFor="owner-backup-key-input"
+                  className="block text-xs font-mono text-zinc-300 uppercase tracking-wider mb-1.5"
+                >
+                  Saved Backup Recovery Key *
+                </label>
+                <input
+                  type="text"
+                  id="owner-backup-key-input"
+                  value={backupRecoveryKeyInput}
+                  onChange={(e) => {
+                    setBackupRecoveryKeyInput(e.target.value.toUpperCase());
+                    setError('');
+                  }}
+                  placeholder="ADH-XXXX-XXXX-XXXX"
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-base font-mono font-bold tracking-widest text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  autoFocus
+                />
+                {!hasRecoveryKey && (
+                  <p className="text-[11px] text-zinc-500 mt-1.5">
+                    If you have not generated a Backup Key inside Owner Mode yet, use the Email Code tab above.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <p className="text-xs text-red-400 flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>{error}</span>
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={
+                isVerifying ||
+                (recoveryMethod === 'email'
+                  ? emailRecoveryCode.length !== 6
+                  : backupRecoveryKeyInput.trim().length < 6)
+              }
+              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{isVerifying ? 'Verifying...' : 'Recover & Unlock Owner Mode'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsRecoveryMode(false);
+                setError('');
+              }}
+              className="w-full py-2 text-xs font-mono text-zinc-400 hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Authenticator Code</span>
+            </button>
+          </form>
         ) : (
           <form onSubmit={handleVerifyTotp} className="space-y-4">
             {!isPaired && canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
@@ -211,7 +626,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
                   />
                 </div>
                 <div className="text-[10px] font-mono text-zinc-500">
-                  After verification, this QR code stays hidden permanently.
+                  After verification, this QR code stays hidden permanently across all devices.
                 </div>
               </div>
             )}
@@ -262,6 +677,19 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
               <ShieldCheck className="w-4 h-4" />
               <span>{isVerifying ? 'Verifying...' : 'Verify & Unlock Owner Mode'}</span>
             </button>
+
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRecoveryMode(true);
+                  setError('');
+                }}
+                className="text-xs font-mono text-zinc-400 hover:text-amber-400 transition-colors underline underline-offset-4 cursor-pointer"
+              >
+                Lost Authenticator access? Recovery Mode
+              </button>
+            </div>
           </form>
         )}
       </div>
