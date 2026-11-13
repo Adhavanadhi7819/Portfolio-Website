@@ -86,6 +86,10 @@ export const DESIGNER_INFO: DesignerInfo = {
       details: 'Hard-surface 3D prop modeling, clean quad topology, PBR texturing pipelines, and real-time asset optimization.'
     }
   ],
+  resumePdfUrl: '/showcase/Adhavan_Resume.pdf',
+  resumeFileName: 'Adhavan B&W resume.pdf',
+  resumeFileSize: '5.1 MB',
+  resumeUploadDate: 'Nov 14, 2026',
   contactHeading: "Let's Work Together",
   contactSubheading: "Have a project in mind? I'd love to hear about it. Reach out for collaborations, freelance work, or just to say hello.",
   contactBadge: 'GET IN TOUCH',
@@ -99,7 +103,7 @@ export const DESIGNER_INFO: DesignerInfo = {
   contactSlidePhotoUrl: '/showcase/contact-slide.jpg',
   heroBadge: 'Unreal Engine & Autodesk Maya Portfolio',
   heroSubtitle: 'Crafting immersive Unreal Engine worlds, cinematic camera sequences, and stylized gameplay mechanics.',
-  heroPhotoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png',
+  heroPhotoUrl: '/showcase/hero-portrait.jpg',
   heroPhotoAlign: {
     x: 50,
     y: 50,

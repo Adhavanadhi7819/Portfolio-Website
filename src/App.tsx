@@ -232,6 +232,7 @@ export default function App() {
   const lastSavedSignatureRef = useRef<string>('');
   const activeSyncPromiseRef = useRef<Promise<boolean> | null>(null);
   const hasPendingSaveRef = useRef<boolean>(false);
+  const immediateSaveRequestedRef = useRef<boolean>(false);
 
   const hasUnsavedOwnerChanges = useMemo(() => {
     if (!isOwnerMode || ownerSessionSnapshot === null) return false;
@@ -425,7 +426,8 @@ export default function App() {
   // Push current state & vault to persistent server
   const pushStateToServer = async (
     nextPortfolios: PortfolioProfile[],
-    nextActiveId: string
+    nextActiveId: string,
+    expectedSig?: string
   ): Promise<boolean> => {
     if (activeSyncPromiseRef.current) {
       await activeSyncPromiseRef.current.catch(() => false);
@@ -448,13 +450,21 @@ export default function App() {
               saved.activePortfolioId || nextActiveId,
               nextVersion
             );
+          } else if (expectedSig) {
+            lastSavedSignatureRef.current = expectedSig;
           }
+        } else if (expectedSig) {
+          lastSavedSignatureRef.current = expectedSig;
         }
         setSyncStatus('saved');
         return true;
       } catch (err) {
         console.error('Failed to sync portfolio to server:', err);
         setSyncStatus('error');
+        if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
+          setSaveToast('2FA session expired · Verify Authenticator code to publish edits');
+          setIsAuthModalOpen(true);
+        }
         return false;
       } finally {
         hasPendingSaveRef.current = false;
@@ -599,10 +609,19 @@ export default function App() {
     if (sig === lastSavedSignatureRef.current) return;
 
     hasPendingSaveRef.current = true;
+    const delayMs = immediateSaveRequestedRef.current ? 0 : 350;
     const timer = window.setTimeout(async () => {
-      lastSavedSignatureRef.current = sig;
-      await pushStateToServer(mergedPortfolios, activePortfolioId);
-    }, 450);
+      const wasImmediate = immediateSaveRequestedRef.current;
+      immediateSaveRequestedRef.current = false;
+      const ok = await pushStateToServer(mergedPortfolios, activePortfolioId, sig);
+      if (ok && wasImmediate) {
+        setSaveToast(
+          portfolioState.designerInfo.resumePdfUrl
+            ? 'Resume uploaded & published for all visitors'
+            : 'Resume changes published for all visitors'
+        );
+      }
+    }, delayMs);
 
     return () => {
       window.clearTimeout(timer);
@@ -691,11 +710,11 @@ export default function App() {
     } catch {}
   };
 
-  const handleRequestCloseOwnerMode = () => {
-    if (hasUnsavedOwnerChanges) {
+  const handleRequestCloseOwnerMode = async () => {
+    if (hasUnsavedOwnerChanges || hasPendingSaveRef.current || activeSyncPromiseRef.current) {
       setIsExitConfirmOpen(true);
     } else {
-      void logoutOwnerServer();
+      await logoutOwnerServer();
       handleSetOwnerMode(false);
     }
   };
@@ -946,6 +965,9 @@ export default function App() {
   };
 
   const handleSaveDesignerInfo = (info: Partial<DesignerInfo>) => {
+    if ('resumePdfUrl' in info) {
+      immediateSaveRequestedRef.current = true;
+    }
     setPortfolioState(prev => ({
       ...prev,
       designerInfo: {

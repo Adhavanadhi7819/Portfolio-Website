@@ -103,6 +103,8 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   const [jsonError, setJsonError] = useState('');
   const [copiedJson, setCopiedJson] = useState(false);
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string | null>(null);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [resumeUploadError, setResumeUploadError] = useState<string | null>(null);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -112,6 +114,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     setErrors({});
     setJsonError('');
     setSavedSuccessMessage(null);
+    setResumeUploadError(null);
 
     const initialMode = mode === 'bio' ? 'hero' : mode;
     setActiveTab(initialMode);
@@ -1831,15 +1834,24 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <div className="flex items-center gap-2 shrink-0">
                     <label className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors">
                       <Upload className="w-3.5 h-3.5" />
-                      <span>{bioForm.resumePdfUrl ? 'Replace File' : 'Upload Resume (PDF/DOCX)'}</span>
+                      <span>
+                        {isUploadingResume
+                          ? 'Uploading...'
+                          : bioForm.resumePdfUrl
+                          ? 'Replace File'
+                          : 'Upload Resume (PDF/DOCX)'}
+                      </span>
                       <input
                         type="file"
                         accept=".pdf,.docx,.doc,application/pdf"
                         className="hidden"
+                        disabled={isUploadingResume}
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           e.target.value = '';
+                          setResumeUploadError(null);
+                          setIsUploadingResume(true);
                           try {
                             const uploaded = await uploadDocumentAsset(file);
                             const nextFields = {
@@ -1854,9 +1866,16 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                             };
                             setBioForm((prev) => ({ ...prev, ...nextFields }));
                             onSaveDesignerInfo(nextFields);
-                            triggerSuccess(`Uploaded "${uploaded.fileName}" for visitors to download!`);
+                            triggerSuccess(`Uploaded "${uploaded.fileName}" and published for all visitors!`);
                           } catch (err) {
                             console.error('Resume upload failed:', err);
+                            setResumeUploadError(
+                              err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+                                ? 'Owner 2FA session expired. Close this dialog, re-verify your 2FA code, and upload again.'
+                                : 'Could not upload resume file. Please check your connection and try again.'
+                            );
+                          } finally {
+                            setIsUploadingResume(false);
                           }
                         }}
                       />
@@ -1884,6 +1903,13 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                     )}
                   </div>
                 </div>
+
+                {resumeUploadError && (
+                  <div className="px-3.5 py-2.5 rounded-lg bg-red-950/60 border border-red-700/60 text-red-300 text-xs font-mono flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{resumeUploadError}</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

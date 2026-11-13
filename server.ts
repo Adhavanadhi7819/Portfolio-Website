@@ -8,12 +8,13 @@ import crypto from 'node:crypto';
 
 const PORT = Number(process.env.PORT) || 3000;
 
+const BUNDLED_DATA_DIR = path.resolve(process.cwd(), 'portfolio-data');
+
 function resolveWritableDataDir(): string {
-  const preferred = path.resolve(process.cwd(), 'portfolio-data');
   try {
-    fs.mkdirSync(path.join(preferred, 'assets'), { recursive: true });
-    fs.accessSync(preferred, fs.constants.W_OK);
-    return preferred;
+    fs.mkdirSync(path.join(BUNDLED_DATA_DIR, 'assets'), { recursive: true });
+    fs.accessSync(BUNDLED_DATA_DIR, fs.constants.W_OK);
+    return BUNDLED_DATA_DIR;
   } catch {
     const fallback = path.join(os.tmpdir(), 'adhavan-portfolio-data');
     fs.mkdirSync(path.join(fallback, 'assets'), { recursive: true });
@@ -21,7 +22,39 @@ function resolveWritableDataDir(): string {
   }
 }
 
+function seedWritableDataDirIfNeeded(targetDir: string): void {
+  if (targetDir === BUNDLED_DATA_DIR || !fs.existsSync(BUNDLED_DATA_DIR)) return;
+  try {
+    const copyIfMissing = (filename: string) => {
+      const src = path.join(BUNDLED_DATA_DIR, filename);
+      const dest = path.join(targetDir, filename);
+      if (fs.existsSync(src) && !fs.existsSync(dest)) {
+        fs.copyFileSync(src, dest);
+      }
+    };
+    copyIfMissing('state.json');
+    copyIfMissing('auth.json');
+    copyIfMissing('messages.json');
+
+    const bundledAssetsDir = path.join(BUNDLED_DATA_DIR, 'assets');
+    const targetAssetsDir = path.join(targetDir, 'assets');
+    if (fs.existsSync(bundledAssetsDir)) {
+      fs.mkdirSync(targetAssetsDir, { recursive: true });
+      for (const entry of fs.readdirSync(bundledAssetsDir)) {
+        const srcAsset = path.join(bundledAssetsDir, entry);
+        const destAsset = path.join(targetAssetsDir, entry);
+        if (!fs.existsSync(destAsset) && fs.statSync(srcAsset).isFile()) {
+          fs.copyFileSync(srcAsset, destAsset);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed seeding fallback data dir from bundled portfolio-data:', err);
+  }
+}
+
 const DATA_DIR = resolveWritableDataDir();
+seedWritableDataDirIfNeeded(DATA_DIR);
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
@@ -98,10 +131,17 @@ function loadOrCreateAuthStore(): AuthStore {
     console.error('Failed to read auth store, recreating:', err);
   }
 
+  const deterministicSigningKey =
+    process.env.OWNER_SESSION_SECRET ||
+    crypto
+      .createHash('sha256')
+      .update(`${DEFAULT_TOTP_SECRET}:adhavan-owner-session-v1`)
+      .digest('hex');
+
   const initial: AuthStore = {
     secret: DEFAULT_TOTP_SECRET,
     paired: false,
-    signingKey: crypto.randomBytes(32).toString('hex')
+    signingKey: deterministicSigningKey
   };
   writeAtomic(AUTH_FILE, JSON.stringify(initial, null, 2));
   return initial;
@@ -724,13 +764,23 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    const assetPath = path.join(ASSETS_DIR, fileId);
-    if (!fs.existsSync(assetPath)) {
+    const primaryAssetPath = path.join(ASSETS_DIR, fileId);
+    const bundledAssetPath = path.join(BUNDLED_DATA_DIR, 'assets', fileId);
+    const assetPath = fs.existsSync(primaryAssetPath)
+      ? primaryAssetPath
+      : fs.existsSync(bundledAssetPath)
+      ? bundledAssetPath
+      : null;
+
+    if (!assetPath) {
       res.status(404).end();
       return;
     }
 
-    const metaPath = path.join(ASSETS_DIR, `${fileId}.json`);
+    const primaryMetaPath = path.join(ASSETS_DIR, `${fileId}.json`);
+    const bundledMetaPath = path.join(BUNDLED_DATA_DIR, 'assets', `${fileId}.json`);
+    const metaPath = fs.existsSync(primaryMetaPath) ? primaryMetaPath : bundledMetaPath;
+
     const ext = path.extname(fileId).toLowerCase();
     let mimeType = EXT_TO_MIME[ext] || 'application/octet-stream';
     let originalFilename = `asset${ext}`;
@@ -743,8 +793,14 @@ async function startServer(): Promise<void> {
       }
     } catch {}
 
+    const asciiFilename = originalFilename.replace(/[^a-zA-Z0-9._ -]/g, '_');
+    const encodedFilename = encodeURIComponent(originalFilename);
+
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${originalFilename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`
+    );
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.sendFile(assetPath);
   });
