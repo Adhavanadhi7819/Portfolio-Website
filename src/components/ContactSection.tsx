@@ -9,7 +9,10 @@ import {
   ShieldCheck,
   Edit3,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  X,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
@@ -93,6 +96,13 @@ function getIstTimeParts(): IstTimeParts {
   };
 }
 
+const DEFAULT_INQUIRY_OPTIONS = [
+  'Game Design & Level Design',
+  '3D Modeling & Environment Art',
+  'Game Studio Role / Full-Time Inquiry',
+  'Freelance / Collaboration Inquiry'
+];
+
 export const ContactSection: React.FC<ContactSectionProps> = ({
   designerInfo = DESIGNER_INFO,
   isOwnerMode = false,
@@ -106,10 +116,15 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   onAddSectionBelow
 }) => {
   const info = designerInfo || DESIGNER_INFO;
+  const inquiryOptions =
+    Array.isArray(info.contactInquiryOptions) && info.contactInquiryOptions.length > 0
+      ? info.contactInquiryOptions
+      : DEFAULT_INQUIRY_OPTIONS;
+
   const [formData, setFormData] = useState<ContactFormData>({
     name: '',
     email: '',
-    projectType: 'Game Design & Core Mechanics (Loops & Pacing)',
+    projectType: inquiryOptions[0] || 'Game Design & Level Design',
     message: ''
   });
 
@@ -117,6 +132,18 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [istTime, setIstTime] = useState<IstTimeParts>(() => getIstTimeParts());
+  const [editingSocialId, setEditingSocialId] = useState<
+    'linkedin' | 'artstation' | 'instagram' | 'youtube' | 'whatsapp' | null
+  >(null);
+  const [socialUrlDraft, setSocialUrlDraft] = useState('');
+  const [isEditingInquiryOptions, setIsEditingInquiryOptions] = useState(false);
+  const [newInquiryOption, setNewInquiryOption] = useState('');
+
+  useEffect(() => {
+    if (!inquiryOptions.includes(formData.projectType) && inquiryOptions.length > 0) {
+      setFormData((prev) => ({ ...prev, projectType: inquiryOptions[0] }));
+    }
+  }, [inquiryOptions, formData.projectType]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -158,10 +185,29 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     setFormData({
       name: '',
       email: '',
-      projectType: 'Game Design & Core Mechanics (Loops & Pacing)',
+      projectType: inquiryOptions[0] || 'Game Design & Level Design',
       message: ''
     });
     setIsSubmitted(false);
+  };
+
+  const handleUpdateInquiryOption = (idx: number, val: string) => {
+    const next = [...inquiryOptions];
+    next[idx] = val;
+    onUpdateDesignerInfo?.({ contactInquiryOptions: next });
+  };
+
+  const handleRemoveInquiryOption = (idx: number) => {
+    if (inquiryOptions.length <= 1) return;
+    const next = inquiryOptions.filter((_, i) => i !== idx);
+    onUpdateDesignerInfo?.({ contactInquiryOptions: next });
+  };
+
+  const handleAddInquiryOption = () => {
+    const trimmed = newInquiryOption.trim();
+    if (!trimmed) return;
+    onUpdateDesignerInfo?.({ contactInquiryOptions: [...inquiryOptions, trimmed] });
+    setNewInquiryOption('');
   };
 
   const displayPhone = info.phone?.startsWith('+')
@@ -170,33 +216,44 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     ? `+91 ${info.phone}`
     : info.phone;
 
-  const socialPlatforms = [
+  const socialPlatforms: Array<{
+    id: 'linkedin' | 'artstation' | 'instagram' | 'youtube' | 'whatsapp';
+    field: 'linkedinUrl' | 'artstationUrl' | 'instagramUrl' | 'youtubeUrl' | 'whatsappUrl';
+    label: string;
+    url: string;
+    icon: React.ReactNode;
+  }> = [
     {
       id: 'linkedin',
+      field: 'linkedinUrl',
       label: 'LinkedIn',
       url: info.linkedinUrl || 'https://www.linkedin.com/in/adhavan-p',
       icon: <LinkedInLogo className="w-4.5 h-4.5" />
     },
     {
       id: 'artstation',
+      field: 'artstationUrl',
       label: 'ArtStation',
       url: info.artstationUrl || 'https://www.artstation.com/adhavan7819',
       icon: <ArtStationLogo className="w-4.5 h-4.5" />
     },
     {
       id: 'instagram',
+      field: 'instagramUrl',
       label: 'Instagram',
       url: info.instagramUrl || 'https://www.instagram.com/',
       icon: <InstagramLogo className="w-4.5 h-4.5" />
     },
     {
       id: 'youtube',
+      field: 'youtubeUrl',
       label: 'YouTube',
       url: info.youtubeUrl || 'https://www.youtube.com/',
       icon: <YouTubeLogo className="w-4.5 h-4.5" />
     },
     {
       id: 'whatsapp',
+      field: 'whatsappUrl',
       label: 'WhatsApp',
       url:
         info.whatsappUrl ||
@@ -204,6 +261,26 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       icon: <WhatsAppLogo className="w-4.5 h-4.5" />
     }
   ];
+
+  const handleOpenSocialEdit = (
+    platform: (typeof socialPlatforms)[number]
+  ) => {
+    setEditingSocialId(platform.id);
+    setSocialUrlDraft(platform.url);
+  };
+
+  const handleSaveSocialUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSocialId) return;
+    const target = socialPlatforms.find((p) => p.id === editingSocialId);
+    if (!target) return;
+    const trimmed = socialUrlDraft.trim();
+    if (trimmed) {
+      onUpdateDesignerInfo?.({ [target.field]: trimmed });
+    }
+    setEditingSocialId(null);
+    setSocialUrlDraft('');
+  };
 
   return (
     <section
@@ -551,12 +628,25 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="projectType"
-                    className="block text-xs font-mono text-zinc-400 mb-1.5"
-                  >
-                    Project Focus / Role
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label
+                      htmlFor="projectType"
+                      className="block text-xs font-mono text-zinc-400"
+                    >
+                      Project Focus / Role
+                    </label>
+                    {isOwnerMode && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingInquiryOptions((v) => !v)}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>{isEditingInquiryOptions ? 'Done Editing' : 'Edit Options'}</span>
+                      </button>
+                    )}
+                  </div>
+
                   <select
                     id="projectType"
                     name="projectType"
@@ -564,25 +654,68 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                     onChange={handleInputChange}
                     className="w-full px-4 py-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors"
                   >
-                    <option value="Game Design & Core Mechanics (Loops & Pacing)">
-                      Game Design &amp; Core Mechanics (Loops &amp; Pacing)
-                    </option>
-                    <option value="Unreal Engine Level Design & Environment Art">
-                      Unreal Engine Level Design &amp; Environment Art
-                    </option>
-                    <option value="Vehicle Rigging & Physics Simulation">
-                      Vehicle Rigging &amp; Physics Simulation
-                    </option>
-                    <option value="Autodesk Maya 3D Modeling & Props">
-                      Autodesk Maya 3D Modeling &amp; Props
-                    </option>
-                    <option value="Game Studio Role / Full-Time Inquiry">
-                      Game Studio Role / Full-Time Inquiry
-                    </option>
-                    <option value="Freelance / Collaboration Inquiry">
-                      Freelance / Collaboration Inquiry
-                    </option>
+                    {inquiryOptions.map((option, idx) => (
+                      <option key={`${idx}-${option}`} value={option}>
+                        {option}
+                      </option>
+                    ))}
                   </select>
+
+                  {isOwnerMode && isEditingInquiryOptions && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-zinc-900/80 border border-amber-500/35 space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-semibold block">
+                        Customize Dropdown Options (Add / Edit / Remove)
+                      </span>
+                      <div className="space-y-1.5">
+                        {inquiryOptions.map((option, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={option}
+                              onChange={(e) => handleUpdateInquiryOption(idx, e.target.value)}
+                              className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500"
+                              aria-label={`Option ${idx + 1}`}
+                            />
+                            {inquiryOptions.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveInquiryOption(idx)}
+                                className="p-1.5 rounded-lg bg-zinc-950 hover:bg-red-950 text-zinc-400 hover:text-red-400 border border-zinc-800 cursor-pointer transition-colors"
+                                title="Remove option"
+                                aria-label={`Remove option ${option}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          value={newInquiryOption}
+                          onChange={(e) => setNewInquiryOption(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddInquiryOption();
+                            }
+                          }}
+                          placeholder="Add new dropdown option..."
+                          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddInquiryOption}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+                        >
+                          <Plus className="w-3 h-3 stroke-[2.5]" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -636,23 +769,99 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             Connect On Social
           </span>
 
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {socialPlatforms.map((platform) => (
-              <motion.a
-                key={platform.id}
-                href={platform.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={platform.label}
-                title={platform.label}
-                whileHover={{ scale: 1.1, y: -2 }}
-                whileTap={{ scale: 0.94 }}
-                transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-                className="w-11 h-11 rounded-xl bg-zinc-950 hover:bg-amber-500 text-zinc-300 hover:text-black border border-zinc-800 hover:border-amber-400 flex items-center justify-center transition-colors shadow-lg hover:shadow-amber-500/25 cursor-pointer"
+          <div className="flex flex-wrap items-center justify-center gap-3.5">
+            {socialPlatforms.map((platform) => {
+              const isEditingThis = editingSocialId === platform.id;
+              return (
+                <div key={platform.id} className="relative group/social">
+                  <motion.a
+                    href={platform.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={platform.label}
+                    title={platform.label}
+                    whileHover={{ scale: 1.1, y: -2 }}
+                    whileTap={{ scale: 0.94 }}
+                    transition={{ type: 'spring', stiffness: 460, damping: 24 }}
+                    className={`w-11 h-11 rounded-xl bg-zinc-950 hover:bg-amber-500 text-zinc-300 hover:text-black border flex items-center justify-center transition-colors shadow-lg hover:shadow-amber-500/25 cursor-pointer ${
+                      isEditingThis
+                        ? 'border-amber-400 ring-2 ring-amber-500/40'
+                        : 'border-zinc-800 hover:border-amber-400'
+                    }`}
+                  >
+                    {platform.icon}
+                  </motion.a>
+
+                  {isOwnerMode && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSocialEdit(platform)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-amber-500 hover:bg-amber-400 text-black border border-[#050507] flex items-center justify-center shadow-md cursor-pointer transition-transform hover:scale-110"
+                      title={`Edit ${platform.label} link`}
+                      aria-label={`Edit ${platform.label} link`}
+                    >
+                      <Edit3 className="w-2.5 h-2.5 stroke-[2.5]" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Owner On-Point Inline Social Link Editor */}
+          <AnimatePresence>
+            {isOwnerMode && editingSocialId && (
+              <motion.form
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.2 }}
+                onSubmit={handleSaveSocialUrl}
+                className="max-w-lg mx-auto p-3 rounded-xl bg-zinc-950 border border-amber-500/40 shadow-2xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-left"
               >
-                {platform.icon}
-              </motion.a>
-            ))}
+                <span className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold shrink-0 px-1">
+                  {socialPlatforms.find((p) => p.id === editingSocialId)?.label} URL:
+                </span>
+                <input
+                  type="url"
+                  value={socialUrlDraft}
+                  onChange={(e) => setSocialUrlDraft(e.target.value)}
+                  placeholder="https://..."
+                  autoFocus
+                  className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] uppercase tracking-wider cursor-pointer transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSocialId(null);
+                      setSocialUrlDraft('');
+                    }}
+                    className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer transition-colors"
+                    aria-label="Cancel editing link"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {/* Centered Location & Worldwide Availability Note Below Social Icons */}
+          <div className="text-xs font-mono text-zinc-400 tracking-wide pt-1">
+            <InlineEdit
+              value={info.contactLocationNote || 'Based in India · Available Worldwide'}
+              onSave={(val) => onUpdateDesignerInfo?.({ contactLocationNote: val })}
+              isOwnerMode={isOwnerMode}
+              label="Location & Availability Note"
+              className="text-zinc-400"
+            />
           </div>
         </motion.div>
       </div>

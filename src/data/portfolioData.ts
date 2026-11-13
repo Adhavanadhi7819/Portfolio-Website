@@ -89,6 +89,13 @@ export const DESIGNER_INFO: DesignerInfo = {
   contactHeading: "Let's Work Together",
   contactSubheading: "Have a project in mind? I'd love to hear about it. Reach out for collaborations, freelance work, or just to say hello.",
   contactBadge: 'GET IN TOUCH',
+  contactLocationNote: 'Based in India · Available Worldwide',
+  contactInquiryOptions: [
+    'Game Design & Level Design',
+    '3D Modeling & Environment Art',
+    'Game Studio Role / Full-Time Inquiry',
+    'Freelance / Collaboration Inquiry'
+  ],
   contactSlidePhotoUrl: '/showcase/contact-slide.jpg',
   heroBadge: 'Unreal Engine & Autodesk Maya Portfolio',
   heroSubtitle: 'Crafting immersive Unreal Engine worlds, cinematic camera sequences, and stylized gameplay mechanics.',

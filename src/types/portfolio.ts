@@ -169,6 +169,8 @@ export interface DesignerInfo {
   contactHeading?: string;
   contactSubheading?: string;
   contactBadge?: string;
+  contactLocationNote?: string;
+  contactInquiryOptions?: string[];
   contactSlidePhotoUrl?: string;
   heroBadge?: string;
   heroSubtitle?: string;
