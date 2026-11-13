@@ -11,7 +11,8 @@ import {
   Layers,
   Gamepad2,
   FileCode,
-  Briefcase
+  Briefcase,
+  ShieldCheck
 } from 'lucide-react';
 
 import { EditModalMode } from './OwnerEditModal';
@@ -28,6 +29,7 @@ interface OwnerAdminBarProps {
   onImportJson: () => void;
   onResetDefaults: () => void;
   onLockMode: () => void;
+  onOpenSecurity?: () => void;
   hasUnsavedChanges?: boolean;
 }
 
@@ -43,6 +45,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onImportJson,
   onResetDefaults,
   onLockMode,
+  onOpenSecurity,
   hasUnsavedChanges = false
 }) => {
   return (
@@ -160,6 +163,17 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
+
+          {onOpenSecurity && (
+            <button
+              onClick={onOpenSecurity}
+              title="2FA Authenticator Security & QR Setup"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">2FA QR</span>
+            </button>
+          )}
 
           <button
             onClick={onLockMode}

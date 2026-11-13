@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { FileText, Download, Upload, ArrowUpRight, Trash2, Loader2 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs';
 import { DesignerInfo } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// Bind PDF.js worker in-bundle so preview works offline and inside nested iframes without worker fetch issues
+(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
 
 interface ResumeSectionProps {
   designerInfo?: DesignerInfo;
@@ -44,14 +45,13 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array | null {
 
 interface PdfCanvasPreviewProps {
   src: string;
-  blobUrl: string | null;
   fileName?: string;
 }
 
-const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, blobUrl, fileName }) => {
-  const pagesContainerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
-  const [pageCount, setPageCount] = useState<number>(0);
+const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [pageImages, setPageImages] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,9 +59,7 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, blobUrl, fileN
 
     const renderPdf = async () => {
       setStatus('loading');
-      setPageCount(0);
-      const container = pagesContainerRef.current;
-      if (container) container.innerHTML = '';
+      setPageImages([]);
 
       try {
         const bytes = src.startsWith('data:') ? dataUrlToUint8Array(src) : null;
@@ -72,12 +70,10 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, blobUrl, fileN
         const pdf = await loadingTask.promise;
         if (cancelled) return;
 
-        setPageCount(pdf.numPages);
-        const containerEl = pagesContainerRef.current;
-        if (!containerEl) return;
-
-        const targetDisplayWidth = Math.max(containerEl.clientWidth - 16, 320);
+        const containerWidth = containerRef.current?.clientWidth || 760;
+        const targetDisplayWidth = Math.max(containerWidth - 24, 340);
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const renderedPages: string[] = [];
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           if (cancelled) return;
@@ -86,31 +82,39 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, blobUrl, fileN
 
           const baseViewport = page.getViewport({ scale: 1 });
           const fitScale = targetDisplayWidth / baseViewport.width;
-          const renderScale = Math.max(fitScale * dpr, 1.5);
+          const renderScale = Math.max(fitScale * dpr, 1.8);
           const viewport = page.getViewport({ scale: renderScale });
 
           const canvas = document.createElement('canvas');
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
-          canvas.className =
-            'w-full h-auto rounded-lg shadow-xl border border-zinc-800 bg-white block mx-auto';
-          canvas.setAttribute('aria-label', `${fileName || 'Resume'} page ${pageNum}`);
 
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext('2d', { alpha: false });
           if (!ctx) continue;
 
-          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+          // Paint crisp white paper backdrop so transparent PDFs never render black
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          await page.render({
+            canvasContext: ctx,
+            viewport,
+            canvas,
+            background: 'rgb(255, 255, 255)'
+          }).promise;
+
           if (cancelled) return;
-          containerEl.appendChild(canvas);
+          renderedPages.push(canvas.toDataURL('image/png'));
+          setPageImages([...renderedPages]);
         }
 
         if (!cancelled) {
-          setStatus('ready');
+          setStatus(renderedPages.length > 0 ? 'ready' : 'error');
         }
       } catch (err) {
-        console.error('PDF canvas preview fallback triggered:', err);
+        console.error('PDF preview render failed:', err);
         if (!cancelled) {
-          setStatus('fallback');
+          setStatus('error');
         }
       }
     };
@@ -125,47 +129,45 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, blobUrl, fileN
     };
   }, [src, fileName]);
 
-  if (status === 'fallback') {
-    return blobUrl ? (
-      <div className="bg-black p-3 sm:p-4">
-        <object
-          data={blobUrl}
-          type="application/pdf"
-          className="w-full h-[540px] sm:h-[640px] rounded-xl border border-zinc-800 bg-zinc-950"
-        >
-          <div className="p-8 text-center text-xs font-mono text-zinc-400">
-            Inline PDF preview is unavailable in this browser view. Use the Download Resume button
-            above to view the document.
-          </div>
-        </object>
-      </div>
-    ) : null;
-  }
-
   return (
-    <div className="bg-zinc-950/90 p-3 sm:p-4 space-y-3">
-      {status === 'loading' && (
+    <div ref={containerRef} className="bg-zinc-950/90 p-3 sm:p-4 space-y-3">
+      {status === 'loading' && pageImages.length === 0 && (
         <div className="py-16 flex flex-col items-center justify-center gap-2.5 text-xs font-mono text-zinc-400">
           <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
-          <span>Loading resume preview...</span>
+          <span>Rendering resume preview...</span>
         </div>
       )}
 
-      {status === 'ready' && pageCount > 0 && (
-        <div className="flex items-center justify-between px-1 text-[11px] font-mono text-zinc-400">
-          <span>Document Preview</span>
-          <span>
-            {pageCount} {pageCount === 1 ? 'Page' : 'Pages'}
-          </span>
+      {status === 'error' && pageImages.length === 0 && (
+        <div className="p-8 rounded-xl border border-zinc-800 bg-zinc-900/50 text-center space-y-2 text-xs font-mono text-zinc-400">
+          <p className="text-zinc-200 font-semibold">
+            Preview could not render for this PDF format.
+          </p>
+          <p>Click the Download Resume button above to view the full file directly.</p>
         </div>
       )}
 
-      <div
-        ref={pagesContainerRef}
-        className={`space-y-4 max-h-[680px] overflow-y-auto pr-1 ${
-          status === 'loading' ? 'hidden' : 'block'
-        }`}
-      />
+      {pageImages.length > 0 && (
+        <>
+          <div className="flex items-center justify-between px-1 text-[11px] font-mono text-zinc-400">
+            <span>Document Preview</span>
+            <span>
+              {pageImages.length} {pageImages.length === 1 ? 'Page' : 'Pages'}
+            </span>
+          </div>
+
+          <div className="space-y-4 max-h-[720px] overflow-y-auto pr-1">
+            {pageImages.map((imgSrc, idx) => (
+              <img
+                key={`pdf-page-${idx + 1}`}
+                src={imgSrc}
+                alt={`${fileName || 'Resume'} — Page ${idx + 1}`}
+                className="w-full h-auto rounded-lg shadow-xl border border-zinc-800 bg-white block mx-auto"
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -423,7 +425,6 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
             {isPdfDocument ? (
               <PdfCanvasPreview
                 src={info.resumePdfUrl}
-                blobUrl={downloadBlobUrl}
                 fileName={info.resumeFileName}
               />
             ) : isImageDocument ? (

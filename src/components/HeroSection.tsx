@@ -217,34 +217,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <ArrowUpRight className="w-4 h-4" />
               </motion.button>
 
-              {designerInfo.resumePdfUrl ? (
-                <motion.a
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
-                  href={designerInfo.resumePdfUrl}
-                  download={
-                    designerInfo.resumeFileName ||
-                    `${designerInfo.name.replace(/\s+/g, '_')}_Resume.pdf`
-                  }
-                  className="px-5 py-3 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 rounded-xl text-sm transition-colors flex items-center gap-2 font-mono cursor-pointer"
-                  title="Download Resume"
-                >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>Download Resume</span>
-                </motion.a>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
-                  onClick={() => onOpenResume?.()}
-                  className="px-5 py-3 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 rounded-xl text-sm transition-colors flex items-center gap-2 font-mono cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>View Resume</span>
-                </motion.button>
-              )}
+              <motion.button
+                whileHover={{ scale: 1.02, y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                onClick={() => onOpenResume?.()}
+                className="px-5 py-3 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/80 rounded-xl text-sm transition-colors flex items-center gap-2 font-mono cursor-pointer"
+                title="Open Resume & Download"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>{designerInfo.resumePdfUrl ? 'Download Resume' : 'View Resume'}</span>
+              </motion.button>
 
               {onOpenContact && (
                 <motion.button

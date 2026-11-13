@@ -1,60 +1,120 @@
-import React, { useState } from 'react';
-import { Lock, Unlock, X, KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { verifyOwnerPasscode } from '../utils/portfolioLogic';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, Lock, Unlock, X, QrCode, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import QRCode from 'qrcode';
+import {
+  OWNER_TOTP_SECRET,
+  buildOtpAuthUri,
+  verifyTotpCode,
+  getTotpSecondsRemaining
+} from '../utils/totp';
 
 interface OwnerAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  currentPasscode: string;
-  onUpdatePasscode: (newPasscode: string) => void;
+  currentPasscode?: string;
+  onUpdatePasscode?: (newPasscode: string) => void;
   isAlreadyOwner: boolean;
   onLockOwnerMode: () => void;
+}
+
+const PAIRING_STORAGE_KEY = 'adhavan_owner_2fa_paired_v1';
+
+function isStudioPreviewHost(): boolean {
+  try {
+    const host = window.location.hostname;
+    return (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host.startsWith('ais-dev-')
+    );
+  } catch {
+    return false;
+  }
 }
 
 export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  currentPasscode,
-  onUpdatePasscode,
   isAlreadyOwner,
   onLockOwnerMode
 }) => {
-  const [passcode, setPasscode] = useState('');
+  const [totpCode, setTotpCode] = useState('');
   const [error, setError] = useState('');
-  const [showChangePasscode, setShowChangePasscode] = useState(false);
-  const [newPasscode, setNewPasscode] = useState('');
-  const [changeSuccess, setChangeSuccess] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [showSetupQr, setShowSetupQr] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number>(() => getTotpSecondsRemaining());
+
+  const [isPaired, setIsPaired] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(PAIRING_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // One-time QR setup is only exposed on the unauthenticated modal in dev/studio preview BEFORE pairing.
+  // On any deployed/public host or once paired, only the 6-digit 2FA verification is ever shown.
+  const canShowFirstTimeSetup = !isAlreadyOwner && !isPaired && isStudioPreviewHost();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    setTotpCode('');
+    const tick = setInterval(() => {
+      setSecondsLeft(getTotpSecondsRemaining());
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || (!showSetupQr && !isAlreadyOwner)) return;
+    const uri = buildOtpAuthUri(OWNER_TOTP_SECRET);
+    QRCode.toDataURL(uri, {
+      width: 220,
+      margin: 2,
+      color: {
+        dark: '#050507',
+        light: '#ffffff'
+      }
+    })
+      .then(setQrDataUrl)
+      .catch((err) => console.error('Failed to render 2FA QR code:', err));
+  }, [isOpen, showSetupQr, isAlreadyOwner]);
 
   if (!isOpen) return null;
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerifyTotp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (verifyOwnerPasscode(passcode, currentPasscode)) {
-      setError('');
-      setPasscode('');
-      onSuccess();
-      onClose();
-    } else {
-      setError('Incorrect owner passcode. Please check and try again.');
-    }
-  };
-
-  const handleChangePasscode = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPasscode.trim() || newPasscode.trim().length < 3) {
-      setError('New passcode must be at least 3 characters.');
+    const cleaned = totpCode.replace(/\D/g, '');
+    if (cleaned.length !== 6) {
+      setError('Enter the 6-digit code from your Authenticator app.');
       return;
     }
-    onUpdatePasscode(newPasscode.trim());
-    setChangeSuccess(true);
+
+    setIsVerifying(true);
     setError('');
-    setTimeout(() => {
-      setChangeSuccess(false);
-      setShowChangePasscode(false);
-      setNewPasscode('');
-    }, 2000);
+    try {
+      const valid = await verifyTotpCode(OWNER_TOTP_SECRET, cleaned);
+      if (valid) {
+        try {
+          localStorage.setItem(PAIRING_STORAGE_KEY, 'true');
+        } catch {}
+        setIsPaired(true);
+        setShowSetupQr(false);
+        setTotpCode('');
+        onSuccess();
+        onClose();
+      } else {
+        setError('Invalid or expired 2FA code. Check your Authenticator app and try again.');
+      }
+    } catch {
+      setError('Verification failed. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -69,7 +129,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
         className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white transition-colors cursor-pointer"
@@ -78,123 +137,172 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Modal Header */}
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-3 shadow-lg shadow-amber-500/10">
-            {isAlreadyOwner ? <Unlock className="w-7 h-7 text-amber-400" /> : <Lock className="w-7 h-7" />}
+            {isAlreadyOwner ? (
+              <Unlock className="w-7 h-7 text-amber-400" />
+            ) : (
+              <ShieldCheck className="w-7 h-7 text-amber-400" />
+            )}
           </div>
-          <h2 id="owner-auth-title" className="text-2xl font-heading font-black text-white uppercase tracking-tight">
-            Owner <span className="text-amber-500">Access</span>
+          <h2
+            id="owner-auth-title"
+            className="text-2xl font-heading font-black text-white uppercase tracking-tight"
+          >
+            Owner <span className="text-amber-500">2FA Access</span>
           </h2>
-          <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-            {isAlreadyOwner 
-              ? 'Owner Mode is currently active. You can edit content across the portfolio or lock it back for visitors.'
-              : 'Enter your owner passcode to unlock full editing and management rights.'}
+          <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
+            {isAlreadyOwner
+              ? '2FA Authenticator security is active for Owner Mode. Scan the QR code if linking a new device or lock Owner Mode below.'
+              : 'Protected by Time-Based 2FA. Enter the 6-digit verification code from your Authenticator app.'}
           </p>
         </div>
 
         {isAlreadyOwner ? (
           <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-amber-400" />
-              <span>You are currently authenticated as <strong>Adhavan (Portfolio Owner)</strong>. All edit buttons are visible.</span>
+              <span>
+                Authenticated as <strong>Adhavan</strong> with 2FA protection active.
+              </span>
             </div>
 
-            {showChangePasscode ? (
-              <form onSubmit={handleChangePasscode} className="space-y-3 pt-2 border-t border-zinc-800">
-                <label className="block text-xs font-mono text-zinc-300 uppercase tracking-wider">
-                  Set New Passcode
-                </label>
-                <input
-                  type="password"
-                  value={newPasscode}
-                  onChange={(e) => setNewPasscode(e.target.value)}
-                  placeholder="Enter new owner passcode"
-                  className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
-                />
-                {changeSuccess && (
-                  <p className="text-xs text-amber-400">Passcode updated successfully!</p>
+            {showSetupQr ? (
+              <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3 text-center">
+                <p className="text-xs font-mono text-zinc-300">
+                  Scan once with Google Authenticator, Authy, or Microsoft Authenticator:
+                </p>
+                {qrDataUrl && (
+                  <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                    <img
+                      src={qrDataUrl}
+                      alt="2FA Authenticator QR Code"
+                      className="w-44 h-44 block"
+                    />
+                  </div>
                 )}
-                {error && <p className="text-xs text-red-400">{error}</p>}
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase"
-                  >
-                    Save New Passcode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowChangePasscode(false)}
-                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-2 pt-2">
+                <p className="text-[11px] font-mono text-zinc-400">
+                  Your 6-digit rolling code refreshes every 30s ({secondsLeft}s remaining).
+                </p>
                 <button
                   type="button"
-                  onClick={() => setShowChangePasscode(true)}
-                  className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold uppercase tracking-wider border border-zinc-800 transition-colors"
+                  onClick={() => setShowSetupQr(false)}
+                  className="text-xs font-mono text-amber-400 hover:text-amber-300 underline cursor-pointer"
                 >
-                  Change Owner Passcode
+                  Hide QR Code
                 </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowSetupQr(true)}
+                className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold uppercase tracking-wider border border-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <QrCode className="w-4 h-4 text-amber-400" />
+                <span>Show 2FA Authenticator QR Code</span>
+              </button>
+            )}
 
+            <button
+              type="button"
+              onClick={() => {
+                onLockOwnerMode();
+                onClose();
+              }}
+              className="w-full py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lock &amp; Exit Owner Mode</span>
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleVerifyTotp} className="space-y-4">
+            {canShowFirstTimeSetup && !showSetupQr && (
+              <div className="p-3 rounded-xl bg-zinc-900/70 border border-amber-500/30 flex items-center justify-between gap-3">
+                <div className="text-[11px] text-zinc-300 font-mono">
+                  First time on this app? Scan the setup QR once.
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    onLockOwnerMode();
-                    onClose();
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs font-bold uppercase tracking-wider transition-colors"
+                  onClick={() => setShowSetupQr(true)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
                 >
-                  Lock & Exit Owner Mode
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Pair QR</span>
                 </button>
               </div>
             )}
-          </div>
-        ) : (
-          <form onSubmit={handleVerify} className="space-y-4">
-            <div>
-              <label htmlFor="owner-passcode-input" className="block text-xs font-mono text-zinc-300 uppercase tracking-wider mb-1.5">
-                Owner Passcode *
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  id="owner-passcode-input"
-                  value={passcode}
-                  onChange={(e) => {
-                    setPasscode(e.target.value);
-                    setError('');
-                  }}
-                  placeholder="Enter owner passcode"
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
-                  autoFocus
-                />
-                <KeyRound className="w-4 h-4 text-zinc-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+
+            {canShowFirstTimeSetup && showSetupQr && (
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
+                <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  One-Time Authenticator Pairing
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Scan this QR code once in <strong>Google Authenticator</strong>,{' '}
+                  <strong>Authy</strong>, or <strong>Microsoft Authenticator</strong>, then enter the
+                  6-digit code below to activate.
+                </p>
+                {qrDataUrl && (
+                  <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                    <img
+                      src={qrDataUrl}
+                      alt="Scan 2FA QR Code"
+                      className="w-44 h-44 block"
+                    />
+                  </div>
+                )}
+                <div className="text-[10px] font-mono text-zinc-500">
+                  After verification, this QR code stays hidden permanently.
+                </div>
               </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="owner-totp-input"
+                  className="block text-xs font-mono text-zinc-300 uppercase tracking-wider"
+                >
+                  6-Digit Authenticator Code *
+                </label>
+                <span className="text-[10px] font-mono text-zinc-500 tabular-nums">
+                  Refreshes in {secondsLeft}s
+                </span>
+              </div>
+
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                id="owner-totp-input"
+                value={totpCode}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setTotpCode(digits);
+                  setError('');
+                }}
+                placeholder="000000"
+                className="w-full px-4 py-3.5 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-2xl font-mono font-bold tracking-[0.4em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                autoFocus
+              />
+
               {error && (
-                <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5" />
+                <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
                   <span>{error}</span>
                 </p>
               )}
             </div>
 
-            {/* Hint for initial setup */}
-            <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-[11px] text-zinc-400 leading-relaxed font-mono">
-              <span className="text-amber-400 font-bold block mb-0.5">DEFAULT OWNER PASSCODE:</span>
-              Use <strong className="text-white">906</strong> to unlock. You can customize this passcode anytime.
-            </div>
-
             <button
               type="submit"
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+              disabled={isVerifying || totpCode.length !== 6}
+              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              Unlock Owner Mode
+              <ShieldCheck className="w-4 h-4" />
+              <span>{isVerifying ? 'Verifying...' : 'Verify & Unlock Owner Mode'}</span>
             </button>
           </form>
         )}

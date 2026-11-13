@@ -822,6 +822,7 @@ export default function App() {
           onImportJson={() => handleOpenEditModal('json_backup')}
           onResetDefaults={handleResetDefaults}
           onLockMode={handleRequestCloseOwnerMode}
+          onOpenSecurity={() => setIsAuthModalOpen(true)}
           hasUnsavedChanges={hasUnsavedOwnerChanges}
         />
       )}

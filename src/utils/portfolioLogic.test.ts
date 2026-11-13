@@ -23,6 +23,12 @@ import {
   updateSectionConfig
 } from './portfolioLogic';
 import { VideoChapter, ProjectItem, PortfolioSectionConfig } from '../types/portfolio';
+import {
+  buildOtpAuthUri,
+  generateTotpCode,
+  verifyTotpCode,
+  OWNER_TOTP_SECRET
+} from './totp';
 
 test('formatVideoTime formats seconds correctly into MM:SS', () => {
   assert.equal(formatVideoTime(0), '00:00');
@@ -405,6 +411,25 @@ test('section management functions toggle, reorder, add, and remove properly', (
   // Removing core section disables it
   const disabledCore = removeSection(withoutCustom, 'hero');
   assert.equal(disabledCore.find(s => s.id === 'hero')?.enabled, false);
+});
+
+test('TOTP 2FA authenticator generates and verifies standard RFC 6238 6-digit codes', async () => {
+  // Official RFC 6238 SHA-1 test secret ("12345678901234567890" in Base32) at T = 59s -> last 6 digits of 94287082 = "287082"
+  const rfcSecret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  const rfcCode = await generateTotpCode(rfcSecret, 59_000);
+  assert.equal(rfcCode, '287082');
+
+  const nowMs = Date.now();
+  const validCode = await generateTotpCode(OWNER_TOTP_SECRET, nowMs);
+  assert.equal(validCode.length, 6);
+  assert.equal(await verifyTotpCode(OWNER_TOTP_SECRET, validCode, nowMs), true);
+  assert.equal(await verifyTotpCode(OWNER_TOTP_SECRET, '000000', nowMs), validCode === '000000');
+  assert.equal(await verifyTotpCode(OWNER_TOTP_SECRET, '12345', nowMs), false);
+
+  const uri = buildOtpAuthUri(OWNER_TOTP_SECRET);
+  assert.ok(uri.startsWith('otpauth://totp/'));
+  assert.ok(uri.includes(`secret=${OWNER_TOTP_SECRET}`));
+  assert.ok(uri.includes('digits=6'));
 });
 
 
