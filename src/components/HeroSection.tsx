@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowUpRight, Download, Edit3, Compass, Mail, Plus, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Download, Edit3, Compass, Mail, Plus, Trash2, X } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { DesignerInfo } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
@@ -56,6 +56,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       )
     : defaultStats;
 
+  const defaultDisciplines = [
+    'Game Design',
+    'Level Layout',
+    'Vehicle Rigging',
+    '3D Arts (Maya)'
+  ];
+
+  const disciplines = Array.isArray(designerInfo.heroDisciplines)
+    ? designerInfo.heroDisciplines.filter((d) => isOwnerMode || Boolean(d?.trim()))
+    : defaultDisciplines;
+
+  const [isEditingDisciplines, setIsEditingDisciplines] = useState(false);
+  const [newDiscipline, setNewDiscipline] = useState('');
+
   const portraitUrl =
     designerInfo.heroPhotoUrl ||
     '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png';
@@ -70,6 +84,24 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const handleRemoveStat = (removeIdx: number) => {
     const next = stats.filter((_, i) => i !== removeIdx);
     onUpdateDesignerInfo?.({ heroStats: next });
+  };
+
+  const handleUpdateDiscipline = (idx: number, val: string) => {
+    const next = [...disciplines];
+    next[idx] = val;
+    onUpdateDesignerInfo?.({ heroDisciplines: next });
+  };
+
+  const handleRemoveDiscipline = (removeIdx: number) => {
+    const next = disciplines.filter((_, i) => i !== removeIdx);
+    onUpdateDesignerInfo?.({ heroDisciplines: next });
+  };
+
+  const handleAddDiscipline = () => {
+    const trimmed = newDiscipline.trim();
+    if (!trimmed) return;
+    onUpdateDesignerInfo?.({ heroDisciplines: [...disciplines, trimmed] });
+    setNewDiscipline('');
   };
 
   return (
@@ -238,29 +270,94 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               )}
             </motion.div>
 
-            {/* Clean Typographic Specializations Quick-Links */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.28, ease: EASE_OUT_EXPO }}
-              className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-mono"
-            >
-              <span className="text-zinc-500 uppercase tracking-wider">Focus Disciplines:</span>
-              {['Game Design', 'Level Layout', 'Vehicle Rigging', '3D Arts (Maya)'].map(
-                (item, idx, arr) => (
-                  <React.Fragment key={item}>
+            {/* Clean Typographic Specializations Quick-Links (Editable Add / Edit / Remove in Owner Mode) */}
+            {(disciplines.length > 0 || isOwnerMode) && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.28, ease: EASE_OUT_EXPO }}
+                className="pt-4 border-t border-zinc-800/80 space-y-2.5 text-xs font-mono"
+              >
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="text-zinc-500 uppercase tracking-wider">Focus Disciplines:</span>
+
+                  {disciplines.map((item, idx, arr) => (
+                    <React.Fragment key={`${idx}-${item}`}>
+                      <span className="inline-flex items-center gap-1.5 group/disc">
+                        {isOwnerMode ? (
+                          <>
+                            <span className="text-zinc-200 inline-flex items-center gap-1">
+                              <InlineEdit
+                                value={item}
+                                onSave={(val) => handleUpdateDiscipline(idx, val)}
+                                isOwnerMode={isOwnerMode}
+                                label="Discipline Name"
+                                as="span"
+                              />
+                              <ArrowUpRight className="w-3 h-3 opacity-60 text-amber-400" />
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDiscipline(idx)}
+                              className="p-0.5 rounded bg-zinc-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer"
+                              title={`Remove ${item}`}
+                              aria-label={`Remove ${item}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={onExploreProjects}
+                            className="text-zinc-300 hover:text-amber-400 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>{item}</span>
+                            <ArrowUpRight className="w-3 h-3 opacity-60" />
+                          </button>
+                        )}
+                      </span>
+                      {idx < arr.length - 1 && <span className="text-zinc-700">/</span>}
+                    </React.Fragment>
+                  ))}
+
+                  {isOwnerMode && (
                     <button
-                      onClick={onExploreProjects}
-                      className="text-zinc-300 hover:text-amber-400 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      type="button"
+                      onClick={() => setIsEditingDisciplines((v) => !v)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-black border border-amber-500/40 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
                     >
-                      <span>{item}</span>
-                      <ArrowUpRight className="w-3 h-3 opacity-60" />
+                      <Plus className="w-3 h-3 stroke-[2.5]" />
+                      <span>{isEditingDisciplines ? 'Done' : 'Add'}</span>
                     </button>
-                    {idx < arr.length - 1 && <span className="text-zinc-700">/</span>}
-                  </React.Fragment>
-                )
-              )}
-            </motion.div>
+                  )}
+                </div>
+
+                {isOwnerMode && isEditingDisciplines && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 max-w-md">
+                    <input
+                      type="text"
+                      value={newDiscipline}
+                      onChange={(e) => setNewDiscipline(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddDiscipline();
+                        }
+                      }}
+                      placeholder="Add discipline (e.g. Blueprints)..."
+                      className="flex-1 min-w-[180px] px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddDiscipline}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      Add Discipline
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            )}
           </motion.div>
 
           {/* Right Column: Clean Portrait Card (Photo Only — No Video Player Overlay) */}

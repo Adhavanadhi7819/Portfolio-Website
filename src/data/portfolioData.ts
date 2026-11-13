@@ -117,6 +117,7 @@ export const DESIGNER_INFO: DesignerInfo = {
     { number: 'Vehicle Rig', label: 'Physics & Drift Sequencer' },
     { number: 'Maya 3D', label: 'Hard-Surface & Prop Art' }
   ],
+  heroDisciplines: ['Game Design', 'Level Layout', 'Vehicle Rigging', '3D Arts (Maya)'],
   proficiencyHeading: 'TECHNICAL PROFICIENCY',
   proficiencySubheading: 'Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.',
   proficiencyCalloutTitle: 'Seeking Junior Game Designer Roles',

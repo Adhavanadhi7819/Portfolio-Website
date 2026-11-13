@@ -165,6 +165,7 @@ export interface DesignerInfo {
     focus: string;
   };
   heroStats?: HeroStatItem[];
+  heroDisciplines?: string[];
   // Section Headings & Subheadings
   contactHeading?: string;
   contactSubheading?: string;
