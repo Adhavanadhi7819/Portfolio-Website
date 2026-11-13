@@ -10,6 +10,7 @@ export interface ServerAuthStatus {
   hasRecoveryKey?: boolean;
   ownerEmailMasked?: string;
   otpauthUri?: string;
+  serverAvailable?: boolean;
 }
 
 export interface ServerPortfolioResponse {
@@ -18,6 +19,7 @@ export interface ServerPortfolioResponse {
   updatedAt?: string;
   activePortfolioId?: string;
   portfolios?: PortfolioProfile[];
+  fromStaticSnapshot?: boolean;
 }
 
 export interface UploadedAssetResponse {
@@ -67,15 +69,21 @@ export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
       return {
         isAuthenticated: false,
         isPaired: true,
-        canShowInitialSetupQr: false
+        canShowInitialSetupQr: false,
+        serverAvailable: false
       };
     }
-    return (await res.json()) as ServerAuthStatus;
+    const json = (await res.json()) as ServerAuthStatus;
+    return {
+      ...json,
+      serverAvailable: true
+    };
   } catch {
     return {
       isAuthenticated: false,
       isPaired: true,
-      canShowInitialSetupQr: false
+      canShowInitialSetupQr: false,
+      serverAvailable: false
     };
   }
 }
@@ -271,27 +279,76 @@ export async function logoutOwnerServer(): Promise<void> {
 }
 
 export async function fetchServerPortfolio(): Promise<ServerPortfolioResponse> {
-  const res = await fetch('/api/portfolio', {
-    method: 'GET',
-    cache: 'no-store',
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch portfolio (${res.status})`);
+  let apiRespondedJson = false;
+  let apiStatus = 0;
+
+  try {
+    const res = await fetch('/api/portfolio', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'include'
+    });
+    apiStatus = res.status;
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      apiRespondedJson = true;
+      const data = (await res.json()) as ServerPortfolioResponse;
+      if (data?.initialized && Array.isArray(data.portfolios) && data.portfolios.length > 0) {
+        return data;
+      }
+    }
+  } catch {
+    // Fall back to static deploy snapshot when /api/portfolio is unavailable (e.g. Vercel static CDN)
   }
-  return (await res.json()) as ServerPortfolioResponse;
+
+  try {
+    const snapRes = await fetch('/portfolio-snapshot.json', {
+      method: 'GET',
+      cache: 'no-store'
+    });
+    const snapType = snapRes.headers.get('content-type') || '';
+    if (snapRes.ok && snapType.includes('application/json')) {
+      const snap = (await snapRes.json()) as Partial<ServerPortfolioResponse>;
+      if (Array.isArray(snap.portfolios) && snap.portfolios.length > 0) {
+        return {
+          initialized: true,
+          version: typeof snap.version === 'number' ? snap.version : 1,
+          updatedAt: snap.updatedAt,
+          activePortfolioId: snap.activePortfolioId || 'default_portfolio',
+          portfolios: snap.portfolios,
+          fromStaticSnapshot: true
+        };
+      }
+    }
+  } catch {}
+
+  if (apiRespondedJson) {
+    return { initialized: false };
+  }
+
+  throw new Error(`Failed to fetch portfolio (${apiStatus || 'network'})`);
 }
 
 export async function saveServerPortfolio(payload: {
   activePortfolioId: string;
   portfolios: PortfolioProfile[];
 }): Promise<ServerPortfolioResponse> {
-  const res = await fetch('/api/portfolio', {
-    method: 'PUT',
-    credentials: 'include',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(payload)
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/portfolio', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    throw new Error('STATIC_HOST_READONLY');
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('STATIC_HOST_READONLY');
+  }
 
   const data = (await res.json().catch(() => ({}))) as ServerPortfolioResponse & {
     error?: string;
@@ -299,6 +356,9 @@ export async function saveServerPortfolio(payload: {
   if (!res.ok) {
     if (res.status === 401) {
       throw new Error('OWNER_AUTH_REQUIRED');
+    }
+    if (res.status === 404 || res.status === 405) {
+      throw new Error('STATIC_HOST_READONLY');
     }
     throw new Error(data.error || `Failed to save portfolio (${res.status})`);
   }
@@ -312,10 +372,24 @@ export async function resetServerPortfolio(defaultState: PortfolioState): Promis
     headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ defaultState })
   });
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return;
+  }
   if (!res.ok) {
     if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    if (res.status === 404 || res.status === 405) return;
     throw new Error(`Failed to reset server portfolio (${res.status})`);
   }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export async function uploadAssetToServer(
@@ -323,27 +397,52 @@ export async function uploadAssetToServer(
   filename: string,
   mimeType?: string
 ): Promise<UploadedAssetResponse> {
-  const res = await fetch('/api/assets', {
-    method: 'POST',
-    credentials: 'include',
-    headers: buildAuthHeaders({
-      'Content-Type': mimeType || fileOrBlob.type || 'application/octet-stream',
-      'X-Filename': encodeURIComponent(filename)
-    }),
-    body: fileOrBlob
-  });
+  const resolvedMime = mimeType || fileOrBlob.type || 'application/octet-stream';
 
-  const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
-    error?: string;
-  };
-  if (!res.ok || !data.url) {
-    if (res.status === 401) {
-      throw new Error('OWNER_AUTH_REQUIRED');
+  try {
+    const res = await fetch('/api/assets', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({
+        'Content-Type': resolvedMime,
+        'X-Filename': encodeURIComponent(filename)
+      }),
+      body: fileOrBlob
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+        error?: string;
+      };
+      if (res.ok && data.url) {
+        return data as UploadedAssetResponse;
+      }
+      if (res.status === 401) {
+        throw new Error('OWNER_AUTH_REQUIRED');
+      }
+      if (res.status !== 404 && res.status !== 405) {
+        throw new Error(data.error || `Asset upload failed (${res.status})`);
+      }
     }
-    throw new Error(data.error || `Asset upload failed (${res.status})`);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message === 'OWNER_AUTH_REQUIRED' || err.message.startsWith('Asset upload failed'))
+    ) {
+      throw err;
+    }
   }
 
-  return data as UploadedAssetResponse;
+  // Fallback for static deployments (e.g. Vercel without Express backend): embed locally as Data URL
+  const dataUrl = await blobToDataUrl(fileOrBlob);
+  return {
+    ok: true,
+    url: dataUrl,
+    filename,
+    size: fileOrBlob.size,
+    mimeType: resolvedMime
+  };
 }
 
 export interface ContactMessageRecord {
@@ -561,12 +660,16 @@ export function subscribeToPortfolioUpdates(
   let closed = false;
   let source: EventSource | null = null;
   let reconnectTimer: number | null = null;
+  let hasConnected = false;
+  let consecutiveFailures = 0;
 
   const connect = () => {
     if (closed) return;
     source = new EventSource('/api/portfolio/stream');
 
     source.addEventListener('connected', (evt) => {
+      hasConnected = true;
+      consecutiveFailures = 0;
       try {
         const parsed = JSON.parse((evt as MessageEvent).data) as {
           version?: number;
@@ -600,9 +703,14 @@ export function subscribeToPortfolioUpdates(
     });
 
     source.onerror = () => {
+      consecutiveFailures += 1;
       if (source) {
         source.close();
         source = null;
+      }
+      // On static deployments (e.g. Vercel without SSE backend), stop retrying after 2 failures
+      if (!hasConnected && consecutiveFailures >= 2) {
+        return;
       }
       if (!closed && reconnectTimer === null) {
         reconnectTimer = window.setTimeout(() => {

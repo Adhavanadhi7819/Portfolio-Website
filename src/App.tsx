@@ -233,6 +233,7 @@ export default function App() {
   const activeSyncPromiseRef = useRef<Promise<boolean> | null>(null);
   const hasPendingSaveRef = useRef<boolean>(false);
   const immediateSaveRequestedRef = useRef<boolean>(false);
+  const hasBackendRef = useRef<boolean>(true);
 
   const hasUnsavedOwnerChanges = useMemo(() => {
     if (!isOwnerMode || ownerSessionSnapshot === null) return false;
@@ -459,6 +460,17 @@ export default function App() {
         setSyncStatus('saved');
         return true;
       } catch (err) {
+        if (err instanceof Error && err.message === 'STATIC_HOST_READONLY') {
+          hasBackendRef.current = false;
+          try {
+            localStorage.setItem('adhavan_local_static_dirty_v1', 'true');
+          } catch {}
+          if (expectedSig) {
+            lastSavedSignatureRef.current = expectedSig;
+          }
+          setSyncStatus('saved');
+          return true;
+        }
         console.error('Failed to sync portfolio to server:', err);
         setSyncStatus('error');
         if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
@@ -489,7 +501,11 @@ export default function App() {
         ]);
         if (!active) return;
 
-        if (authStatus && !authStatus.isAuthenticated && isOwnerMode) {
+        if (authStatus && authStatus.serverAvailable === false) {
+          hasBackendRef.current = false;
+        }
+
+        if (authStatus && authStatus.serverAvailable && !authStatus.isAuthenticated && isOwnerMode) {
           setIsOwnerMode(false);
           setOwnerSessionSnapshot(null);
           try {
@@ -502,11 +518,31 @@ export default function App() {
           Array.isArray(serverData.portfolios) &&
           serverData.portfolios.length > 0
         ) {
-          applyServerPayload(
-            serverData.portfolios,
-            serverData.activePortfolioId || 'default_portfolio',
-            serverData.version || 1
-          );
+          let shouldApply = true;
+          if (serverData.fromStaticSnapshot) {
+            hasBackendRef.current = false;
+            const snapshotSig = `${serverData.version ?? 1}:${serverData.updatedAt ?? ''}`;
+            try {
+              const lastStaticSig = localStorage.getItem('adhavan_static_snapshot_sig_v1');
+              const hasLocalStaticEdits =
+                localStorage.getItem('adhavan_local_static_dirty_v1') === 'true';
+              if (lastStaticSig === snapshotSig && hasLocalStaticEdits) {
+                shouldApply = false;
+              } else {
+                localStorage.setItem('adhavan_static_snapshot_sig_v1', snapshotSig);
+                localStorage.removeItem('adhavan_local_static_dirty_v1');
+              }
+            } catch {}
+          }
+
+          if (shouldApply) {
+            applyServerPayload(
+              serverData.portfolios,
+              serverData.activePortfolioId || 'default_portfolio',
+              serverData.version || 1
+            );
+          }
+
           if (authStatus?.isAuthenticated) {
             const activeP =
               serverData.portfolios.find(
@@ -742,7 +778,11 @@ export default function App() {
 
     await logoutOwnerServer();
     handleSetOwnerMode(false);
-    setSaveToast('Changes saved & live across all devices · Owner Mode closed');
+    setSaveToast(
+      hasBackendRef.current
+        ? 'Changes saved & live across all devices · Owner Mode closed'
+        : 'Changes saved locally in browser · Owner Mode closed'
+    );
   };
 
   const handleDiscardAndExitOwnerMode = async () => {

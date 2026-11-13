@@ -61,6 +61,9 @@ const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
 const DIST_INDEX = path.join(DIST_DIR, 'index.html');
+const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
+const STATIC_SNAPSHOT_FILE = path.join(PUBLIC_DIR, 'portfolio-snapshot.json');
+const STATIC_ASSETS_DIR = path.join(PUBLIC_DIR, 'uploaded-assets');
 
 const DEFAULT_TOTP_SECRET =
   process.env.OWNER_TOTP_SECRET || 'NBSWY3DPFQQHO33SNRSCC43FMNZGK5A4';
@@ -476,6 +479,107 @@ function dehydrateDataUrls(value: unknown, keyHint?: string): unknown {
   return value;
 }
 
+function rewriteAssetsForStaticDeploy(
+  value: unknown,
+  referencedFiles: Set<string>
+): unknown {
+  if (typeof value === 'string') {
+    const match = /^\/api\/assets\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(value.trim());
+    if (match) {
+      const fileId = match[1];
+      referencedFiles.add(fileId);
+      return `/uploaded-assets/${fileId}`;
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteAssetsForStaticDeploy(item, referencedFiles));
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const inputObj = value as Record<string, unknown>;
+    const outObj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(inputObj)) {
+      outObj[k] = rewriteAssetsForStaticDeploy(v, referencedFiles);
+    }
+    return outObj;
+  }
+
+  return value;
+}
+
+function resolveExistingAssetPath(fileId: string): string | null {
+  const primary = path.join(ASSETS_DIR, fileId);
+  if (fs.existsSync(primary)) return primary;
+  const bundled = path.join(BUNDLED_DATA_DIR, 'assets', fileId);
+  if (fs.existsSync(bundled)) return bundled;
+  return null;
+}
+
+function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): void {
+  try {
+    // Only write static deployment snapshot when project workspace public/ is writable
+    fs.accessSync(process.cwd(), fs.constants.W_OK);
+
+    if (!record) {
+      if (fs.existsSync(STATIC_SNAPSHOT_FILE)) {
+        fs.unlinkSync(STATIC_SNAPSHOT_FILE);
+      }
+      return;
+    }
+
+    const referencedFiles = new Set<string>();
+    const staticPortfolios = rewriteAssetsForStaticDeploy(
+      record.portfolios,
+      referencedFiles
+    ) as unknown[];
+
+    fs.mkdirSync(STATIC_ASSETS_DIR, { recursive: true });
+
+    for (const fileId of referencedFiles) {
+      const srcPath = resolveExistingAssetPath(fileId);
+      if (!srcPath) continue;
+      const destPath = path.join(STATIC_ASSETS_DIR, fileId);
+      let needsCopy = !fs.existsSync(destPath);
+      if (!needsCopy) {
+        try {
+          needsCopy = fs.statSync(srcPath).size !== fs.statSync(destPath).size;
+        } catch {
+          needsCopy = true;
+        }
+      }
+      if (needsCopy) {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+
+    // Remove stale uploaded-assets no longer referenced by the exported snapshot
+    try {
+      for (const entry of fs.readdirSync(STATIC_ASSETS_DIR)) {
+        if (!referencedFiles.has(entry)) {
+          const stalePath = path.join(STATIC_ASSETS_DIR, entry);
+          if (fs.statSync(stalePath).isFile()) {
+            fs.unlinkSync(stalePath);
+          }
+        }
+      }
+    } catch {}
+
+    const staticPayload = {
+      initialized: true,
+      version: record.version,
+      updatedAt: record.updatedAt,
+      activePortfolioId: record.activePortfolioId,
+      portfolios: staticPortfolios
+    };
+
+    writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(staticPayload, null, 2));
+  } catch (err) {
+    console.warn('Skipped exporting static deploy snapshot:', err);
+  }
+}
+
 // --- Portfolio State Store & Live SSE Broadcast ---
 function loadPortfolioState(): StoredPortfolioFile | null {
   try {
@@ -700,6 +804,8 @@ setInterval(() => {
 }, 25000);
 
 async function startServer(): Promise<void> {
+  exportStaticSnapshotForDeploy(loadPortfolioState());
+
   const app = express();
   app.set('trust proxy', 1);
 
@@ -1164,6 +1270,7 @@ async function startServer(): Promise<void> {
       };
 
       writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+      exportStaticSnapshotForDeploy(record);
       broadcastPortfolioUpdate(nextVersion, updatedAt);
 
       res.json({
@@ -1204,8 +1311,12 @@ async function startServer(): Promise<void> {
           ]
         };
         writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
-      } else if (fs.existsSync(STATE_FILE)) {
-        fs.unlinkSync(STATE_FILE);
+        exportStaticSnapshotForDeploy(record);
+      } else {
+        if (fs.existsSync(STATE_FILE)) {
+          fs.unlinkSync(STATE_FILE);
+        }
+        exportStaticSnapshotForDeploy(null);
       }
 
       broadcastPortfolioUpdate(nextVersion, updatedAt);
