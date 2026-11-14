@@ -610,6 +610,7 @@ test('getGitHubConfigStatus auto-detects owner, repo, and branch from Vercel Sys
 
     const status = getGitHubConfigStatus();
     assert.equal(status.githubConfigured, true);
+    assert.equal(status.canPullFromGitHub, true);
     assert.equal(status.hasToken, true);
     assert.equal(status.hasOwner, true);
     assert.equal(status.hasRepo, true);
@@ -623,4 +624,51 @@ test('getGitHubConfigStatus auto-detects owner, repo, and branch from Vercel Sys
     }
   }
 });
+
+test('isRemoteNewerThanLocal compares versions and timestamps safely and defaults to Adhavanadhi7819/Portfolio-Website for pull', async () => {
+  const { getGitHubConfigStatus, isRemoteNewerThanLocal } = await import('../../api/update-portfolio');
+
+  const prevToken = process.env.GITHUB_TOKEN;
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+
+  try {
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_OWNER;
+    delete process.env.GITHUB_REPO;
+
+    const status = getGitHubConfigStatus();
+    assert.equal(status.githubConfigured, false);
+    assert.equal(status.canPullFromGitHub, true);
+    assert.equal(status.owner, 'Adhavanadhi7819');
+    assert.equal(status.repo, 'Portfolio-Website');
+
+    const base = {
+      initialized: true,
+      version: 3,
+      updatedAt: '2026-11-14T17:00:00.000Z',
+      activePortfolioId: 'default_portfolio',
+      portfolios: []
+    };
+
+    assert.equal(isRemoteNewerThanLocal({ ...base, version: 4 }, base), true);
+    assert.equal(isRemoteNewerThanLocal({ ...base, version: 2 }, base), false);
+    assert.equal(
+      isRemoteNewerThanLocal({ ...base, updatedAt: '2026-11-14T17:05:00.000Z' }, base),
+      true
+    );
+    assert.equal(
+      isRemoteNewerThanLocal({ ...base, updatedAt: '2026-11-14T16:55:00.000Z' }, base),
+      false
+    );
+  } finally {
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+  }
+});
+
 

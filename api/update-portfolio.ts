@@ -9,6 +9,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export interface GitHubConfigStatus {
   githubConfigured: boolean;
+  canPullFromGitHub: boolean;
   hasToken: boolean;
   hasOwner: boolean;
   hasRepo: boolean;
@@ -16,6 +17,53 @@ export interface GitHubConfigStatus {
   repo: string;
   branch: string;
   adminPinConfigured: boolean;
+}
+
+const DEFAULT_GITHUB_OWNER = 'Adhavanadhi7819';
+const DEFAULT_GITHUB_REPO = 'Portfolio-Website';
+
+function readServerEnv(): {
+  token: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  adminPin: string;
+} {
+  return {
+    token: (process.env.GITHUB_TOKEN || '').trim(),
+    owner: (
+      process.env.GITHUB_OWNER ||
+      process.env.VERCEL_GIT_REPO_OWNER ||
+      DEFAULT_GITHUB_OWNER
+    ).trim(),
+    repo: (
+      process.env.GITHUB_REPO ||
+      process.env.VERCEL_GIT_REPO_SLUG ||
+      DEFAULT_GITHUB_REPO
+    ).trim(),
+    branch:
+      (
+        process.env.GITHUB_BRANCH ||
+        process.env.VERCEL_GIT_COMMIT_REF ||
+        'main'
+      ).trim() || 'main',
+    adminPin: (process.env.ADMIN_PIN || '906').trim() || '906'
+  };
+}
+
+export function getGitHubConfigStatus(): GitHubConfigStatus {
+  const env = readServerEnv();
+  return {
+    githubConfigured: Boolean(env.token && env.owner && env.repo),
+    canPullFromGitHub: Boolean(env.owner && env.repo),
+    hasToken: Boolean(env.token),
+    hasOwner: Boolean(env.owner),
+    hasRepo: Boolean(env.repo),
+    owner: env.owner,
+    repo: env.repo,
+    branch: env.branch,
+    adminPinConfigured: Boolean(process.env.ADMIN_PIN && process.env.ADMIN_PIN.trim())
+  };
 }
 
 export interface CanonicalDataBundle {
@@ -38,41 +86,6 @@ type NodeReq = IncomingMessage & {
   protocol?: string;
   secure?: boolean;
 };
-
-function readServerEnv(): {
-  token: string;
-  owner: string;
-  repo: string;
-  branch: string;
-  adminPin: string;
-} {
-  return {
-    token: (process.env.GITHUB_TOKEN || '').trim(),
-    owner: (process.env.GITHUB_OWNER || process.env.VERCEL_GIT_REPO_OWNER || '').trim(),
-    repo: (process.env.GITHUB_REPO || process.env.VERCEL_GIT_REPO_SLUG || '').trim(),
-    branch:
-      (
-        process.env.GITHUB_BRANCH ||
-        process.env.VERCEL_GIT_COMMIT_REF ||
-        'main'
-      ).trim() || 'main',
-    adminPin: (process.env.ADMIN_PIN || '906').trim() || '906'
-  };
-}
-
-export function getGitHubConfigStatus(): GitHubConfigStatus {
-  const env = readServerEnv();
-  return {
-    githubConfigured: Boolean(env.token && env.owner && env.repo),
-    hasToken: Boolean(env.token),
-    hasOwner: Boolean(env.owner),
-    hasRepo: Boolean(env.repo),
-    owner: env.owner,
-    repo: env.repo,
-    branch: env.branch,
-    adminPinConfigured: Boolean(process.env.ADMIN_PIN && process.env.ADMIN_PIN.trim())
-  };
-}
 
 function getSigningSecret(): string {
   const env = readServerEnv();
@@ -335,13 +348,28 @@ export function normalizeIncomingBundle(
   return null;
 }
 
-function buildGitHubHeaders(token: string): Record<string, string> {
+function buildGitHubHeaders(token?: string): Record<string, string> {
   return {
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'Adhavan-Portfolio-CMS/1.0'
   };
+}
+
+export function isRemoteNewerThanLocal(
+  remote: CanonicalDataBundle,
+  local: CanonicalDataBundle | null
+): boolean {
+  if (!local) return true;
+  if (remote.version > local.version) return true;
+  if (remote.version < local.version) return false;
+  const remoteTime = Date.parse(remote.updatedAt || '');
+  const localTime = Date.parse(local.updatedAt || '');
+  if (!Number.isNaN(remoteTime) && !Number.isNaN(localTime)) {
+    return remoteTime > localTime;
+  }
+  return false;
 }
 
 export async function fetchGitHubDataJson(): Promise<{
@@ -351,8 +379,8 @@ export async function fetchGitHubDataJson(): Promise<{
   data?: CanonicalDataBundle;
 }> {
   const { token, owner, repo, branch } = readServerEnv();
-  if (!token || !owner || !repo) {
-    throw new Error('GitHub sync is not configured (missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO).');
+  if (!owner || !repo) {
+    throw new Error('GitHub repository is not configured (missing GITHUB_OWNER or GITHUB_REPO).');
   }
 
   const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
@@ -535,27 +563,44 @@ export async function handleUpdatePortfolioRequest(
       return;
     }
 
-    if (status.githubConfigured) {
+    const forcePull = getQueryParam(req, 'forcePull') === '1';
+    const local = readLocalDataJson();
+
+    if (status.githubConfigured || status.canPullFromGitHub) {
       try {
         const remote = await fetchGitHubDataJson();
         if (remote.exists && remote.data) {
-          sendJson(res, 200, {
-            ok: true,
-            source: 'github',
-            ...status,
-            isAuthenticated,
-            sha: remote.sha,
-            htmlUrl: remote.htmlUrl,
-            data: remote.data
-          });
-          return;
+          const isVercel = runtimeMode === 'vercel';
+          const remoteIsNewer = isRemoteNewerThanLocal(remote.data, local);
+
+          // On Vercel, GitHub data.json is always canonical.
+          // In AI Studio / Express, pull GitHub into local files when forcePull=1 OR when GitHub is newer than local.
+          if (isVercel || forcePull || remoteIsNewer) {
+            if (!isVercel && (forcePull || remoteIsNewer)) {
+              const synced = writeLocalDataJsonIfWritable(remote.data);
+              if (synced) {
+                options.onLocalCommitted?.(remote.data);
+              }
+            }
+            sendJson(res, 200, {
+              ok: true,
+              source: 'github',
+              runtime: runtimeMode,
+              ...status,
+              isAuthenticated,
+              sha: remote.sha,
+              htmlUrl: remote.htmlUrl,
+              data: remote.data
+            });
+            return;
+          }
         }
       } catch (err) {
-        const local = readLocalDataJson();
-        if (local) {
+        if (local && !forcePull) {
           sendJson(res, 200, {
             ok: true,
             source: 'local',
+            runtime: runtimeMode,
             ...status,
             isAuthenticated,
             warning: err instanceof Error ? err.message : 'GitHub fetch failed',
@@ -563,21 +608,24 @@ export async function handleUpdatePortfolioRequest(
           });
           return;
         }
-        sendJson(res, 502, {
-          ok: false,
-          ...status,
-          isAuthenticated,
-          error: err instanceof Error ? err.message : 'Failed to pull data.json from GitHub.'
-        });
-        return;
+        if (forcePull || !local) {
+          sendJson(res, 502, {
+            ok: false,
+            runtime: runtimeMode,
+            ...status,
+            isAuthenticated,
+            error: err instanceof Error ? err.message : 'Failed to pull data.json from GitHub.'
+          });
+          return;
+        }
       }
     }
 
-    const local = readLocalDataJson();
     if (local) {
       sendJson(res, 200, {
         ok: true,
         source: 'local',
+        runtime: runtimeMode,
         ...status,
         isAuthenticated,
         data: local

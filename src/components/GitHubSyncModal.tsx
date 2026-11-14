@@ -340,28 +340,36 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
               {/* Auto-Push on Save Toggle */}
               <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-zinc-100">
-                    Auto-Push to GitHub on Save
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">
+                      Auto-Push to GitHub on Save
+                    </span>
+                    {githubStatus.githubConfigured && (
+                      <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        Required
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Automatically commit updates to <code className="text-zinc-300">data.json</code>{' '}
-                    whenever you save edits in Owner Mode.
+                    Every Owner Mode save commits &amp; pushes <code className="text-zinc-300">data.json</code>{' '}
+                    to GitHub first. Without a successful push, the save is rolled back.
                   </p>
                 </div>
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={autoPushOnSave}
+                  aria-checked={githubStatus.githubConfigured ? true : autoPushOnSave}
+                  disabled={githubStatus.githubConfigured}
                   onClick={() => onAutoPushOnSaveChange(!autoPushOnSave)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                    autoPushOnSave
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
+                    githubStatus.githubConfigured || autoPushOnSave
                       ? 'bg-amber-500 border-amber-400'
                       : 'bg-zinc-800 border-zinc-700'
-                  }`}
+                  } ${githubStatus.githubConfigured ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${
-                      autoPushOnSave ? 'translate-x-6' : 'translate-x-1'
+                      githubStatus.githubConfigured || autoPushOnSave ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>

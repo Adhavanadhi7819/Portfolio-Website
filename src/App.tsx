@@ -141,6 +141,12 @@ export default function App() {
   const immediateSaveRequestedRef = useRef<boolean>(false);
   const hasBackendRef = useRef<boolean>(true);
   const [isStaticHost, setIsStaticHost] = useState<boolean>(false);
+  const lastCommittedSnapshotRef = useRef<{
+    activePortfolioId: string;
+    portfolios: PortfolioProfile[];
+    portfolioState: PortfolioState;
+    version: number;
+  } | null>(null);
 
   const hasUnsavedOwnerChanges = useMemo(() => {
     if (!isOwnerMode || ownerSessionSnapshot === null) return false;
@@ -260,6 +266,12 @@ export default function App() {
 
     serverVersionRef.current = version;
     lastSavedSignatureRef.current = sig;
+    lastCommittedSnapshotRef.current = {
+      activePortfolioId: resolvedActiveId,
+      portfolios: JSON.parse(JSON.stringify(serverPortfolios)) as PortfolioProfile[],
+      portfolioState: JSON.parse(JSON.stringify(normalizedState)) as PortfolioState,
+      version
+    };
     setPortfolios(serverPortfolios);
     setActivePortfolioId(resolvedActiveId);
     setPortfolioState(normalizedState);
@@ -271,7 +283,8 @@ export default function App() {
     return nextStatus;
   };
 
-  // Push current state & vault to Express server / GitHub Contents API
+  // Push current state & vault to GitHub/Express atomically:
+  // When GitHub push is configured (or on Vercel), commit + push MUST succeed before save is applied; otherwise roll back.
   const pushStateToServer = async (
     nextPortfolios: PortfolioProfile[],
     nextActiveId: string,
@@ -283,9 +296,16 @@ export default function App() {
     }
 
     const runSave = async (): Promise<boolean> => {
+      const githubPushRequired = Boolean(
+        githubStatus.githubConfigured || githubStatus.runtime === 'vercel'
+      );
       setSyncStatus('saving');
+      if (githubPushRequired) {
+        setSaveToast('Committing & pushing data.json to GitHub...');
+      }
+
       try {
-        const shouldCommitToGitHub = forceGitHubCommit || autoPushOnSave;
+        const shouldCommitToGitHub = forceGitHubCommit || autoPushOnSave || githubPushRequired;
         const saved = shouldCommitToGitHub
           ? await saveServerPortfolio({
               activePortfolioId: nextActiveId,
@@ -297,15 +317,36 @@ export default function App() {
               portfolios: nextPortfolios
             });
 
+        if (githubPushRequired && !saved.githubCommit?.commitSha) {
+          throw new Error('GitHub commit & push did not complete — save was not applied.');
+        }
+
+        const committedPortfolios =
+          saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0
+            ? saved.portfolios
+            : nextPortfolios;
+        const committedActiveId = saved.activePortfolioId || nextActiveId;
+        const committedVersion = saved.version ?? serverVersionRef.current + 1;
+        const committedActiveProfile =
+          committedPortfolios.find((p) => p.id === committedActiveId) || committedPortfolios[0];
+
+        serverVersionRef.current = committedVersion;
+        if (committedActiveProfile?.state) {
+          lastCommittedSnapshotRef.current = {
+            activePortfolioId: committedActiveId,
+            portfolios: JSON.parse(JSON.stringify(committedPortfolios)) as PortfolioProfile[],
+            portfolioState: JSON.parse(JSON.stringify(committedActiveProfile.state)) as PortfolioState,
+            version: committedVersion
+          };
+        }
+
         if (saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0) {
           const hadDataUrls = JSON.stringify(nextPortfolios).includes('data:');
-          const nextVersion = saved.version ?? serverVersionRef.current + 1;
-          serverVersionRef.current = nextVersion;
           if (hadDataUrls && !saved.fromGitHub) {
             applyServerPayload(
               saved.portfolios,
-              saved.activePortfolioId || nextActiveId,
-              nextVersion
+              committedActiveId,
+              committedVersion
             );
           } else if (expectedSig) {
             lastSavedSignatureRef.current = expectedSig;
@@ -320,19 +361,44 @@ export default function App() {
             url: saved.githubCommit.commitUrl,
             committedAt: new Date().toISOString()
           });
-          setSaveToast(`Committed data.json to GitHub (${saved.githubCommit.commitSha.slice(0, 7)})`);
+          setSaveToast(
+            `Pushed to GitHub (${saved.githubCommit.commitSha.slice(0, 7)}) — Save applied`
+          );
+        } else {
+          setSaveToast('Saved to data.json');
         }
 
         setSyncStatus('saved');
         return true;
       } catch (err) {
-        console.error('Failed to sync portfolio:', err);
+        console.error('Failed to commit/save portfolio:', err);
         setSyncStatus('error');
+
+        // Without successful GitHub commit & push (or valid server save), revert pending edits cleanly
+        const rollback = lastCommittedSnapshotRef.current;
+        if (rollback) {
+          const rollbackSig = JSON.stringify({
+            activePortfolioId: rollback.activePortfolioId,
+            state: rollback.portfolioState,
+            portfolioIds: rollback.portfolios.map((p) => ({
+              id: p.id,
+              name: p.name,
+              subtitle: p.subtitle
+            }))
+          });
+          lastSavedSignatureRef.current = rollbackSig;
+          setPortfolios(rollback.portfolios);
+          setActivePortfolioId(rollback.activePortfolioId);
+          setPortfolioState(rollback.portfolioState);
+        }
+
         if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
-          setSaveToast('Owner session expired · Enter Admin PIN to publish edits');
+          setSaveToast('Save not applied — Enter Admin PIN to commit edits to GitHub');
           setIsAuthModalOpen(true);
         } else if (err instanceof Error) {
-          setSaveToast(err.message);
+          setSaveToast(`Save not applied: ${err.message}`);
+        } else {
+          setSaveToast('Save not applied — GitHub commit & push failed.');
         }
         return false;
       } finally {
@@ -414,7 +480,7 @@ export default function App() {
   };
 
   const handlePullLatestFromGitHub = async () => {
-    const res = await pullLatestFromGitHub();
+    const res = await pullLatestFromGitHub(true);
     setGithubStatus(res.status);
     if (res.ok && res.data?.portfolios?.length) {
       applyServerPayload(
@@ -423,7 +489,7 @@ export default function App() {
         res.data.version || serverVersionRef.current + 1
       );
       setSyncStatus('saved');
-      setSaveToast(`Pulled latest data.json (v${res.data.version || 1})`);
+      setSaveToast(`Pulled latest data.json from GitHub (v${res.data.version || 1})`);
       return {
         ok: true,
         source: res.source,
@@ -479,9 +545,9 @@ export default function App() {
         if (!active) return;
 
         const hasExpress = Boolean(authStatus?.serverAvailable);
-        const hasGitHub = Boolean(ghStatus?.githubConfigured);
+        const hasGitHub = Boolean(ghStatus?.githubConfigured || ghStatus?.canPullFromGitHub);
         hasBackendRef.current = hasExpress || hasGitHub;
-        setIsStaticHost(!hasExpress && !hasGitHub);
+        setIsStaticHost(!hasExpress && !ghStatus?.githubConfigured);
 
         const cookieAuthenticated = Boolean(
           authStatus?.isAuthenticated || ghStatus?.isAuthenticated
@@ -582,7 +648,7 @@ export default function App() {
     if (sig === lastSavedSignatureRef.current) return;
 
     hasPendingSaveRef.current = true;
-    const delayMs = immediateSaveRequestedRef.current ? 0 : 350;
+    const delayMs = immediateSaveRequestedRef.current || githubStatus.githubConfigured ? 0 : 250;
     const timer = window.setTimeout(async () => {
       const wasImmediate = immediateSaveRequestedRef.current;
       immediateSaveRequestedRef.current = false;
@@ -590,8 +656,8 @@ export default function App() {
       if (ok && wasImmediate) {
         setSaveToast(
           portfolioState.designerInfo.resumePdfUrl
-            ? 'Resume uploaded & published for all visitors'
-            : 'Resume changes published for all visitors'
+            ? 'Resume uploaded, pushed to GitHub & published'
+            : 'Resume changes pushed to GitHub & published'
         );
       }
     }, delayMs);

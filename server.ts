@@ -1358,12 +1358,16 @@ async function startServer(): Promise<void> {
         portfolios: nextPortfolios
       };
 
-      writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
-      const exportedBundle = exportStaticSnapshotForDeploy(record);
-      broadcastPortfolioUpdate(nextVersion, updatedAt);
+      const exportedBundle = {
+        initialized: true as const,
+        version: nextVersion,
+        updatedAt,
+        activePortfolioId: nextActiveId,
+        portfolios: nextPortfolios
+      };
 
       let githubCommit: { commitSha: string; commitUrl: string; branch: string } | undefined;
-      if (getGitHubConfigStatus().githubConfigured && exportedBundle) {
+      if (getGitHubConfigStatus().githubConfigured) {
         try {
           const customMsg =
             typeof body?.commitMessage === 'string' && body.commitMessage.trim()
@@ -1379,9 +1383,20 @@ async function startServer(): Promise<void> {
             branch: result.branch
           };
         } catch (err) {
-          console.warn('Auto GitHub sync after /api/portfolio save failed:', err);
+          res.status(502).json({
+            ok: false,
+            error:
+              err instanceof Error
+                ? `GitHub commit & push failed: ${err.message}. Save was not applied.`
+                : 'GitHub commit & push failed. Save was not applied.'
+          });
+          return;
         }
       }
+
+      writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+      exportStaticSnapshotForDeploy(record);
+      broadcastPortfolioUpdate(nextVersion, updatedAt);
 
       res.json({
         ok: true,

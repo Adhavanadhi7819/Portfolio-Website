@@ -18,6 +18,7 @@ export interface ServerAuthStatus {
 
 export interface GitHubSyncStatus {
   githubConfigured: boolean;
+  canPullFromGitHub?: boolean;
   hasToken: boolean;
   hasOwner: boolean;
   hasRepo: boolean;
@@ -110,6 +111,7 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
       }
       return {
         githubConfigured: Boolean(json.githubConfigured),
+        canPullFromGitHub: Boolean(json.canPullFromGitHub ?? (json.hasOwner && json.hasRepo)),
         hasToken: Boolean(json.hasToken),
         hasOwner: Boolean(json.hasOwner),
         hasRepo: Boolean(json.hasRepo),
@@ -125,6 +127,7 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
 
   return {
     githubConfigured: false,
+    canPullFromGitHub: false,
     hasToken: false,
     hasOwner: false,
     hasRepo: false,
@@ -191,7 +194,7 @@ export async function verifyAdminPinWithServer(pin: string): Promise<{
   }
 }
 
-export async function pullLatestFromGitHub(): Promise<{
+export async function pullLatestFromGitHub(forcePull = false): Promise<{
   ok: boolean;
   source?: string;
   sha?: string;
@@ -202,7 +205,8 @@ export async function pullLatestFromGitHub(): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch('/api/update-portfolio', {
+    const endpoint = forcePull ? '/api/update-portfolio?forcePull=1' : '/api/update-portfolio';
+    const res = await fetch(endpoint, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'include',
@@ -234,6 +238,7 @@ export async function pullLatestFromGitHub(): Promise<{
 
     const status: GitHubSyncStatus = {
       githubConfigured: Boolean(json.githubConfigured),
+      canPullFromGitHub: Boolean(json.canPullFromGitHub ?? (json.hasOwner && json.hasRepo)),
       hasToken: Boolean(json.hasToken),
       hasOwner: Boolean(json.hasOwner),
       hasRepo: Boolean(json.hasRepo),
@@ -241,7 +246,8 @@ export async function pullLatestFromGitHub(): Promise<{
       repo: json.repo || '',
       branch: json.branch || 'main',
       adminPinConfigured: Boolean(json.adminPinConfigured),
-      isAuthenticated: Boolean(json.isAuthenticated)
+      isAuthenticated: Boolean(json.isAuthenticated),
+      runtime: json.runtime
     };
 
     if (!res.ok || !json.ok) {
