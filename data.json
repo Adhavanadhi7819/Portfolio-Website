@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 8,
-  "updatedAt": "2026-11-14T17:57:04.065Z",
+  "version": 9,
+  "updatedAt": "2026-11-14T17:57:08.581Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:57:03.839Z",
+      "updatedAt": "2026-11-14T17:57:08.352Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -186,15 +186,11 @@
             {
               "number": "Vehicle Rig",
               "label": "Physics & Drift Sequencer"
-            },
-            {
-              "number": "Maya 3D",
-              "label": "Hard-Surface & Prop Art"
             }
           ],
           "heroDisciplines": [
             "Game Design",
-            "3D Artist"
+            "Level Layout"
           ],
           "proficiencyHeading": "TECHNICAL PROFICIENCY",
           "proficiencySubheading": "Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.",
