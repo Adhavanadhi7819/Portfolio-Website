@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 23,
-  "updatedAt": "2026-11-14T17:58:44.020Z",
+  "version": 24,
+  "updatedAt": "2026-11-14T17:59:27.962Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:58:41.539Z",
+      "updatedAt": "2026-11-14T17:59:27.270Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -155,7 +155,7 @@
           "contactLocationNote": "Based in India · Available Worldwide",
           "contactInquiryOptions": [
             "Game Design & Level Design",
-            "3D Modeling & Environment Art",
+            "3D Modeling & Environment Arti",
             "Game Studio Role / Full-Time Inquiry",
             "Freelance / Collaboration Inquiry"
           ],
