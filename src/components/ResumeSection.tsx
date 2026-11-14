@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { FileText, Download, Upload, ArrowUpRight, Trash2, Loader2 } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
-import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs';
+import type { PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist';
 import { DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { uploadDocumentAsset } from '../utils/fileHelpers';
-
-// Bind PDF.js worker in-bundle so preview works offline and inside nested iframes without worker fetch issues
-(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
 
 interface ResumeSectionProps {
   designerInfo?: DesignerInfo;
@@ -66,8 +62,8 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
     }
 
     let cancelled = false;
-    let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
-    let activeRenderTask: pdfjsLib.RenderTask | null = null;
+    let loadingTask: PDFDocumentLoadingTask | null = null;
+    let activeRenderTask: RenderTask | null = null;
 
     const isCancellationError = (err: unknown) => {
       if (cancelled) return true;
@@ -85,6 +81,13 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
       setPageImages([]);
 
       try {
+        const [pdfjsLib, pdfjsWorker] = await Promise.all([
+          import('pdfjs-dist'),
+          import('pdfjs-dist/build/pdf.worker.min.mjs')
+        ]);
+        if (cancelled) return;
+        (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
+
         const bytes = src.startsWith('data:') ? dataUrlToUint8Array(src) : null;
         loadingTask = bytes
           ? pdfjsLib.getDocument({ data: bytes })

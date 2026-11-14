@@ -1000,8 +1000,7 @@ async function startServer(): Promise<void> {
   // --- Auth Endpoints ---
   app.get('/api/auth/status', (req: Request, res: Response) => {
     const authenticated = isOwnerAuthenticated(req);
-    const preview = isPreviewRequest(req);
-    const showInitialSetupQr = !authStore.paired && preview;
+    const showInitialSetupQr = !authStore.paired;
     const ghStatus = getGitHubConfigStatus();
 
     res.setHeader('Cache-Control', 'no-store');
@@ -1254,6 +1253,7 @@ async function startServer(): Promise<void> {
       ...authStore,
       paired: false
     });
+    res.clearCookie('adhavan_totp_paired', { path: '/' });
     res.json({
       ok: true,
       isPaired: false,

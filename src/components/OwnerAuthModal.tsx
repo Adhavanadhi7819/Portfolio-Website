@@ -18,12 +18,10 @@ import {
   EyeOff,
   GitBranch
 } from 'lucide-react';
-import QRCode from 'qrcode';
 import { getTotpSecondsRemaining } from '../utils/totp';
 import {
   fetchServerAuthStatus,
   verifyOwnerTwoFactorWithServer,
-  revealSetupQrWithAdminPin,
   unpairAuthenticatorDevice,
   requestOwnerRecoveryEmail,
   verifyOwnerRecoveryWithServer,
@@ -59,13 +57,10 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
 
   const pinInputRef = useRef<HTMLInputElement>(null);
 
-  // Automatic Setup QR state (shown automatically when !isPaired or after PIN-verified reveal)
+  // Automatic Setup QR state (shown automatically only when !isPaired or after Recovery Mode)
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [otpauthUri, setOtpauthUri] = useState<string | null>(null);
-  const [isPaired, setIsPaired] = useState(true);
   const [showSetupQr, setShowSetupQr] = useState(false);
-  const [isRevealingQr, setIsRevealingQr] = useState(false);
-  const [qrBannerNote, setQrBannerNote] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(() => getTotpSecondsRemaining());
 
   // Unauthenticated Recovery Mode state
@@ -96,7 +91,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     setShowPinValue(false);
     setTotpCode('');
     setShowSetupQr(false);
-    setQrBannerNote(null);
     setIsRecoveryMode(false);
     setRecoveryEmailSentNote(null);
     setEmailRecoveryCode('');
@@ -109,7 +103,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     fetchServerAuthStatus()
       .then((status) => {
         if (!active) return;
-        setIsPaired(status.isPaired);
         if (status.ownerEmailMasked) setOwnerEmailMasked(status.ownerEmailMasked);
         setHasRecoveryKey(Boolean(status.hasRecoveryKey));
         const shouldAutoShowQr =
@@ -149,16 +142,25 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
       setQrDataUrl('');
       return;
     }
-    QRCode.toDataURL(otpauthUri, {
-      width: 210,
-      margin: 2,
-      color: {
-        dark: '#050507',
-        light: '#ffffff'
-      }
-    })
-      .then(setQrDataUrl)
+    let active = true;
+    import('qrcode')
+      .then((mod) =>
+        mod.default.toDataURL(otpauthUri, {
+          width: 210,
+          margin: 2,
+          color: {
+            dark: '#050507',
+            light: '#ffffff'
+          }
+        })
+      )
+      .then((url) => {
+        if (active) setQrDataUrl(url);
+      })
       .catch((err) => console.error('Failed to render 2FA QR code:', err));
+    return () => {
+      active = false;
+    };
   }, [isOpen, otpauthUri, showSetupQr]);
 
   if (!isOpen) return null;
@@ -184,7 +186,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     try {
       const result = await verifyOwnerTwoFactorWithServer(trimmedPin, cleanedCode);
       if (result.ok) {
-        setIsPaired(true);
         setOtpauthUri(null);
         setQrDataUrl('');
         setShowSetupQr(false);
@@ -201,34 +202,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
       setError('Unable to verify Owner credentials right now. Please try again.');
     } finally {
       setIsVerifying(false);
-    }
-  };
-
-  const handleRevealSetupQr = async () => {
-    const trimmedPin = adminPinInput.trim();
-    if (!trimmedPin) {
-      setError('Enter your Admin PIN above first, then click Show Connect QR.');
-      pinInputRef.current?.focus();
-      return;
-    }
-
-    setIsRevealingQr(true);
-    setError('');
-    setQrBannerNote(null);
-    try {
-      const res = await revealSetupQrWithAdminPin(trimmedPin);
-      if (res.ok && res.otpauthUri) {
-        setIsPaired(false);
-        setOtpauthUri(res.otpauthUri);
-        setShowSetupQr(true);
-        setQrBannerNote(
-          'Admin PIN verified. Scan this QR code in your Authenticator app, then enter the 6-digit code below to unlock Owner Mode.'
-        );
-      } else {
-        setError(res.error || 'Incorrect Admin PIN. Enter your valid Admin PIN to show QR.');
-      }
-    } finally {
-      setIsRevealingQr(false);
     }
   };
 
@@ -267,7 +240,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
       const result = await verifyOwnerRecoveryWithServer(payload);
       if (result.ok) {
         if (result.otpauthUri) {
-          setIsPaired(false);
           setOtpauthUri(result.otpauthUri);
           setShowSetupQr(true);
           setIsRecoveryMode(false);
@@ -277,7 +249,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           );
           return;
         }
-        setIsPaired(true);
         setIsRecoveryMode(false);
         onSuccess();
         onClose();
@@ -313,6 +284,7 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     setError('');
     try {
       const res = await relinkAuthenticatorDevice(rotateSecret);
+      const { default: QRCode } = await import('qrcode');
       const qr = await QRCode.toDataURL(res.otpauthUri, {
         width: 210,
         margin: 2,
@@ -337,12 +309,12 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     setError('');
     try {
       const res = await unpairAuthenticatorDevice();
+      const { default: QRCode } = await import('qrcode');
       const qr = await QRCode.toDataURL(res.otpauthUri, {
         width: 210,
         margin: 2,
         color: { dark: '#050507', light: '#ffffff' }
       });
-      setIsPaired(false);
       setRelinkQrDataUrl(qr);
       setSecurityNotice(
         'Phone pairing cleared. The Connect Authenticator QR will automatically show when opening Owner Mode until you verify a 6-digit code.'
@@ -711,21 +683,21 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
           </form>
         ) : (
           <form onSubmit={handleVerifyDualFactor} className="space-y-4">
-            {/* Automatic Setup QR (shown automatically when !isPaired or after PIN-verified reveal) */}
+            {/* Automatic Setup QR (shown automatically whenever no authenticator is paired) */}
             {showSetupQr && qrDataUrl && (
               <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-2.5 text-center">
                 <div className="flex items-center justify-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
                   <QrCode className="w-3.5 h-3.5" />
                   <span>Connect Authenticator App</span>
                 </div>
-                {(recoveryRelinkBanner || qrBannerNote) && (
+                {recoveryRelinkBanner && (
                   <p className="text-[11px] text-emerald-400 leading-relaxed font-medium">
-                    {recoveryRelinkBanner || qrBannerNote}
+                    {recoveryRelinkBanner}
                   </p>
                 )}
-                {!recoveryRelinkBanner && !qrBannerNote && (
+                {!recoveryRelinkBanner && (
                   <p className="text-[11px] text-zinc-300 leading-relaxed">
-                    No phone authenticator paired yet. Scan this QR once in{' '}
+                    No authenticator connected yet. Scan this QR once in{' '}
                     <strong>Google Authenticator</strong> or <strong>Authy</strong>, then enter your{' '}
                     <strong>Admin PIN</strong> and the <strong>6-digit code</strong> below.
                   </p>
@@ -807,24 +779,6 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
                 className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-2xl font-mono font-bold tracking-[0.4em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
               />
             </div>
-
-            {/* Removed from phone -> PIN-verified QR reveal */}
-            {!showSetupQr && (
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/90 text-[11px]">
-                <span className="text-zinc-400 font-mono">
-                  Removed from your phone app?
-                </span>
-                <button
-                  type="button"
-                  onClick={handleRevealSetupQr}
-                  disabled={isRevealingQr}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/35 font-mono font-bold uppercase text-[10px] transition-colors cursor-pointer shrink-0"
-                >
-                  <QrCode className="w-3 h-3" />
-                  <span>{isRevealingQr ? 'Checking PIN...' : 'Show Connect QR'}</span>
-                </button>
-              </div>
-            )}
 
             {error && (
               <p className="text-xs text-red-400 flex items-center gap-1.5">

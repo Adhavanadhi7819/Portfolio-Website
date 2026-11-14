@@ -983,6 +983,89 @@ test('upload-asset commits binary to GitHub and action=asset + relink-qr work in
   }
 });
 
+test('status auto-detects unpaired 2FA and emits otpauthUri until 2FA verification sets paired cookie', async () => {
+  const {
+    handleUpdatePortfolioRequest,
+    generateServerTotpCode,
+    OWNER_TOTP_DEFAULT_SECRET
+  } = await import('../../api/update-portfolio');
+
+  const invoke = async (
+    method: string,
+    url: string,
+    body?: Record<string, unknown>,
+    cookieHeader = ''
+  ) => {
+    let statusCode = 200;
+    let rawChunk = '';
+    const headers: Record<string, unknown> = {};
+    const fakeReq = {
+      method,
+      url,
+      headers: cookieHeader ? { cookie: cookieHeader } : {},
+      body
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[0];
+    const fakeRes = {
+      setHeader(k: string, v: unknown) {
+        headers[k.toLowerCase()] = v;
+      },
+      getHeader(k: string) {
+        return headers[k.toLowerCase()];
+      },
+      end(chunk?: Buffer | string) {
+        rawChunk = String(chunk || '');
+      }
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[1];
+    Object.defineProperty(fakeRes, 'statusCode', {
+      get: () => statusCode,
+      set: (v: number) => {
+        statusCode = v;
+      }
+    });
+    await handleUpdatePortfolioRequest(fakeReq, fakeRes, { runtime: 'vercel' });
+    return { statusCode, headers, data: JSON.parse(rawChunk || '{}') as Record<string, unknown> };
+  };
+
+  // 1. Fresh/unpaired state: automatically emits otpauthUri for QR rendering
+  const unpairedStatus = await invoke('GET', '/api/update-portfolio?action=status');
+  assert.equal(unpairedStatus.statusCode, 200);
+  assert.equal(unpairedStatus.data.isPaired, false);
+  assert.equal(unpairedStatus.data.canShowInitialSetupQr, true);
+  assert.ok(String(unpairedStatus.data.otpauthUri || '').startsWith('otpauth://totp/'));
+
+  // 2. Verify Admin PIN + TOTP -> issues session + paired cookies
+  const validCode = generateServerTotpCode(OWNER_TOTP_DEFAULT_SECRET);
+  const verifyRes = await invoke('POST', '/api/update-portfolio', {
+    action: 'verify-owner-2fa',
+    pin: '906',
+    code: validCode
+  });
+  assert.equal(verifyRes.statusCode, 200);
+  const setCookies = Array.isArray(verifyRes.headers['set-cookie'])
+    ? verifyRes.headers['set-cookie']
+    : [String(verifyRes.headers['set-cookie'] || '')];
+  const cookieHeader = setCookies.map((c) => String(c).split(';')[0]).join('; ');
+  assert.ok(cookieHeader.includes('adhavan_totp_paired='));
+
+  // 3. Subsequent status check with paired cookie -> hides QR automatically
+  const pairedStatus = await invoke('GET', '/api/update-portfolio?action=status', undefined, cookieHeader);
+  assert.equal(pairedStatus.statusCode, 200);
+  assert.equal(pairedStatus.data.isPaired, true);
+  assert.equal(pairedStatus.data.canShowInitialSetupQr, false);
+  assert.equal(pairedStatus.data.otpauthUri, undefined);
+
+  // 4. unpair-2fa clears paired cookie and returns fresh otpauthUri
+  const unpairRes = await invoke(
+    'POST',
+    '/api/update-portfolio',
+    { action: 'unpair-2fa' },
+    cookieHeader
+  );
+  assert.equal(unpairRes.statusCode, 200);
+  assert.equal(unpairRes.data.isPaired, false);
+  assert.ok(String(unpairRes.data.otpauthUri || '').startsWith('otpauth://totp/'));
+});
+
 
 
 

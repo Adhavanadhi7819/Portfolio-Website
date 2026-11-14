@@ -478,14 +478,19 @@ export async function commitPortfolioToGitHub(payload: {
   };
 }
 
+let memoryRecoveryChallengeToken: string | null = null;
+
 export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
   if (knownExpressAvailable !== false) {
     try {
-      const res = await fetch('/api/auth/status', {
+      const res = await fetch(`/api/auth/status?_t=${Date.now()}`, {
         method: 'GET',
         cache: 'no-store',
         credentials: 'include',
-        headers: buildAuthHeaders()
+        headers: buildAuthHeaders({
+          'Cache-Control': 'no-cache, no-store',
+          Pragma: 'no-cache'
+        })
       });
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
@@ -502,7 +507,35 @@ export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
     } catch {}
   }
 
-  // Vercel serverless deployment path: inspect Admin PIN session via /api/update-portfolio
+  // Vercel serverless deployment path: inspect pairing & auto-QR status via /api/update-portfolio
+  try {
+    const res = await fetch(`/api/update-portfolio?action=status&_t=${Date.now()}`, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'include',
+      headers: buildAuthHeaders({
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache'
+      })
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const json = (await res.json()) as Partial<ServerAuthStatus> & Partial<GitHubSyncStatus>;
+      return {
+        isAuthenticated: Boolean(json.isAuthenticated),
+        isPaired: Boolean(json.isPaired),
+        canShowInitialSetupQr: Boolean(
+          json.canShowInitialSetupQr ?? (!json.isPaired && Boolean(json.otpauthUri))
+        ),
+        hasRecoveryKey: Boolean(json.hasRecoveryKey),
+        ownerEmailMasked: json.ownerEmailMasked,
+        otpauthUri: json.otpauthUri,
+        githubConfigured: Boolean(json.githubConfigured),
+        serverAvailable: false
+      };
+    }
+  } catch {}
+
   const ghStatus = await fetchGitHubSyncStatus();
   return {
     isAuthenticated: ghStatus.isAuthenticated,
@@ -528,31 +561,72 @@ export async function requestOwnerRecoveryEmail(): Promise<{
   deliveryNote?: string;
   error?: string;
 }> {
-  const res = await fetch('/api/auth/recovery/request', {
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/auth/recovery/request', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          maskedEmail?: string;
+          deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+          deliveryNote?: string;
+          error?: string;
+        };
+        if (res.ok && data.ok) {
+          knownExpressAvailable = true;
+          return {
+            ok: true,
+            maskedEmail: data.maskedEmail,
+            deliveryStatus: data.deliveryStatus,
+            deliveryNote: data.deliveryNote
+          };
+        }
+        if (res.status !== 404) {
+          return {
+            ok: false,
+            error: data.error || 'Could not send recovery code right now.'
+          };
+        }
+      }
+      if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch {}
+  }
+
+  const fallbackRes = await fetch('/api/update-portfolio', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'recovery-request' })
   });
-  const contentType = res.headers.get('content-type') || '';
+  const contentType = fallbackRes.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     return {
       ok: false,
-      error: 'Recovery email service is unavailable on static hosting.'
+      error: 'Recovery email service is unavailable right now.'
     };
   }
-  const data = (await res.json().catch(() => ({}))) as {
+  const data = (await fallbackRes.json().catch(() => ({}))) as {
     ok?: boolean;
     maskedEmail?: string;
     deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
     deliveryNote?: string;
+    challengeToken?: string;
     error?: string;
   };
-  if (!res.ok || !data.ok) {
+  if (!fallbackRes.ok || !data.ok) {
     return {
       ok: false,
       error: data.error || 'Could not send recovery code right now.'
     };
   }
+  memoryRecoveryChallengeToken = data.challengeToken || null;
   return {
     ok: true,
     maskedEmail: data.maskedEmail,
@@ -566,27 +640,71 @@ export async function verifyOwnerRecoveryWithServer(payload: {
   recoveryKey?: string;
   relinkDevice?: boolean;
 }): Promise<{ ok: boolean; error?: string; recoveredVia?: string; otpauthUri?: string }> {
-  const res = await fetch('/api/auth/recovery/verify', {
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/auth/recovery/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          token?: string;
+          error?: string;
+          recoveredVia?: string;
+          otpauthUri?: string;
+        };
+        if (res.ok && data.ok && data.token) {
+          knownExpressAvailable = true;
+          setStoredOwnerToken(data.token);
+          return {
+            ok: true,
+            recoveredVia: data.recoveredVia,
+            otpauthUri: data.otpauthUri
+          };
+        }
+        if (res.status !== 404) {
+          return {
+            ok: false,
+            error: data.error || 'Recovery verification failed.'
+          };
+        }
+      }
+      if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch {}
+  }
+
+  const fallbackRes = await fetch('/api/update-portfolio', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      action: 'recovery-verify',
+      ...payload,
+      ...(memoryRecoveryChallengeToken ? { challengeToken: memoryRecoveryChallengeToken } : {})
+    })
   });
-  const contentType = res.headers.get('content-type') || '';
+  const contentType = fallbackRes.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     return {
       ok: false,
       error: 'Recovery verification endpoint is unavailable here.'
     };
   }
-  const data = (await res.json().catch(() => ({}))) as {
+  const data = (await fallbackRes.json().catch(() => ({}))) as {
     ok?: boolean;
     token?: string;
     error?: string;
     recoveredVia?: string;
     otpauthUri?: string;
   };
-  if (res.ok && data.ok && data.token) {
+  if (fallbackRes.ok && data.ok && data.token) {
+    memoryRecoveryChallengeToken = null;
     setStoredOwnerToken(data.token);
     return {
       ok: true,
@@ -665,16 +783,30 @@ export async function unpairAuthenticatorDevice(): Promise<{
   isPaired: boolean;
   otpauthUri: string;
 }> {
-  const res = await fetch('/api/auth/unpair', {
+  if (knownExpressAvailable !== false) {
+    const res = await fetch('/api/auth/unpair', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
+    });
+    if (res.ok) {
+      return (await res.json()) as { ok: boolean; isPaired: boolean; otpauthUri: string };
+    }
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    if (res.status !== 404) throw new Error('Failed to disconnect device pairing');
+  }
+
+  const fallbackRes = await fetch('/api/update-portfolio', {
     method: 'POST',
     credentials: 'include',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ action: 'unpair-2fa' })
   });
-  if (!res.ok) {
-    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+  if (!fallbackRes.ok) {
+    if (fallbackRes.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
     throw new Error('Failed to disconnect device pairing');
   }
-  return (await res.json()) as { ok: boolean; isPaired: boolean; otpauthUri: string };
+  return (await fallbackRes.json()) as { ok: boolean; isPaired: boolean; otpauthUri: string };
 }
 
 export async function logoutOwnerServer(): Promise<void> {

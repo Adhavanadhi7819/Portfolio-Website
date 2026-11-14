@@ -5,7 +5,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
 const ADMIN_SESSION_COOKIE = 'adhavan_admin_session';
+const TOTP_PAIRED_COOKIE = 'adhavan_totp_paired';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const PAIRED_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
 
 export interface GitHubConfigStatus {
   githubConfigured: boolean;
@@ -324,6 +326,17 @@ function isRequestHttps(req: NodeReq): boolean {
   return fwdProto.toLowerCase().includes('https');
 }
 
+function setCookieHeader(res: ServerResponse, nextCookie: string): void {
+  const existing = res.getHeader('Set-Cookie');
+  if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, nextCookie]);
+  } else if (typeof existing === 'string') {
+    res.setHeader('Set-Cookie', [existing, nextCookie]);
+  } else {
+    res.setHeader('Set-Cookie', nextCookie);
+  }
+}
+
 function setSessionCookie(req: NodeReq, res: ServerResponse, token: string): void {
   const secure = isRequestHttps(req);
   const maxAgeSec = Math.floor(SESSION_TTL_MS / 1000);
@@ -335,22 +348,137 @@ function setSessionCookie(req: NodeReq, res: ServerResponse, token: string): voi
     secure ? 'SameSite=None' : 'SameSite=Lax',
     ...(secure ? ['Secure'] : [])
   ];
-  const existing = res.getHeader('Set-Cookie');
-  const nextCookie = parts.join('; ');
-  if (Array.isArray(existing)) {
-    res.setHeader('Set-Cookie', [...existing, nextCookie]);
-  } else if (typeof existing === 'string') {
-    res.setHeader('Set-Cookie', [existing, nextCookie]);
-  } else {
-    res.setHeader('Set-Cookie', nextCookie);
-  }
+  setCookieHeader(res, parts.join('; '));
 }
 
 function clearSessionCookie(res: ServerResponse): void {
-  res.setHeader(
-    'Set-Cookie',
-    `${ADMIN_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`
-  );
+  setCookieHeader(res, `${ADMIN_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+}
+
+function createTotpPairedToken(): string {
+  const now = Date.now();
+  const payload = Buffer.from(
+    JSON.stringify({
+      paired: true,
+      iat: now,
+      exp: now + PAIRED_TTL_MS
+    })
+  ).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', getSigningSecret())
+    .update(`paired:${payload}`)
+    .digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifyTotpPairedToken(token: string | undefined): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return false;
+  try {
+    const expectedSig = crypto
+      .createHmac('sha256', getSigningSecret())
+      .update(`paired:${payloadB64}`)
+      .digest();
+    const actualSig = Buffer.from(sigB64, 'base64url');
+    if (expectedSig.length !== actualSig.length) return false;
+    if (!crypto.timingSafeEqual(expectedSig, actualSig)) return false;
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as {
+      paired?: boolean;
+      exp?: number;
+    };
+    return payload.paired === true && typeof payload.exp === 'number' && payload.exp > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function setTotpPairedCookie(req: NodeReq, res: ServerResponse): void {
+  const secure = isRequestHttps(req);
+  const maxAgeSec = Math.floor(PAIRED_TTL_MS / 1000);
+  const token = createTotpPairedToken();
+  const parts = [
+    `${TOTP_PAIRED_COOKIE}=${encodeURIComponent(token)}`,
+    'Path=/',
+    `Max-Age=${maxAgeSec}`,
+    'HttpOnly',
+    secure ? 'SameSite=None' : 'SameSite=Lax',
+    ...(secure ? ['Secure'] : [])
+  ];
+  setCookieHeader(res, parts.join('; '));
+}
+
+function clearTotpPairedCookie(res: ServerResponse): void {
+  setCookieHeader(res, `${TOTP_PAIRED_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+}
+
+function readLocalAuthStoreMeta(): {
+  paired: boolean;
+  secret?: string;
+  recoveryKeyHash?: string;
+} {
+  try {
+    const authPath = path.resolve(process.cwd(), 'portfolio-data', 'auth.json');
+    if (!fs.existsSync(authPath)) return { paired: false };
+    const raw = JSON.parse(fs.readFileSync(authPath, 'utf8')) as {
+      paired?: boolean;
+      secret?: string;
+      recoveryKeyHash?: string;
+    };
+    return {
+      paired: Boolean(raw?.paired),
+      ...(typeof raw?.secret === 'string' ? { secret: raw.secret } : {}),
+      ...(typeof raw?.recoveryKeyHash === 'string' ? { recoveryKeyHash: raw.recoveryKeyHash } : {})
+    };
+  } catch {
+    return { paired: false };
+  }
+}
+
+function maskOwnerEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return '***';
+  const visible = local.slice(0, 2);
+  return `${visible}${'*'.repeat(Math.max(3, local.length - 2))}@${domain}`;
+}
+
+function createRecoveryChallengeToken(codeHash: string, expMs: number): string {
+  const payload = Buffer.from(JSON.stringify({ codeHash, exp: expMs })).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', getSigningSecret())
+    .update(`recovery:${payload}`)
+    .digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifyRecoveryChallengeToken(token: string | undefined, emailCode: string): boolean {
+  if (!token || !emailCode) return false;
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return false;
+  try {
+    const expectedSig = crypto
+      .createHmac('sha256', getSigningSecret())
+      .update(`recovery:${payloadB64}`)
+      .digest();
+    const actualSig = Buffer.from(sigB64, 'base64url');
+    if (expectedSig.length !== actualSig.length) return false;
+    if (!crypto.timingSafeEqual(expectedSig, actualSig)) return false;
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as {
+      codeHash?: string;
+      exp?: number;
+    };
+    if (!payload.codeHash || typeof payload.exp !== 'number' || payload.exp < Date.now()) {
+      return false;
+    }
+    const candidateHash = crypto.createHash('sha256').update(emailCode).digest('hex');
+    return timingSafeStringEqual(candidateHash, payload.codeHash);
+  } catch {
+    return false;
+  }
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -973,13 +1101,25 @@ export async function handleUpdatePortfolioRequest(
     }
 
     if (action === 'status') {
-      const effectivePaired = typeof options.isPaired === 'boolean' ? options.isPaired : true;
+      const cookies = parseCookies(req.headers.cookie);
+      const hasPairedCookie = verifyTotpPairedToken(cookies[TOTP_PAIRED_COOKIE]);
+      const authMeta = readLocalAuthStoreMeta();
+      const effectivePaired =
+        typeof options.isPaired === 'boolean'
+          ? options.isPaired
+          : Boolean(hasPairedCookie || authMeta.paired);
+      const canShowInitialSetupQr = !effectivePaired;
+      const activeSecret = resolveOwnerTotpSecret(options.totpSecret || authMeta.secret);
       sendJson(res, 200, {
         ok: true,
         runtime: runtimeMode,
         ...status,
         isPaired: effectivePaired,
-        isAuthenticated
+        canShowInitialSetupQr,
+        hasRecoveryKey: Boolean(authMeta.recoveryKeyHash || process.env.OWNER_RECOVERY_KEY),
+        ownerEmailMasked: maskOwnerEmail(OWNER_TOTP_ACCOUNT),
+        isAuthenticated,
+        ...(canShowInitialSetupQr ? { otpauthUri: buildServerOtpAuthUri(activeSecret) } : {})
       });
       return;
     }
@@ -1079,7 +1219,9 @@ export async function handleUpdatePortfolioRequest(
 
   const action = typeof body.action === 'string' ? body.action : '';
 
-  const activeTotpSecret = resolveOwnerTotpSecret(options.totpSecret);
+  const activeTotpSecret = resolveOwnerTotpSecret(
+    options.totpSecret || readLocalAuthStoreMeta().secret
+  );
 
   if (action === 'reveal-setup-qr') {
     const pin = typeof body.pin === 'string' ? body.pin : '';
@@ -1135,6 +1277,7 @@ export async function handleUpdatePortfolioRequest(
     options.onTwoFactorVerified?.();
     const token = createAdminSessionToken();
     setSessionCookie(req, res, token);
+    setTotpPairedCookie(req, res);
     sendJson(res, 200, {
       ok: true,
       token,
@@ -1142,6 +1285,135 @@ export async function handleUpdatePortfolioRequest(
       ...status,
       isPaired: true,
       isAuthenticated: true
+    });
+    return;
+  }
+
+  if (action === 'recovery-request') {
+    const recoveryCode = crypto.randomInt(100000, 1000000).toString();
+    const codeHash = crypto.createHash('sha256').update(recoveryCode).digest('hex');
+    const challengeToken = createRecoveryChallengeToken(codeHash, Date.now() + 10 * 60 * 1000);
+    const originUrl = `https://${String(req.headers['x-forwarded-host'] || req.headers.host || 'hey-adhavan.vercel.app')}`;
+
+    let deliveryStatus: 'sent' | 'activation_pending' | 'stored_only' = 'stored_only';
+    let deliveryNote = `Recovery code requested for ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
+
+    try {
+      const relayRes = await fetch(
+        `https://formsubmit.co/ajax/${encodeURIComponent(OWNER_TOTP_ACCOUNT)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Referer: originUrl,
+            Origin: originUrl
+          },
+          body: JSON.stringify({
+            name: 'Portfolio 2FA Recovery',
+            email: OWNER_TOTP_ACCOUNT,
+            _replyto: OWNER_TOTP_ACCOUNT,
+            _subject: 'Owner Mode Recovery Code',
+            message: `Your one-time Owner Mode recovery code is: ${recoveryCode}\n\nThis code expires in 10 minutes.`,
+            _template: 'table',
+            _captcha: 'false'
+          })
+        }
+      );
+      const relayData = (await relayRes.json().catch(() => ({}))) as {
+        success?: boolean | string;
+        message?: string;
+      };
+      if (relayRes.ok && (relayData.success === true || relayData.success === 'true')) {
+        deliveryStatus = 'sent';
+        deliveryNote = `6-digit recovery code sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
+      } else if (String(relayData.message || '').toLowerCase().includes('activat')) {
+        deliveryStatus = 'activation_pending';
+        deliveryNote = `Activation email sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}. Activate FormSubmit in your inbox once to receive recovery emails.`;
+      }
+    } catch {}
+
+    sendJson(res, 200, {
+      ok: true,
+      maskedEmail: maskOwnerEmail(OWNER_TOTP_ACCOUNT),
+      deliveryStatus,
+      deliveryNote,
+      challengeToken
+    });
+    return;
+  }
+
+  if (action === 'recovery-verify') {
+    const emailCode =
+      typeof body.emailCode === 'string' ? body.emailCode.replace(/\s+/g, '').trim() : '';
+    const recoveryKey =
+      typeof body.recoveryKey === 'string' ? body.recoveryKey.trim().toUpperCase() : '';
+    const challengeToken = typeof body.challengeToken === 'string' ? body.challengeToken : '';
+    const relinkDevice = Boolean(body.relinkDevice);
+
+    let recoveredVia: 'email' | 'recovery_key' | null = null;
+
+    if (emailCode) {
+      if (!verifyRecoveryChallengeToken(challengeToken, emailCode)) {
+        sendJson(res, 401, {
+          ok: false,
+          error: 'Invalid or expired email recovery code. Request a fresh code and try again.'
+        });
+        return;
+      }
+      recoveredVia = 'email';
+    } else if (recoveryKey) {
+      const authMeta = readLocalAuthStoreMeta();
+      const expectedHashHex =
+        authMeta.recoveryKeyHash ||
+        (process.env.OWNER_RECOVERY_KEY
+          ? crypto
+              .createHash('sha256')
+              .update(process.env.OWNER_RECOVERY_KEY.trim().toUpperCase())
+              .digest('hex')
+          : '');
+      if (!expectedHashHex) {
+        sendJson(res, 400, {
+          ok: false,
+          error: 'No backup recovery key configured. Use Email Code instead.'
+        });
+        return;
+      }
+      const providedHashHex = crypto.createHash('sha256').update(recoveryKey).digest('hex');
+      if (!timingSafeStringEqual(providedHashHex, expectedHashHex)) {
+        sendJson(res, 401, { ok: false, error: 'Invalid Backup Recovery Key.' });
+        return;
+      }
+      recoveredVia = 'recovery_key';
+    } else {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Enter a 6-digit email recovery code or Backup Recovery Key.'
+      });
+      return;
+    }
+
+    const token = createAdminSessionToken();
+    setSessionCookie(req, res, token);
+    if (relinkDevice) {
+      clearTotpPairedCookie(res);
+      options.onResetPairingRequested?.();
+      sendJson(res, 200, {
+        ok: true,
+        token,
+        isPaired: false,
+        recoveredVia,
+        otpauthUri: buildServerOtpAuthUri(activeTotpSecret)
+      });
+      return;
+    }
+
+    setTotpPairedCookie(req, res);
+    sendJson(res, 200, {
+      ok: true,
+      token,
+      isPaired: true,
+      recoveredVia
     });
     return;
   }
@@ -1251,6 +1523,17 @@ export async function handleUpdatePortfolioRequest(
     sendJson(res, 200, {
       ok: true,
       rotated: false,
+      otpauthUri: buildServerOtpAuthUri(activeTotpSecret)
+    });
+    return;
+  }
+
+  if (action === 'unpair-2fa') {
+    clearTotpPairedCookie(res);
+    options.onResetPairingRequested?.();
+    sendJson(res, 200, {
+      ok: true,
+      isPaired: false,
       otpauthUri: buildServerOtpAuthUri(activeTotpSecret)
     });
     return;

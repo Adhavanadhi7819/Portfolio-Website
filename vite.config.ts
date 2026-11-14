@@ -136,7 +136,30 @@ export default defineConfig(() => {
     plugins: [syncPortfolioSnapshotOnBuild(), react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    build: {
+      chunkSizeWarningLimit: 1300,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'react-vendor',
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+              {
+                name: 'motion-vendor',
+                test: /[\\/]node_modules[\\/](motion|framer-motion)[\\/]/,
+              },
+              {
+                name: 'icons-vendor',
+                test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+              },
+            ],
+          },
+        },
       },
     },
     server: {
