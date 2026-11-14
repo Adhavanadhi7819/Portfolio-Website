@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 14,
-  "updatedAt": "2026-11-14T17:58:01.728Z",
+  "version": 15,
+  "updatedAt": "2026-11-14T17:58:26.246Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:57:49.403Z",
+      "updatedAt": "2026-11-14T17:58:25.872Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -165,7 +165,7 @@
           "heroPhotoUrl": "/showcase/hero-portrait.jpg",
           "heroPhotoAlign": {
             "x": 50,
-            "y": 35,
+            "y": 48,
             "zoom": 1,
             "fit": "cover"
           },
@@ -612,37 +612,6 @@
               "theme": "Tribute to Initial D Mountain/City Drifting",
               "lighting": "Overcast urban street lighting with desaturated atmospheric mist",
               "mechanics": "Rigged 4-wheel physics, drift angle yaw, body roll under centrifugal force"
-            }
-          },
-          {
-            "id": "temple-dual-concept",
-            "title": "Temple Dual Concept: Upside vs Downside",
-            "category": "environment",
-            "categoryLabel": "Environment Art",
-            "summary": "Contrasting environmental design exploring holy sunlit architecture versus dark subterranean ruined shrines.",
-            "description": "An architectural and lighting duality concept created in Unreal Engine. The \"Upside Concept\" portrays a pristine ancient Indian temple with carved stone vimanas, sanctum sanctorum with floral garlands, Lord Ganesha, and sacred Nandi under radiant sunshine. The \"Downside Concept\" reimagines the same space as an ancient subterranean ruin guarded by ceremonial flame braziers and misty night air.",
-            "keyFeatures": [
-              "Duality exploration: Sacred daylight atmosphere vs eerie underworld ruins",
-              "Authentic Indian temple stone architecture, sculptures, and ornamental columns",
-              "Particle-based fire braziers casting dynamic flickering light in the downside version",
-              "God-ray atmospheric volumetric fog and directional sunlight"
-            ],
-            "techStack": [
-              "Unreal Engine",
-              "Volumetric Fog",
-              "Niagara / Flame FX",
-              "Architectural Composition"
-            ],
-            "thumbnail": "/showcase/temple-upside.jpg",
-            "galleryImages": [
-              "/showcase/temple-upside.jpg",
-              "/showcase/temple-ruins.jpg"
-            ],
-            "videoTimestamp": 11,
-            "conceptNotes": {
-              "theme": "Sacred Sanctum Duality (Daylight Divinity vs Subterranean Shadow)",
-              "lighting": "Upside: Golden hour sun rays; Downside: Fiery torch orange highlights with cold mist shadows",
-              "mechanics": "Environmental storytelling through architectural weathering and lighting shifts"
             }
           },
           {
