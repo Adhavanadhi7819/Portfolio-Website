@@ -1,15 +1,16 @@
 {
   "initialized": true,
-  "version": 34,
-  "updatedAt": "2026-11-14T19:58:24.234Z",
+  "version": 35,
+  "updatedAt": "2026-11-14T20:01:15.355Z",
   "activePortfolioId": "default_portfolio",
+  "authenticatorPaired": true,
   "portfolios": [
     {
       "id": "default_portfolio",
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T19:00:19.209Z",
+      "updatedAt": "2026-11-14T20:01:14.817Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -407,7 +408,25 @@
           "mayaHeading": "3D Modeling & Assets",
           "mayaSubheading": "“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.",
           "outroTitle": "",
-          "outroText": ""
+          "outroText": "",
+          "backgroundConfig": {
+            "enabled": true,
+            "voidInnerHex": "#130816",
+            "voidOuterHex": "#03050a",
+            "paletteHexes": [
+              "#f43f5e",
+              "#f59e0b",
+              "#c026d3",
+              "#2563eb",
+              "#fb7185"
+            ],
+            "colorCycleEnabled": true,
+            "cycleSpeed": 1,
+            "nodeDensity": 1,
+            "facetOpacity": 0.13,
+            "cursorRadius": 180,
+            "cursorMode": "attract"
+          }
         },
         "videoPath": "/assets/aistudio/Portfolio_46956db1.mp4",
         "videoChapters": [
@@ -729,6 +748,5 @@
         ]
       }
     }
-  ],
-  "authenticatorPaired": true
+  ]
 }
