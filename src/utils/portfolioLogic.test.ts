@@ -818,6 +818,171 @@ test('Owner unlock enforces BOTH Admin PIN and Authenticator TOTP, and reveal-se
   assert.equal(verifiedCalled, true);
 });
 
+test('fetchGitHubDataJson sends no-cache headers/query and falls back to raw.githubusercontent.com on unauthenticated 403', async () => {
+  const { fetchGitHubDataJson } = await import('../../api/update-portfolio');
+  const prevToken = process.env.GITHUB_TOKEN;
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+  const prevFetch = globalThis.fetch;
+
+  delete process.env.GITHUB_TOKEN;
+  process.env.GITHUB_OWNER = 'Adhavanadhi7819';
+  process.env.GITHUB_REPO = 'Portfolio-Website';
+
+  const requestedUrls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.startsWith('https://api.github.com/')) {
+      return new Response(JSON.stringify({ message: 'API rate limit exceeded' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        initialized: true,
+        version: 42,
+        updatedAt: '2026-11-14T19:00:00.000Z',
+        activePortfolioId: 'default_portfolio',
+        portfolios: [{ id: 'default_portfolio', name: 'Raw Fallback', subtitle: '', createdAt: '', updatedAt: '', state: {} }]
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  try {
+    const res = await fetchGitHubDataJson();
+    assert.equal(res.exists, true);
+    assert.equal(res.data?.version, 42);
+    assert.ok(requestedUrls[0].includes('&_t='));
+    assert.ok(requestedUrls[1].startsWith('https://raw.githubusercontent.com/Adhavanadhi7819/Portfolio-Website/'));
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+  }
+});
+
+test('upload-asset commits binary to GitHub and action=asset + relink-qr work in Vercel serverless mode', async () => {
+  const {
+    handleUpdatePortfolioRequest,
+    createAdminSessionToken,
+    extractReferencedAssetIds
+  } = await import('../../api/update-portfolio');
+
+  const ids = extractReferencedAssetIds({
+    thumb: '/api/assets/abcdef0123456789abcdef0123456789.jpg',
+    other: '/uploaded-assets/11112222333344445555666677778888.pdf'
+  });
+  assert.equal(ids.size, 2);
+
+  const prevToken = process.env.GITHUB_TOKEN;
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+  const prevFetch = globalThis.fetch;
+
+  process.env.GITHUB_TOKEN = 'ghp_asset_test_token';
+  process.env.GITHUB_OWNER = 'Adhavanadhi7819';
+  process.env.GITHUB_REPO = 'Portfolio-Website';
+
+  const putCalls: Array<{ url: string; body: string }> = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method || 'GET').toUpperCase();
+    if (method === 'GET') {
+      return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+    }
+    putCalls.push({ url, body: String(init?.body || '') });
+    return new Response(JSON.stringify({ content: { path: 'public/uploaded-assets/test' } }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }) as typeof fetch;
+
+  const sessionToken = createAdminSessionToken();
+  const sampleBase64 = Buffer.from('hello-portfolio-asset-bytes', 'utf8').toString('base64');
+
+  const invoke = async (method: string, url: string, body?: Record<string, unknown>) => {
+    let statusCode = 200;
+    let rawChunk: Buffer | string = '';
+    const headers: Record<string, unknown> = {};
+    const fakeReq = {
+      method,
+      url,
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[0];
+    const fakeRes = {
+      setHeader(k: string, v: unknown) {
+        headers[k.toLowerCase()] = v;
+      },
+      getHeader(k: string) {
+        return headers[k.toLowerCase()];
+      },
+      end(chunk?: Buffer | string) {
+        rawChunk = chunk ?? '';
+      }
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[1];
+    Object.defineProperty(fakeRes, 'statusCode', {
+      get: () => statusCode,
+      set: (v: number) => {
+        statusCode = v;
+      }
+    });
+    await handleUpdatePortfolioRequest(fakeReq, fakeRes, { runtime: 'vercel' });
+    return { statusCode, headers, rawChunk };
+  };
+
+  try {
+    const uploadRes = await invoke('POST', '/api/update-portfolio', {
+      action: 'upload-asset',
+      filename: 'shot.png',
+      mimeType: 'image/png',
+      base64Content: sampleBase64
+    });
+    assert.equal(uploadRes.statusCode, 201);
+    const uploadJson = JSON.parse(String(uploadRes.rawChunk)) as { ok: boolean; url: string };
+    assert.equal(uploadJson.ok, true);
+    assert.ok(uploadJson.url.startsWith('/api/assets/'));
+    assert.ok(uploadJson.url.endsWith('.png'));
+    assert.equal(putCalls.length, 1);
+    assert.ok(putCalls[0].url.includes('/contents/public/uploaded-assets/'));
+
+    const relinkRes = await invoke('POST', '/api/update-portfolio', { action: 'relink-qr' });
+    assert.equal(relinkRes.statusCode, 200);
+    const relinkJson = JSON.parse(String(relinkRes.rawChunk)) as { ok: boolean; otpauthUri: string };
+    assert.equal(relinkJson.ok, true);
+    assert.ok(relinkJson.otpauthUri.startsWith('otpauth://totp/'));
+
+    const fileId = uploadJson.url.replace('/api/assets/', '');
+    const assetGetRes = await invoke('GET', `/api/update-portfolio?action=asset&file=${fileId}`);
+    assert.equal(assetGetRes.statusCode, 200);
+    assert.equal(assetGetRes.headers['content-type'], 'image/png');
+    assert.equal(Buffer.from(assetGetRes.rawChunk).toString('utf8'), 'hello-portfolio-asset-bytes');
+
+    // Clean up local test file written by writeLocalAssetIfWritable
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    for (const dir of ['portfolio-data/assets', 'public/uploaded-assets']) {
+      const f = path.resolve(process.cwd(), dir, fileId);
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    }
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+  }
+});
+
 
 
 

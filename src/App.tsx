@@ -163,12 +163,28 @@ export default function App() {
   const serverVersionRef = useRef<number>(
     PUBLISHED_PORTFOLIO_SNAPSHOT.initialized ? PUBLISHED_PORTFOLIO_SNAPSHOT.version : 0
   );
+  const lastServerUpdatedAtRef = useRef<string>(
+    PUBLISHED_PORTFOLIO_SNAPSHOT.initialized ? PUBLISHED_PORTFOLIO_SNAPSHOT.updatedAt || '' : ''
+  );
+  const lastRemoteShaRef = useRef<string>('');
   const isServerHydratedRef = useRef<boolean>(false);
   const lastSavedSignatureRef = useRef<string>('');
-  const activeSyncPromiseRef = useRef<Promise<boolean> | null>(null);
+  const isSyncRunningRef = useRef<boolean>(false);
+  const desiredSaveRef = useRef<{
+    portfolios: PortfolioProfile[];
+    activePortfolioId: string;
+    sig?: string;
+    forceGitHubCommit?: boolean;
+    customMessage?: string;
+  } | null>(null);
+  const pendingWaitersRef = useRef<Array<(ok: boolean) => void>>([]);
   const hasPendingSaveRef = useRef<boolean>(false);
   const immediateSaveRequestedRef = useRef<boolean>(false);
   const hasBackendRef = useRef<boolean>(true);
+  const githubStatusRef = useRef<GitHubSyncStatus>(githubStatus);
+  useEffect(() => {
+    githubStatusRef.current = githubStatus;
+  }, [githubStatus]);
   const [isStaticHost, setIsStaticHost] = useState<boolean>(false);
   const lastCommittedSnapshotRef = useRef<{
     activePortfolioId: string;
@@ -269,7 +285,9 @@ export default function App() {
   const applyServerPayload = (
     serverPortfolios: PortfolioProfile[],
     serverActiveId: string,
-    version: number
+    version: number,
+    updatedAt?: string,
+    remoteSha?: string
   ) => {
     const resolvedActiveId =
       serverPortfolios.some((p) => p.id === serverActiveId)
@@ -294,6 +312,8 @@ export default function App() {
     });
 
     serverVersionRef.current = version;
+    if (updatedAt) lastServerUpdatedAtRef.current = updatedAt;
+    if (remoteSha) lastRemoteShaRef.current = remoteSha;
     lastSavedSignatureRef.current = sig;
     lastCommittedSnapshotRef.current = {
       activePortfolioId: resolvedActiveId,
@@ -308,137 +328,172 @@ export default function App() {
 
   const handleRefreshGitHubStatus = async (): Promise<GitHubSyncStatus> => {
     const nextStatus = await fetchGitHubSyncStatus();
+    githubStatusRef.current = nextStatus;
     setGithubStatus(nextStatus);
     return nextStatus;
   };
 
-  // Push current state & vault to GitHub/Express atomically:
+  // Single-flight serialized save & GitHub auto-push queue:
+  // Coalesces rapid edits into atomic ordered commits so concurrent saves never race on SHA.
   // When GitHub push is configured (or on Vercel), commit + push MUST succeed before save is applied; otherwise roll back.
+  const drainSaveQueue = async (): Promise<boolean> => {
+    if (isSyncRunningRef.current) {
+      return new Promise<boolean>((resolve) => {
+        pendingWaitersRef.current.push(resolve);
+      });
+    }
+
+    isSyncRunningRef.current = true;
+    let lastResult = true;
+
+    try {
+      while (desiredSaveRef.current) {
+        const job = desiredSaveRef.current;
+        desiredSaveRef.current = null;
+
+        const currentGh = githubStatusRef.current;
+        const githubPushRequired = Boolean(
+          currentGh.githubConfigured || currentGh.runtime === 'vercel'
+        );
+        setSyncStatus('saving');
+        if (githubPushRequired) {
+          setSaveToast('Committing & pushing data.json to GitHub...');
+        }
+
+        try {
+          const shouldCommitToGitHub =
+            Boolean(job.forceGitHubCommit) || autoPushOnSave || githubPushRequired;
+          const saved = await saveServerPortfolio({
+            activePortfolioId: job.activePortfolioId,
+            portfolios: job.portfolios,
+            ...(shouldCommitToGitHub
+              ? { commitMessage: job.customMessage || commitMessage }
+              : {})
+          });
+
+          if (githubPushRequired && !saved.githubCommit?.commitSha) {
+            throw new Error('GitHub commit & push did not complete — save was not applied.');
+          }
+
+          const committedPortfolios =
+            saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0
+              ? saved.portfolios
+              : job.portfolios;
+          const committedActiveId = saved.activePortfolioId || job.activePortfolioId;
+          const committedVersion = saved.version ?? serverVersionRef.current + 1;
+          const committedActiveProfile =
+            committedPortfolios.find((p) => p.id === committedActiveId) || committedPortfolios[0];
+
+          serverVersionRef.current = committedVersion;
+          if (saved.updatedAt) {
+            lastServerUpdatedAtRef.current = saved.updatedAt;
+          }
+          if (committedActiveProfile?.state) {
+            lastCommittedSnapshotRef.current = {
+              activePortfolioId: committedActiveId,
+              portfolios: JSON.parse(JSON.stringify(committedPortfolios)) as PortfolioProfile[],
+              portfolioState: JSON.parse(JSON.stringify(committedActiveProfile.state)) as PortfolioState,
+              version: committedVersion
+            };
+          }
+
+          if (saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0) {
+            const hadDataUrls = JSON.stringify(job.portfolios).includes('data:');
+            if (hadDataUrls && !saved.fromGitHub) {
+              applyServerPayload(
+                saved.portfolios,
+                committedActiveId,
+                committedVersion,
+                saved.updatedAt
+              );
+            } else if (job.sig) {
+              lastSavedSignatureRef.current = job.sig;
+            }
+          } else if (job.sig) {
+            lastSavedSignatureRef.current = job.sig;
+          }
+
+          if (saved.githubCommit?.commitSha) {
+            setLastCommitInfo({
+              sha: saved.githubCommit.commitSha,
+              url: saved.githubCommit.commitUrl,
+              committedAt: new Date().toISOString()
+            });
+            setSaveToast(
+              `Pushed to GitHub (${saved.githubCommit.commitSha.slice(0, 7)}) — Live on reload`
+            );
+          } else {
+            setSaveToast('Saved to data.json');
+          }
+
+          setSyncStatus('saved');
+          lastResult = true;
+        } catch (err) {
+          console.error('Failed to commit/save portfolio:', err);
+          setSyncStatus('error');
+          lastResult = false;
+
+          // If no newer edit superseded this one, revert pending edits cleanly
+          if (!desiredSaveRef.current) {
+            const rollback = lastCommittedSnapshotRef.current;
+            if (rollback) {
+              const rollbackSig = JSON.stringify({
+                activePortfolioId: rollback.activePortfolioId,
+                state: rollback.portfolioState,
+                portfolioIds: rollback.portfolios.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  subtitle: p.subtitle
+                }))
+              });
+              lastSavedSignatureRef.current = rollbackSig;
+              setPortfolios(rollback.portfolios);
+              setActivePortfolioId(rollback.activePortfolioId);
+              setPortfolioState(rollback.portfolioState);
+            }
+          }
+
+          if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
+            setSaveToast('Save not applied — Enter Admin PIN + 2FA to commit edits to GitHub');
+            setIsAuthModalOpen(true);
+          } else if (err instanceof Error) {
+            setSaveToast(`Save not applied: ${err.message}`);
+          } else {
+            setSaveToast('Save not applied — GitHub commit & push failed.');
+          }
+
+          desiredSaveRef.current = null;
+          break;
+        }
+      }
+    } finally {
+      hasPendingSaveRef.current = false;
+      isSyncRunningRef.current = false;
+      const waiters = pendingWaitersRef.current.splice(0);
+      for (const resolve of waiters) {
+        resolve(lastResult);
+      }
+    }
+
+    return lastResult;
+  };
+
   const pushStateToServer = async (
     nextPortfolios: PortfolioProfile[],
     nextActiveId: string,
     expectedSig?: string,
-    forceGitHubCommit = false
+    forceGitHubCommit = false,
+    customMessage?: string
   ): Promise<boolean> => {
-    if (activeSyncPromiseRef.current) {
-      await activeSyncPromiseRef.current.catch(() => false);
-    }
-
-    const runSave = async (): Promise<boolean> => {
-      const githubPushRequired = Boolean(
-        githubStatus.githubConfigured || githubStatus.runtime === 'vercel'
-      );
-      setSyncStatus('saving');
-      if (githubPushRequired) {
-        setSaveToast('Committing & pushing data.json to GitHub...');
-      }
-
-      try {
-        const shouldCommitToGitHub = forceGitHubCommit || autoPushOnSave || githubPushRequired;
-        const saved = shouldCommitToGitHub
-          ? await saveServerPortfolio({
-              activePortfolioId: nextActiveId,
-              portfolios: nextPortfolios,
-              commitMessage
-            })
-          : await saveServerPortfolio({
-              activePortfolioId: nextActiveId,
-              portfolios: nextPortfolios
-            });
-
-        if (githubPushRequired && !saved.githubCommit?.commitSha) {
-          throw new Error('GitHub commit & push did not complete — save was not applied.');
-        }
-
-        const committedPortfolios =
-          saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0
-            ? saved.portfolios
-            : nextPortfolios;
-        const committedActiveId = saved.activePortfolioId || nextActiveId;
-        const committedVersion = saved.version ?? serverVersionRef.current + 1;
-        const committedActiveProfile =
-          committedPortfolios.find((p) => p.id === committedActiveId) || committedPortfolios[0];
-
-        serverVersionRef.current = committedVersion;
-        if (committedActiveProfile?.state) {
-          lastCommittedSnapshotRef.current = {
-            activePortfolioId: committedActiveId,
-            portfolios: JSON.parse(JSON.stringify(committedPortfolios)) as PortfolioProfile[],
-            portfolioState: JSON.parse(JSON.stringify(committedActiveProfile.state)) as PortfolioState,
-            version: committedVersion
-          };
-        }
-
-        if (saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0) {
-          const hadDataUrls = JSON.stringify(nextPortfolios).includes('data:');
-          if (hadDataUrls && !saved.fromGitHub) {
-            applyServerPayload(
-              saved.portfolios,
-              committedActiveId,
-              committedVersion
-            );
-          } else if (expectedSig) {
-            lastSavedSignatureRef.current = expectedSig;
-          }
-        } else if (expectedSig) {
-          lastSavedSignatureRef.current = expectedSig;
-        }
-
-        if (saved.githubCommit?.commitSha) {
-          setLastCommitInfo({
-            sha: saved.githubCommit.commitSha,
-            url: saved.githubCommit.commitUrl,
-            committedAt: new Date().toISOString()
-          });
-          setSaveToast(
-            `Pushed to GitHub (${saved.githubCommit.commitSha.slice(0, 7)}) — Save applied`
-          );
-        } else {
-          setSaveToast('Saved to data.json');
-        }
-
-        setSyncStatus('saved');
-        return true;
-      } catch (err) {
-        console.error('Failed to commit/save portfolio:', err);
-        setSyncStatus('error');
-
-        // Without successful GitHub commit & push (or valid server save), revert pending edits cleanly
-        const rollback = lastCommittedSnapshotRef.current;
-        if (rollback) {
-          const rollbackSig = JSON.stringify({
-            activePortfolioId: rollback.activePortfolioId,
-            state: rollback.portfolioState,
-            portfolioIds: rollback.portfolios.map((p) => ({
-              id: p.id,
-              name: p.name,
-              subtitle: p.subtitle
-            }))
-          });
-          lastSavedSignatureRef.current = rollbackSig;
-          setPortfolios(rollback.portfolios);
-          setActivePortfolioId(rollback.activePortfolioId);
-          setPortfolioState(rollback.portfolioState);
-        }
-
-        if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
-          setSaveToast('Save not applied — Enter Admin PIN to commit edits to GitHub');
-          setIsAuthModalOpen(true);
-        } else if (err instanceof Error) {
-          setSaveToast(`Save not applied: ${err.message}`);
-        } else {
-          setSaveToast('Save not applied — GitHub commit & push failed.');
-        }
-        return false;
-      } finally {
-        hasPendingSaveRef.current = false;
-        activeSyncPromiseRef.current = null;
-      }
+    hasPendingSaveRef.current = true;
+    desiredSaveRef.current = {
+      portfolios: nextPortfolios,
+      activePortfolioId: nextActiveId,
+      sig: expectedSig,
+      forceGitHubCommit,
+      customMessage
     };
-
-    const promise = runSave();
-    activeSyncPromiseRef.current = promise;
-    return promise;
+    return drainSaveQueue();
   };
 
   const handleSaveAndCommitToGitHub = async (customMessage?: string) => {
@@ -457,8 +512,12 @@ export default function App() {
       await handleRefreshGitHubStatus();
 
       if (result.ok && result.committed) {
-        if (result.data?.version) {
-          serverVersionRef.current = result.data.version;
+        const nextVersion = result.data?.version || serverVersionRef.current + 1;
+        const committedPortfolios =
+          result.data?.portfolios?.length ? result.data.portfolios : mergedPortfolios;
+        serverVersionRef.current = nextVersion;
+        if (result.data?.updatedAt) {
+          lastServerUpdatedAtRef.current = result.data.updatedAt;
         }
         if (result.commitSha) {
           setLastCommitInfo({
@@ -466,6 +525,16 @@ export default function App() {
             url: result.commitUrl || '',
             committedAt: new Date().toISOString()
           });
+        }
+        const activeCommitted =
+          committedPortfolios.find((p) => p.id === activePortfolioId) || committedPortfolios[0];
+        if (activeCommitted?.state) {
+          lastCommittedSnapshotRef.current = {
+            activePortfolioId,
+            portfolios: JSON.parse(JSON.stringify(committedPortfolios)) as PortfolioProfile[],
+            portfolioState: JSON.parse(JSON.stringify(activeCommitted.state)) as PortfolioState,
+            version: nextVersion
+          };
         }
         lastSavedSignatureRef.current = JSON.stringify({
           activePortfolioId,
@@ -510,13 +579,25 @@ export default function App() {
 
   const handlePullLatestFromGitHub = async () => {
     const res = await pullLatestFromGitHub(true);
+    githubStatusRef.current = res.status;
     setGithubStatus(res.status);
     if (res.ok && res.data?.portfolios?.length) {
       applyServerPayload(
         res.data.portfolios,
         res.data.activePortfolioId || 'default_portfolio',
-        res.data.version || serverVersionRef.current + 1
+        res.data.version || serverVersionRef.current + 1,
+        res.data.updatedAt,
+        res.sha
       );
+      if (isOwnerMode) {
+        const activeP =
+          res.data.portfolios.find(
+            (p) => p.id === (res.data?.activePortfolioId || 'default_portfolio')
+          ) || res.data.portfolios[0];
+        if (activeP?.state) {
+          setOwnerSessionSnapshot(JSON.stringify(activeP.state));
+        }
+      }
       setSyncStatus('saved');
       setSaveToast(`Pulled latest data.json from GitHub (v${res.data.version || 1})`);
       return {
@@ -531,28 +612,70 @@ export default function App() {
     };
   };
 
-  // Initial server / GitHub hydration + httpOnly cookie auth check + live SSE sync
+  // Initial server / GitHub hydration + httpOnly cookie auth check + automatic focus/visibility pull
   useEffect(() => {
     let active = true;
     let unsubscribeSse: (() => void) | null = null;
 
+    const isIncomingDataNewer = (serverData: {
+      version?: number;
+      updatedAt?: string;
+      sha?: string;
+      fromGitHub?: boolean;
+    }): boolean => {
+      if (typeof serverData.version === 'number') {
+        if (serverData.version > serverVersionRef.current) return true;
+        if (serverData.version === serverVersionRef.current) {
+          const remoteTs = Date.parse(serverData.updatedAt || '');
+          const localTs = Date.parse(lastServerUpdatedAtRef.current || '');
+          if (!Number.isNaN(remoteTs) && !Number.isNaN(localTs) && remoteTs > localTs) {
+            return true;
+          }
+        }
+      }
+      if (
+        serverData.fromGitHub &&
+        serverData.sha &&
+        lastRemoteShaRef.current &&
+        serverData.sha !== lastRemoteShaRef.current
+      ) {
+        return true;
+      }
+      return false;
+    };
+
     const syncLatestIfNewer = async () => {
-      if (activeSyncPromiseRef.current || hasPendingSaveRef.current || !hasBackendRef.current) return;
+      if (
+        isSyncRunningRef.current ||
+        hasPendingSaveRef.current ||
+        desiredSaveRef.current ||
+        !hasBackendRef.current
+      ) {
+        return;
+      }
       try {
         const serverData = await fetchServerPortfolio();
-        if (!active || activeSyncPromiseRef.current || hasPendingSaveRef.current) return;
+        if (
+          !active ||
+          isSyncRunningRef.current ||
+          hasPendingSaveRef.current ||
+          desiredSaveRef.current
+        ) {
+          return;
+        }
         if (serverData.fromStaticSnapshot) return;
         if (
           serverData.initialized &&
           Array.isArray(serverData.portfolios) &&
           serverData.portfolios.length > 0 &&
-          typeof serverData.version === 'number' &&
-          serverData.version > serverVersionRef.current
+          isIncomingDataNewer(serverData)
         ) {
           applyServerPayload(
             serverData.portfolios,
             serverData.activePortfolioId || 'default_portfolio',
-            serverData.version
+            serverData.version || serverVersionRef.current,
+            serverData.updatedAt,
+            serverData.sha
           );
         }
       } catch {}
@@ -560,17 +683,28 @@ export default function App() {
 
     const hydrateFromServer = async () => {
       try {
-        const ghStatus = await fetchGitHubSyncStatus().catch(() => null);
+        const [ghStatus, serverData] = await Promise.all([
+          fetchGitHubSyncStatus().catch(() => null),
+          fetchServerPortfolio().catch(() => null)
+        ]);
         if (!active) return;
 
         if (ghStatus) {
+          githubStatusRef.current = ghStatus;
           setGithubStatus(ghStatus);
         }
 
-        const [authStatus, serverData] = await Promise.all([
-          fetchServerAuthStatus().catch(() => null),
-          fetchServerPortfolio().catch(() => null)
-        ]);
+        // Only query Express /api/auth/status when not running on Vercel serverless
+        const authStatus =
+          ghStatus?.runtime === 'vercel'
+            ? {
+                isAuthenticated: Boolean(ghStatus.isAuthenticated),
+                isPaired: true,
+                canShowInitialSetupQr: false,
+                githubConfigured: ghStatus.githubConfigured,
+                serverAvailable: false
+              }
+            : await fetchServerAuthStatus().catch(() => null);
         if (!active) return;
 
         const hasExpress = Boolean(authStatus?.serverAvailable);
@@ -596,7 +730,9 @@ export default function App() {
           applyServerPayload(
             serverData.portfolios,
             serverData.activePortfolioId || 'default_portfolio',
-            serverData.version || 1
+            serverData.version || 1,
+            serverData.updatedAt,
+            serverData.sha
           );
 
           if (cookieAuthenticated) {
@@ -623,8 +759,9 @@ export default function App() {
             ({ version }) => {
               if (
                 version > serverVersionRef.current &&
-                !activeSyncPromiseRef.current &&
-                !hasPendingSaveRef.current
+                !isSyncRunningRef.current &&
+                !hasPendingSaveRef.current &&
+                !desiredSaveRef.current
               ) {
                 syncLatestIfNewer();
               }
@@ -648,17 +785,33 @@ export default function App() {
         syncLatestIfNewer();
       }
     };
+    const handleFocusPull = () => {
+      syncLatestIfNewer();
+    };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isSyncRunningRef.current || hasPendingSaveRef.current || desiredSaveRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocusPull);
+    window.addEventListener('pageshow', handleFocusPull);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       active = false;
       unsubscribeSse?.();
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocusPull);
+      window.removeEventListener('pageshow', handleFocusPull);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Debounced auto-save to server whenever Owner makes edits
+  // Debounced auto-save & GitHub auto-push whenever Owner makes edits
   useEffect(() => {
     if (!isOwnerMode || !isServerHydratedRef.current) return;
 
@@ -677,7 +830,7 @@ export default function App() {
     if (sig === lastSavedSignatureRef.current) return;
 
     hasPendingSaveRef.current = true;
-    const delayMs = immediateSaveRequestedRef.current || githubStatus.githubConfigured ? 0 : 250;
+    const delayMs = immediateSaveRequestedRef.current ? 0 : 180;
     const timer = window.setTimeout(async () => {
       const wasImmediate = immediateSaveRequestedRef.current;
       immediateSaveRequestedRef.current = false;
@@ -774,7 +927,12 @@ export default function App() {
   };
 
   const handleRequestCloseOwnerMode = async () => {
-    if (hasUnsavedOwnerChanges || hasPendingSaveRef.current || activeSyncPromiseRef.current) {
+    if (
+      hasUnsavedOwnerChanges ||
+      hasPendingSaveRef.current ||
+      isSyncRunningRef.current ||
+      desiredSaveRef.current
+    ) {
       setIsExitConfirmOpen(true);
     } else {
       await logoutOwnerServer();

@@ -38,6 +38,7 @@ export interface ServerPortfolioResponse {
   portfolios?: PortfolioProfile[];
   fromStaticSnapshot?: boolean;
   fromGitHub?: boolean;
+  sha?: string;
   githubCommit?: {
     commitSha: string;
     commitUrl: string;
@@ -95,11 +96,14 @@ function buildAuthHeaders(extra: Record<string, string> = {}): Record<string, st
 
 export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
   try {
-    const res = await fetch('/api/update-portfolio?action=status', {
+    const res = await fetch(`/api/update-portfolio?action=status&_t=${Date.now()}`, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'include',
-      headers: buildAuthHeaders()
+      headers: buildAuthHeaders({
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache'
+      })
     });
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && contentType.includes('application/json')) {
@@ -329,12 +333,18 @@ export async function pullLatestFromGitHub(forcePull = false): Promise<{
   error?: string;
 }> {
   try {
-    const endpoint = forcePull ? '/api/update-portfolio?forcePull=1' : '/api/update-portfolio';
+    const cacheBust = `_t=${Date.now()}`;
+    const endpoint = forcePull
+      ? `/api/update-portfolio?forcePull=1&${cacheBust}`
+      : `/api/update-portfolio?${cacheBust}`;
     const res = await fetch(endpoint, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'include',
-      headers: buildAuthHeaders()
+      headers: buildAuthHeaders({
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache'
+      })
     });
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
@@ -397,7 +407,8 @@ export async function pullLatestFromGitHub(forcePull = false): Promise<{
           updatedAt: json.data.updatedAt,
           activePortfolioId: json.data.activePortfolioId || 'default_portfolio',
           portfolios: json.data.portfolios,
-          fromGitHub: json.source === 'github'
+          fromGitHub: json.source === 'github',
+          ...(json.sha ? { sha: json.sha } : {})
         }
       };
     }
@@ -622,17 +633,31 @@ export async function regenerateRecoveryKey(): Promise<{ recoveryKey: string }> 
 export async function relinkAuthenticatorDevice(
   rotateSecret = false
 ): Promise<{ otpauthUri: string; rotated: boolean }> {
-  const res = await fetch('/api/auth/relink', {
+  if (knownExpressAvailable !== false) {
+    const res = await fetch('/api/auth/relink', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ rotateSecret })
+    });
+    if (res.ok) {
+      return (await res.json()) as { otpauthUri: string; rotated: boolean };
+    }
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    if (res.status !== 404) throw new Error('Failed to generate device link QR');
+  }
+
+  const fallbackRes = await fetch('/api/update-portfolio', {
     method: 'POST',
     credentials: 'include',
     headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ rotateSecret })
+    body: JSON.stringify({ action: 'relink-qr' })
   });
-  if (!res.ok) {
-    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+  if (!fallbackRes.ok) {
+    if (fallbackRes.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
     throw new Error('Failed to generate device link QR');
   }
-  return (await res.json()) as { otpauthUri: string; rotated: boolean };
+  return (await fallbackRes.json()) as { otpauthUri: string; rotated: boolean };
 }
 
 export async function unpairAuthenticatorDevice(): Promise<{
@@ -870,8 +895,57 @@ export async function uploadAssetToServer(
     }
   }
 
-  // Embed uploaded file directly inside data.json when serverless mode has no stateful /api/assets disk
+  // Vercel Serverless path: commit asset directly to public/uploaded-assets/<fileId> on GitHub
+  // so data.json stays compact and /api/assets/<fileId> resolves immediately across reloads.
+  const MAX_SERVERLESS_UPLOAD_BYTES = Math.floor(3.1 * 1024 * 1024);
+  if (fileOrBlob.size > MAX_SERVERLESS_UPLOAD_BYTES) {
+    throw new Error(
+      `File (${(fileOrBlob.size / (1024 * 1024)).toFixed(1)} MB) exceeds Vercel serverless upload limit (3.1 MB). Use a smaller compressed file or paste an external video/PDF link.`
+    );
+  }
+
   const dataUrl = await blobToDataUrl(fileOrBlob);
+  const commaIdx = dataUrl.indexOf(',');
+  const base64Content = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
+
+  if (base64Content) {
+    const uploadRes = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'upload-asset',
+        filename,
+        mimeType: resolvedMime,
+        base64Content
+      })
+    });
+
+    if (uploadRes.status === 401) {
+      throw new Error('OWNER_AUTH_REQUIRED');
+    }
+
+    const contentType = uploadRes.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const uploadedJson = (await uploadRes.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+        ok?: boolean;
+        error?: string;
+      };
+      if (uploadRes.ok && uploadedJson.ok && uploadedJson.url) {
+        return {
+          ok: true,
+          url: uploadedJson.url,
+          filename: uploadedJson.filename || filename,
+          size: uploadedJson.size || fileOrBlob.size,
+          mimeType: uploadedJson.mimeType || resolvedMime
+        };
+      }
+      if (uploadRes.status >= 400 && fileOrBlob.size > 350 * 1024) {
+        throw new Error(uploadedJson.error || `Asset upload failed (${uploadRes.status})`);
+      }
+    }
+  }
+
   return {
     ok: true,
     url: dataUrl,

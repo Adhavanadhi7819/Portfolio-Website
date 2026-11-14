@@ -496,6 +496,230 @@ function buildGitHubHeaders(token?: string): Record<string, string> {
   };
 }
 
+function buildGitHubNoCacheHeaders(token?: string): Record<string, string> {
+  return {
+    ...buildGitHubHeaders(token),
+    'Cache-Control': 'no-cache, no-store, max-age=0',
+    Pragma: 'no-cache'
+  };
+}
+
+const ASSET_MIME_TO_EXT: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/msword': '.doc',
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/svg+xml': '.svg',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'model/gltf-binary': '.glb',
+  'model/gltf+json': '.gltf',
+  'application/octet-stream': '.bin'
+};
+
+const ASSET_EXT_TO_MIME: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream'
+};
+
+function resolveAssetExtension(mimeType: string, originalFilename?: string): string {
+  const cleanMime = (mimeType || '').split(';')[0].trim().toLowerCase();
+  if (ASSET_MIME_TO_EXT[cleanMime]) return ASSET_MIME_TO_EXT[cleanMime];
+  if (originalFilename) {
+    const ext = path.extname(originalFilename).toLowerCase();
+    if (/^\.[a-z0-9]{1,8}$/.test(ext) && ext !== '.json') return ext;
+  }
+  return '.bin';
+}
+
+function writeLocalAssetIfWritable(fileId: string, buffer: Buffer): void {
+  const dirs = [
+    path.resolve(process.cwd(), 'portfolio-data', 'assets'),
+    path.resolve(process.cwd(), 'public', 'uploaded-assets')
+  ];
+  for (const dir of dirs) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      const target = path.join(dir, fileId);
+      if (!fs.existsSync(target)) {
+        fs.writeFileSync(target, buffer);
+      }
+    } catch {}
+  }
+}
+
+function readLocalAssetIfPresent(fileId: string): Buffer | null {
+  const candidates = [
+    path.resolve(process.cwd(), 'portfolio-data', 'assets', fileId),
+    path.resolve(process.cwd(), 'public', 'uploaded-assets', fileId)
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        return fs.readFileSync(p);
+      }
+    } catch {}
+  }
+  return null;
+}
+
+export async function commitGitHubAssetFile(params: {
+  fileId: string;
+  buffer: Buffer;
+  commitMessage?: string;
+}): Promise<{ uploaded: boolean; path: string }> {
+  const { token, owner, repo, branch } = readServerEnv();
+  const repoPath = `public/uploaded-assets/${params.fileId}`;
+  if (!token || !owner || !repo) {
+    throw new Error('GitHub sync is not configured (missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO).');
+  }
+
+  const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/contents/${repoPath}`;
+
+  // Content-addressed by sha256 prefix: if already on branch, skip redundant commit
+  const checkRes = await fetch(`${contentsUrl}?ref=${encodeURIComponent(branch)}&_t=${Date.now()}`, {
+    method: 'GET',
+    headers: buildGitHubNoCacheHeaders(token),
+    cache: 'no-store'
+  });
+  if (checkRes.ok) {
+    return { uploaded: false, path: repoPath };
+  }
+
+  const putRes = await fetch(contentsUrl, {
+    method: 'PUT',
+    headers: {
+      ...buildGitHubHeaders(token),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message: params.commitMessage || `chore(assets): upload ${params.fileId}`,
+      content: params.buffer.toString('base64'),
+      branch
+    })
+  });
+
+  if (!putRes.ok && putRes.status !== 422) {
+    const errPayload = (await putRes.json().catch(() => ({}))) as { message?: string };
+    throw new Error(errPayload.message || `Failed to upload asset to GitHub (HTTP ${putRes.status})`);
+  }
+
+  return { uploaded: true, path: repoPath };
+}
+
+export function extractReferencedAssetIds(value: unknown, out = new Set<string>()): Set<string> {
+  if (typeof value === 'string') {
+    const match = /^\/(?:api\/assets|uploaded-assets)\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(
+      value.trim()
+    );
+    if (match) out.add(match[1]);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) extractReferencedAssetIds(item, out);
+    return out;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      extractReferencedAssetIds(v, out);
+    }
+  }
+  return out;
+}
+
+export async function ensureGitHubAssetsSynced(value: unknown): Promise<void> {
+  const { token, owner, repo } = readServerEnv();
+  if (!token || !owner || !repo) return;
+  const assetIds = extractReferencedAssetIds(value);
+  for (const fileId of assetIds) {
+    const localBuf = readLocalAssetIfPresent(fileId);
+    if (!localBuf) continue;
+    await commitGitHubAssetFile({ fileId, buffer: localBuf }).catch((err) => {
+      console.warn(`Skipped uploading asset ${fileId} to GitHub:`, err);
+    });
+  }
+}
+
+async function fetchGitHubAssetBuffer(fileId: string): Promise<Buffer | null> {
+  const local = readLocalAssetIfPresent(fileId);
+  if (local) return local;
+
+  const { token, owner, repo, branch } = readServerEnv();
+  if (!owner || !repo) return null;
+
+  const repoPath = `public/uploaded-assets/${fileId}`;
+  const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/contents/${repoPath}?ref=${encodeURIComponent(branch)}&_t=${Date.now()}`;
+
+  try {
+    const res = await fetch(contentsUrl, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { sha?: string; content?: string };
+      if (typeof json.content === 'string' && json.content.trim()) {
+        return Buffer.from(json.content.replace(/\n/g, ''), 'base64');
+      }
+      if (json.sha) {
+        const blobUrl = `https://api.github.com/repos/${encodeURIComponent(
+          owner
+        )}/${encodeURIComponent(repo)}/git/blobs/${encodeURIComponent(json.sha)}?_t=${Date.now()}`;
+        const blobRes = await fetch(blobUrl, {
+          method: 'GET',
+          headers: buildGitHubNoCacheHeaders(token),
+          cache: 'no-store'
+        });
+        if (blobRes.ok) {
+          const blobJson = (await blobRes.json().catch(() => ({}))) as { content?: string };
+          if (blobJson.content) {
+            return Buffer.from(blobJson.content.replace(/\n/g, ''), 'base64');
+          }
+        }
+      }
+    }
+  } catch {}
+
+  try {
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(
+      owner
+    )}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${repoPath}?_t=${Date.now()}`;
+    const rawRes = await fetch(rawUrl, {
+      method: 'GET',
+      headers: { 'Cache-Control': 'no-cache, no-store' },
+      cache: 'no-store'
+    });
+    if (rawRes.ok) {
+      return Buffer.from(await rawRes.arrayBuffer());
+    }
+  } catch {}
+
+  return null;
+}
+
 export function isRemoteNewerThanLocal(
   remote: CanonicalDataBundle,
   local: CanonicalDataBundle | null
@@ -522,18 +746,51 @@ export async function fetchGitHubDataJson(): Promise<{
     throw new Error('GitHub repository is not configured (missing GITHUB_OWNER or GITHUB_REPO).');
   }
 
+  const cacheBust = Date.now();
   const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
     repo
-  )}/contents/data.json?ref=${encodeURIComponent(branch)}`;
+  )}/contents/data.json?ref=${encodeURIComponent(branch)}&_t=${cacheBust}`;
 
   const res = await fetch(contentsUrl, {
     method: 'GET',
-    headers: buildGitHubHeaders(token),
+    headers: buildGitHubNoCacheHeaders(token),
     cache: 'no-store'
   });
 
   if (res.status === 404) {
     return { exists: false };
+  }
+
+  // If unauthenticated GitHub API hits rate limit (403/429), read directly from raw.githubusercontent.com
+  if ((res.status === 403 || res.status === 429) && !token) {
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(
+      owner
+    )}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/data.json?_t=${cacheBust}`;
+    const rawRes = await fetch(rawUrl, {
+      method: 'GET',
+      headers: { 'Cache-Control': 'no-cache, no-store', Pragma: 'no-cache' },
+      cache: 'no-store'
+    });
+    if (rawRes.status === 404) {
+      return { exists: false };
+    }
+    if (rawRes.ok) {
+      const rawText = await rawRes.text();
+      const rawObj = JSON.parse(rawText) as Partial<CanonicalDataBundle>;
+      if (rawObj && Array.isArray(rawObj.portfolios) && rawObj.portfolios.length > 0) {
+        return {
+          exists: true,
+          htmlUrl: `https://github.com/${owner}/${repo}/blob/${branch}/data.json`,
+          data: {
+            initialized: true,
+            version: typeof rawObj.version === 'number' ? rawObj.version : 1,
+            updatedAt: rawObj.updatedAt || new Date().toISOString(),
+            activePortfolioId: rawObj.activePortfolioId || 'default_portfolio',
+            portfolios: rawObj.portfolios
+          }
+        };
+      }
+    }
   }
 
   const json = (await res.json().catch(() => ({}))) as {
@@ -554,10 +811,10 @@ export async function fetchGitHubDataJson(): Promise<{
     // Files larger than 1 MB omit inline content in /contents API; fetch via Git Blobs API
     const blobUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
       repo
-    )}/git/blobs/${encodeURIComponent(json.sha)}`;
+    )}/git/blobs/${encodeURIComponent(json.sha)}?_t=${cacheBust}`;
     const blobRes = await fetch(blobUrl, {
       method: 'GET',
-      headers: buildGitHubHeaders(token),
+      headers: buildGitHubNoCacheHeaders(token),
       cache: 'no-store'
     });
     const blobJson = (await blobRes.json().catch(() => ({}))) as {
@@ -692,6 +949,29 @@ export async function handleUpdatePortfolioRequest(
 
   if (method === 'GET') {
     const action = getQueryParam(req, 'action');
+    if (action === 'asset') {
+      const fileId = getQueryParam(req, 'file');
+      if (!/^[a-f0-9]{16,64}\.[a-z0-9]{1,8}$/i.test(fileId) || fileId.endsWith('.json')) {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
+      const assetBuffer = await fetchGitHubAssetBuffer(fileId);
+      if (!assetBuffer) {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
+      const ext = path.extname(fileId).toLowerCase();
+      const mimeType = ASSET_EXT_TO_MIME[ext] || 'application/octet-stream';
+      res.statusCode = 200;
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.end(assetBuffer);
+      return;
+    }
+
     if (action === 'status') {
       const effectivePaired = typeof options.isPaired === 'boolean' ? options.isPaired : true;
       sendJson(res, 200, {
@@ -967,6 +1247,70 @@ export async function handleUpdatePortfolioRequest(
     }
   }
 
+  if (action === 'relink-qr') {
+    sendJson(res, 200, {
+      ok: true,
+      rotated: false,
+      otpauthUri: buildServerOtpAuthUri(activeTotpSecret)
+    });
+    return;
+  }
+
+  if (action === 'upload-asset') {
+    const base64Content = typeof body.base64Content === 'string' ? body.base64Content.trim() : '';
+    const filename = typeof body.filename === 'string' ? body.filename.trim() : 'upload.bin';
+    const mimeType =
+      typeof body.mimeType === 'string' && body.mimeType.trim()
+        ? body.mimeType.trim()
+        : 'application/octet-stream';
+
+    if (!base64Content) {
+      sendJson(res, 400, { ok: false, error: 'Missing asset content.' });
+      return;
+    }
+
+    const buffer = Buffer.from(base64Content.replace(/\s+/g, ''), 'base64');
+    if (buffer.length === 0) {
+      sendJson(res, 400, { ok: false, error: 'Empty asset file.' });
+      return;
+    }
+
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 32);
+    const ext = resolveAssetExtension(mimeType, filename);
+    const fileId = `${hash}${ext}`;
+
+    writeLocalAssetIfWritable(fileId, buffer);
+
+    if (status.githubConfigured) {
+      try {
+        await commitGitHubAssetFile({
+          fileId,
+          buffer,
+          commitMessage: `chore(assets): add ${filename || fileId} via Owner Mode`
+        });
+      } catch (err) {
+        sendJson(res, 502, {
+          ok: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Failed to commit uploaded asset to GitHub.'
+        });
+        return;
+      }
+    }
+
+    sendJson(res, 201, {
+      ok: true,
+      url: `/api/assets/${fileId}`,
+      staticUrl: `/uploaded-assets/${fileId}`,
+      filename: filename || fileId,
+      size: buffer.length,
+      mimeType
+    });
+    return;
+  }
+
   if (action === 'clear-preview-token') {
     writeLocalPreviewGitHubConfig(null);
     const nextStatus = getGitHubConfigStatus();
@@ -1026,6 +1370,7 @@ export async function handleUpdatePortfolioRequest(
   }
 
   try {
+    await ensureGitHubAssetsSynced(nextBundle);
     const commitResult = await commitGitHubDataJson({
       bundle: nextBundle,
       commitMessage

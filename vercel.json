@@ -25,6 +25,15 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate"
+        }
+      ]
+    },
+    {
       "source": "/index.html",
       "headers": [
         {
@@ -35,6 +44,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/assets/:fileId",
+      "destination": "/api/update-portfolio?action=asset&file=:fileId"
+    },
     {
       "source": "/((?!api/|assets/|showcase/|uploaded-assets/|portfolio-snapshot\\.json|.*\\..*).*)",
       "destination": "/index.html"

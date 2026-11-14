@@ -11,7 +11,10 @@ import {
   verifyAdminSessionToken,
   verifyAdminPinValue,
   getGitHubConfigStatus,
-  commitGitHubDataJson
+  commitGitHubDataJson,
+  fetchGitHubDataJson,
+  isRemoteNewerThanLocal,
+  ensureGitHubAssetsSynced
 } from './api/update-portfolio';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -862,7 +865,48 @@ setInterval(() => {
   }
 }, 25000);
 
+async function syncGitHubOnStartup(): Promise<void> {
+  const status = getGitHubConfigStatus();
+  if (!status.canPullFromGitHub) return;
+  try {
+    const localState = loadPortfolioState();
+    const localBundle = localState
+      ? {
+          initialized: true,
+          version: localState.version,
+          updatedAt: localState.updatedAt,
+          activePortfolioId: localState.activePortfolioId,
+          portfolios: localState.portfolios
+        }
+      : null;
+
+    const remote = await Promise.race([
+      fetchGitHubDataJson(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+    ]);
+
+    if (remote && remote.exists && remote.data && isRemoteNewerThanLocal(remote.data, localBundle)) {
+      const dehydrated = dehydrateDataUrls(remote.data.portfolios) as unknown[];
+      const record: StoredPortfolioFile = {
+        version: remote.data.version,
+        updatedAt: remote.data.updatedAt,
+        activePortfolioId: remote.data.activePortfolioId,
+        portfolios: dehydrated
+      };
+      writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+      writeAtomic(ROOT_DATA_JSON_FILE, JSON.stringify(remote.data, null, 2) + '\n');
+      try {
+        fs.accessSync(PUBLIC_DIR, fs.constants.W_OK);
+        writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(remote.data, null, 2) + '\n');
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('Startup GitHub sync skipped:', err instanceof Error ? err.message : err);
+  }
+}
+
 async function startServer(): Promise<void> {
+  await syncGitHubOnStartup();
   exportStaticSnapshotForDeploy(loadPortfolioState());
 
   const app = express();
@@ -1271,6 +1315,31 @@ async function startServer(): Promise<void> {
       : null;
 
     if (!assetPath) {
+      // Fallback: serve asset directly from GitHub public/uploaded-assets/<fileId> if uploaded from Vercel
+      const ghStatus = getGitHubConfigStatus();
+      if (ghStatus.canPullFromGitHub && ghStatus.owner && ghStatus.repo) {
+        const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(
+          ghStatus.owner
+        )}/${encodeURIComponent(ghStatus.repo)}/${encodeURIComponent(
+          ghStatus.branch || 'main'
+        )}/public/uploaded-assets/${encodeURIComponent(fileId)}`;
+        fetch(rawUrl, { cache: 'no-store' })
+          .then(async (ghRes) => {
+            if (!ghRes.ok) {
+              res.status(404).end();
+              return;
+            }
+            const buf = Buffer.from(await ghRes.arrayBuffer());
+            const ext = path.extname(fileId).toLowerCase();
+            const mimeType = EXT_TO_MIME[ext] || 'application/octet-stream';
+            saveBufferAsAsset(buf, mimeType, fileId);
+            res.setHeader('Content-Type', mimeType);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.end(buf);
+          })
+          .catch(() => res.status(404).end());
+        return;
+      }
       res.status(404).end();
       return;
     }
@@ -1402,6 +1471,7 @@ async function startServer(): Promise<void> {
       let githubCommit: { commitSha: string; commitUrl: string; branch: string } | undefined;
       if (getGitHubConfigStatus().githubConfigured) {
         try {
+          await ensureGitHubAssetsSynced(exportedBundle);
           const customMsg =
             typeof body?.commitMessage === 'string' && body.commitMessage.trim()
               ? body.commitMessage.trim()
