@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 16,
-  "updatedAt": "2026-11-14T17:58:28.060Z",
+  "version": 17,
+  "updatedAt": "2026-11-14T17:58:29.646Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:58:25.910Z",
+      "updatedAt": "2026-11-14T17:58:29.632Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -612,37 +612,6 @@
               "theme": "Tribute to Initial D Mountain/City Drifting",
               "lighting": "Overcast urban street lighting with desaturated atmospheric mist",
               "mechanics": "Rigged 4-wheel physics, drift angle yaw, body roll under centrifugal force"
-            }
-          },
-          {
-            "id": "tavern-island-galleon",
-            "title": "Tavern Island & Pirate Galleon Outpost",
-            "category": "environment",
-            "categoryLabel": "Environment Art",
-            "summary": "Cliffside fortress tavern with wooden piers, open ocean water, and sailing 18th-century pirate galleon.",
-            "description": "An expansive coastal island level featuring a multi-story hexagonal wooden tavern perched atop a sheer rocky cliff. Down at sea level, wooden catwalks and piers lead out past a weathered shipwreck toward a majestic, fully-rigged 18th-century pirate galleon vessel navigating the open waters, complete with detailed masts, sails, and deck helm.",
-            "keyFeatures": [
-              "Multi-level verticality: sea-level docks connected to clifftop tavern fortress via stairways",
-              "Full exterior and deck modeling of an authentic pirate warship",
-              "Water plane simulation with shoreline foam and shipwreck props",
-              "Cinematic flyover camera capturing the scale of the sea and rocky spires"
-            ],
-            "techStack": [
-              "Unreal Engine",
-              "Landscape & Cliffs",
-              "Ocean Water Shading",
-              "Prop Dressing"
-            ],
-            "thumbnail": "/showcase/pirate-ship.jpg",
-            "galleryImages": [
-              "/showcase/pirate-ship.jpg",
-              "/showcase/pirate-deck.jpg"
-            ],
-            "videoTimestamp": 33,
-            "conceptNotes": {
-              "theme": "Pirate Haven Island & High Seas Outpost",
-              "lighting": "Crisp midday ocean sky with natural horizon atmospheric haze",
-              "mechanics": "Player exploration paths from ship deck to fortress overlook"
             }
           },
           {
