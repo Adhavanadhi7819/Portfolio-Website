@@ -74,7 +74,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   });
 
   return (
-    <section id="projects" className="py-12 border-b border-zinc-800/80 relative bg-[#070709]">
+    <section id="projects" className="py-8 sm:py-10 border-b border-zinc-800/80 relative bg-[#070709] scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -99,7 +99,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
-          <div>
+          <div className="flex-1 min-w-0 max-w-2xl">
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 mb-1.5">
               <Layers className="w-3.5 h-3.5 text-amber-400" />
               <span>Portfolio · Case Studies</span>
@@ -112,13 +112,13 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                 className="text-white font-bold"
               />
             </h2>
-            <p className="text-zinc-400 text-sm mt-1.5 max-w-2xl leading-relaxed">
+            <p className="text-zinc-400 text-sm mt-1.5 leading-relaxed text-justify">
               <InlineEdit
                 value={designerInfo?.projectsSubheading || 'Explorations spanning Unreal Engine level layout, dynamic vehicle rigging, lighting duality concepts, and Autodesk Maya models.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ projectsSubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
-                className="text-zinc-400"
+                className="text-zinc-400 text-justify"
               />
             </p>
           </div>
@@ -191,7 +191,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         {filteredProjects.length > 0 ? (
           <motion.div 
             layout
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5 items-stretch"
           >
             <AnimatePresence mode="popLayout">
               {filteredProjects.map((project) => (
@@ -202,6 +202,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.25 }}
+                  className="h-full"
                 >
                   <ProjectCard
                     project={project}

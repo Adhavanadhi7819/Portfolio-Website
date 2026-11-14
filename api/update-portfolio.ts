@@ -127,10 +127,96 @@ export interface CanonicalDataBundle {
   portfolios: unknown[];
 }
 
+export const OWNER_TOTP_DEFAULT_SECRET = 'NBSWY3DPFQQHO33SNRSCC43FMNZGK5A4';
+export const OWNER_TOTP_ISSUER = 'ADHAVAN Portfolio';
+export const OWNER_TOTP_ACCOUNT = 'adhavanprabhu906@gmail.com';
+
+const TOTP_BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+export function resolveOwnerTotpSecret(overrideSecret?: string): string {
+  const candidate =
+    (typeof overrideSecret === 'string' && overrideSecret.trim()) ||
+    (process.env.OWNER_TOTP_SECRET || '').trim() ||
+    OWNER_TOTP_DEFAULT_SECRET;
+  return candidate.toUpperCase().replace(/[^A-Z2-7]/g, '');
+}
+
+function totpBase32ToBuffer(base32: string): Buffer {
+  const cleaned = base32.toUpperCase().replace(/=+$/g, '').replace(/[^A-Z2-7]/g, '');
+  let bits = 0;
+  let value = 0;
+  const output: number[] = [];
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const idx = TOTP_BASE32_ALPHABET.indexOf(cleaned[i]);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
+export function generateServerTotpCode(
+  secret: string,
+  timestampMs = Date.now(),
+  stepOffset = 0
+): string {
+  const key = totpBase32ToBuffer(secret);
+  const counter = Math.floor(timestampMs / 1000 / 30) + stepOffset;
+  const counterBuf = Buffer.alloc(8);
+  const high = Math.floor(counter / 0x100000000);
+  const low = counter >>> 0;
+  counterBuf.writeUInt32BE(high, 0);
+  counterBuf.writeUInt32BE(low, 4);
+
+  const hmac = crypto.createHmac('sha1', key).update(counterBuf).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+
+  return (binary % 1_000_000).toString().padStart(6, '0');
+}
+
+export function verifyServerTotpCode(
+  secret: string,
+  inputCode: string,
+  timestampMs = Date.now()
+): boolean {
+  const normalized = (inputCode || '').replace(/\s+/g, '').trim();
+  if (!/^\d{6}$/.test(normalized)) return false;
+
+  for (const offset of [0, -1, 1, -2, 2]) {
+    const expected = generateServerTotpCode(secret, timestampMs, offset);
+    if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(normalized))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function buildServerOtpAuthUri(secret: string): string {
+  const label = `${encodeURIComponent(OWNER_TOTP_ISSUER)}:${encodeURIComponent(OWNER_TOTP_ACCOUNT)}`;
+  const cleanSecret = resolveOwnerTotpSecret(secret);
+  return `otpauth://totp/${label}?secret=${cleanSecret}&issuer=${encodeURIComponent(
+    OWNER_TOTP_ISSUER
+  )}&algorithm=SHA1&digits=6&period=30`;
+}
+
 export interface HandleUpdateOptions {
   isTrustedOwner?: boolean;
   runtime?: 'express' | 'vercel' | 'node';
   onLocalCommitted?: (bundle: CanonicalDataBundle) => void;
+  totpSecret?: string;
+  isPaired?: boolean;
+  onTwoFactorVerified?: () => void;
+  onResetPairingRequested?: () => void;
 }
 
 type NodeReq = IncomingMessage & {
@@ -167,7 +253,7 @@ export function createAdminSessionToken(): string {
   const payload = Buffer.from(
     JSON.stringify({
       role: 'owner',
-      method: 'pin',
+      method: 'pin+totp',
       iat: now,
       exp: now + SESSION_TTL_MS
     })
@@ -607,10 +693,12 @@ export async function handleUpdatePortfolioRequest(
   if (method === 'GET') {
     const action = getQueryParam(req, 'action');
     if (action === 'status') {
+      const effectivePaired = typeof options.isPaired === 'boolean' ? options.isPaired : true;
       sendJson(res, 200, {
         ok: true,
         runtime: runtimeMode,
         ...status,
+        isPaired: effectivePaired,
         isAuthenticated
       });
       return;
@@ -711,8 +799,37 @@ export async function handleUpdatePortfolioRequest(
 
   const action = typeof body.action === 'string' ? body.action : '';
 
-  if (action === 'verify-pin') {
+  const activeTotpSecret = resolveOwnerTotpSecret(options.totpSecret);
+
+  if (action === 'reveal-setup-qr') {
     const pin = typeof body.pin === 'string' ? body.pin : '';
+    if (!verifyAdminPinValue(pin)) {
+      sendJson(res, 401, {
+        ok: false,
+        ...status,
+        error: 'Enter your valid Admin PIN first to display the Authenticator connect QR.'
+      });
+      return;
+    }
+    options.onResetPairingRequested?.();
+    sendJson(res, 200, {
+      ok: true,
+      runtime: runtimeMode,
+      isPaired: false,
+      otpauthUri: buildServerOtpAuthUri(activeTotpSecret)
+    });
+    return;
+  }
+
+  if (action === 'verify-pin' || action === 'verify-owner-2fa') {
+    const pin = typeof body.pin === 'string' ? body.pin : '';
+    const code =
+      typeof body.code === 'string'
+        ? body.code
+        : typeof body.totpCode === 'string'
+        ? body.totpCode
+        : '';
+
     if (!verifyAdminPinValue(pin)) {
       sendJson(res, 401, {
         ok: false,
@@ -721,6 +838,21 @@ export async function handleUpdatePortfolioRequest(
       });
       return;
     }
+
+    const cleanedCode = code.replace(/\D/g, '');
+    if (cleanedCode.length !== 6 || !verifyServerTotpCode(activeTotpSecret, cleanedCode)) {
+      sendJson(res, 401, {
+        ok: false,
+        ...status,
+        error:
+          cleanedCode.length !== 6
+            ? 'Enter the 6-digit code from your Authenticator app in addition to Admin PIN.'
+            : 'Invalid or expired 6-digit Authenticator code. Check your app and try again.'
+      });
+      return;
+    }
+
+    options.onTwoFactorVerified?.();
     const token = createAdminSessionToken();
     setSessionCookie(req, res, token);
     sendJson(res, 200, {
@@ -728,6 +860,7 @@ export async function handleUpdatePortfolioRequest(
       token,
       runtime: runtimeMode,
       ...status,
+      isPaired: true,
       isAuthenticated: true
     });
     return;

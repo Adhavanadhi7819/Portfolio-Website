@@ -727,5 +727,97 @@ test('getGitHubConfigStatus reports tokenSource as env when GITHUB_TOKEN env is 
   }
 });
 
+test('Owner unlock enforces BOTH Admin PIN and Authenticator TOTP, and reveal-setup-qr checks PIN', async () => {
+  const {
+    handleUpdatePortfolioRequest,
+    generateServerTotpCode,
+    OWNER_TOTP_DEFAULT_SECRET,
+    verifyAdminSessionToken
+  } = await import('../../api/update-portfolio');
+
+  const invoke = async (body: Record<string, unknown>, extraOptions: Record<string, unknown> = {}) => {
+    let statusCode = 200;
+    let rawBody = '';
+    const headers: Record<string, unknown> = {};
+    const fakeReq = {
+      method: 'POST',
+      url: '/api/update-portfolio',
+      headers: {},
+      body
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[0];
+    const fakeRes = {
+      statusCode: 200,
+      setHeader(k: string, v: unknown) {
+        headers[k.toLowerCase()] = v;
+      },
+      getHeader(k: string) {
+        return headers[k.toLowerCase()];
+      },
+      end(chunk?: string) {
+        rawBody = String(chunk || '');
+      }
+    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[1];
+
+    Object.defineProperty(fakeRes, 'statusCode', {
+      get: () => statusCode,
+      set: (v: number) => {
+        statusCode = v;
+      }
+    });
+
+    await handleUpdatePortfolioRequest(fakeReq, fakeRes, extraOptions);
+    return { statusCode, data: JSON.parse(rawBody || '{}') as Record<string, unknown> };
+  };
+
+  const validCode = generateServerTotpCode(OWNER_TOTP_DEFAULT_SECRET);
+
+  // 1. Right PIN without Authenticator code -> REJECTED
+  const pinOnly = await invoke({ action: 'verify-owner-2fa', pin: '906', code: '' });
+  assert.equal(pinOnly.statusCode, 401);
+  assert.equal(pinOnly.data.ok, false);
+  assert.equal(pinOnly.data.token, undefined);
+
+  // 2. Right Authenticator code with WRONG PIN -> REJECTED
+  const totpOnlyWrongPin = await invoke({ action: 'verify-owner-2fa', pin: '000', code: validCode });
+  assert.equal(totpOnlyWrongPin.statusCode, 401);
+  assert.equal(totpOnlyWrongPin.data.ok, false);
+  assert.equal(totpOnlyWrongPin.data.token, undefined);
+
+  // 3. reveal-setup-qr with WRONG PIN -> REJECTED
+  let resetCalled = false;
+  const qrWrongPin = await invoke(
+    { action: 'reveal-setup-qr', pin: '000' },
+    { onResetPairingRequested: () => { resetCalled = true; } }
+  );
+  assert.equal(qrWrongPin.statusCode, 401);
+  assert.equal(qrWrongPin.data.otpauthUri, undefined);
+  assert.equal(resetCalled, false);
+
+  // 4. reveal-setup-qr with RIGHT PIN -> returns otpauthUri and marks unpaired
+  const qrRightPin = await invoke(
+    { action: 'reveal-setup-qr', pin: '906' },
+    { onResetPairingRequested: () => { resetCalled = true; } }
+  );
+  assert.equal(qrRightPin.statusCode, 200);
+  assert.equal(qrRightPin.data.ok, true);
+  assert.equal(qrRightPin.data.isPaired, false);
+  assert.ok(String(qrRightPin.data.otpauthUri || '').startsWith('otpauth://totp/'));
+  assert.equal(resetCalled, true);
+
+  // 5. BOTH Right Admin PIN AND Right Authenticator code -> UNLOCKED + marks paired
+  let verifiedCalled = false;
+  const dualOk = await invoke(
+    { action: 'verify-owner-2fa', pin: '906', code: validCode },
+    { onTwoFactorVerified: () => { verifiedCalled = true; } }
+  );
+  assert.equal(dualOk.statusCode, 200);
+  assert.equal(dualOk.data.ok, true);
+  assert.equal(dualOk.data.isAuthenticated, true);
+  assert.equal(dualOk.data.isPaired, true);
+  assert.equal(verifyAdminSessionToken(String(dualOk.data.token || '')), true);
+  assert.equal(verifiedCalled, true);
+});
+
+
 
 

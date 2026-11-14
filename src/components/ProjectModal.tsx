@@ -122,7 +122,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <h2 id="modal-title" className="text-2xl sm:text-3xl font-heading font-black text-white">
               {project.title}
             </h2>
-            <p className="text-sm text-zinc-300 mt-3 leading-relaxed">
+            <p className="text-sm text-zinc-300 mt-3 leading-relaxed text-justify">
               {project.description}
             </p>
           </div>

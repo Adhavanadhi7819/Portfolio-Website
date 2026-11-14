@@ -115,7 +115,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   return (
     <section
       id="hero"
-      className="relative pt-20 sm:pt-24 pb-8 sm:pb-10 flex-1 flex flex-col justify-center overflow-hidden bg-[#050507]"
+      className="relative py-6 sm:py-8 flex-1 flex flex-col justify-center overflow-hidden bg-[#050507] scroll-mt-[68px]"
     >
       {/* Subtle atmospheric glow */}
       <div className="absolute inset-0 bg-radial-vignette pointer-events-none" />
@@ -144,8 +144,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         />
       )}
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-4 sm:py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-2 sm:py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* Left Column: Kicker, Headline, Lead Copy, Actions */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
@@ -198,7 +198,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, delay: 0.16, ease: EASE_OUT_EXPO }}
-              className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed font-normal"
+              className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed font-normal text-justify"
             >
               <InlineEdit
                 value={designerInfo.tagline}
@@ -207,6 +207,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 multiline={true}
                 label="Hero Tagline"
                 as="p"
+                className="text-justify"
               />
             </motion.div>
 
@@ -426,7 +427,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.34, ease: EASE_OUT_EXPO }}
-            className="mt-7 sm:mt-8 pt-6 border-t border-zinc-800/80 relative"
+            className="mt-6 sm:mt-7 pt-5 border-t border-zinc-800/80 relative"
           >
             {isOwnerMode && (
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">

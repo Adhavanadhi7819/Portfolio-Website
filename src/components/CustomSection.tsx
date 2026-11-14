@@ -197,7 +197,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   return (
     <section
       id={section.id}
-      className="py-10 sm:py-12 md:py-14 relative bg-[#070709] border-t border-zinc-800/80"
+      className="py-8 sm:py-10 relative bg-[#070709] border-t border-zinc-800/80 scroll-mt-[68px]"
     >
       {/* Floating Section Controls for Owner */}
       {isOwnerMode && (
@@ -248,7 +248,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
               />
             </h2>
 
-            <p className="text-zinc-400 text-sm sm:text-base max-w-2xl leading-relaxed">
+            <p className="text-zinc-400 text-sm sm:text-base max-w-2xl leading-relaxed text-justify">
               <InlineEdit
                 value={data.subheading || ''}
                 onSave={(val) => handleUpdateField('subheading', val)}
@@ -256,6 +256,8 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                 multiline={true}
                 label="Section Subheading"
                 placeholder="Click to add a subheading description..."
+                as="span"
+                className="text-justify"
               />
             </p>
           </div>
@@ -482,7 +484,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                           <div className="text-sm font-bold text-white">{item.title}</div>
                         )}
                         {item.caption && (
-                          <p className="text-xs text-zinc-400 mt-0.5">{item.caption}</p>
+                          <p className="text-xs text-zinc-400 mt-0.5 text-justify">{item.caption}</p>
                         )}
                       </div>
                     )}
@@ -495,21 +497,22 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
         {/* Narrative / Body Text */}
         {data.bodyText && (
-          <div className="mb-10 p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 max-w-4xl">
+          <div className="mb-8 p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 w-full">
             <InlineEdit
               value={data.bodyText}
               onSave={(val) => handleUpdateField('bodyText', val)}
               isOwnerMode={isOwnerMode}
               multiline={true}
               label="Body Text"
-              className="text-zinc-300 text-base leading-relaxed"
+              as="p"
+              className="text-zinc-300 text-base leading-relaxed text-justify"
             />
           </div>
         )}
 
         {/* Feature Cards Grid */}
         {data.cards && data.cards.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5 items-stretch">
             {data.cards.map((card) => (
               <div
                 key={card.id}
@@ -575,7 +578,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                       label="Card Title"
                     />
                   </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
+                  <p className="text-xs text-zinc-400 leading-relaxed text-justify">
                     <InlineEdit
                       value={card.description}
                       onSave={(val) => {
@@ -587,6 +590,8 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                       isOwnerMode={isOwnerMode}
                       multiline={true}
                       label="Card Description"
+                      as="span"
+                      className="text-justify"
                     />
                   </p>
                 </div>

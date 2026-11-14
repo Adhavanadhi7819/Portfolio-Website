@@ -135,7 +135,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
   return (
     <section
       id="flagship"
-      className="pt-20 sm:pt-24 pb-12 sm:pb-14 relative overflow-hidden bg-gradient-to-b from-[#09090d] via-[#0b0a10] to-[#050507]"
+      className="py-8 sm:py-10 relative overflow-hidden bg-gradient-to-b from-[#09090d] via-[#0b0a10] to-[#050507] border-b border-zinc-800/80 scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -162,8 +162,8 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Clean Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 sm:mb-8">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5 sm:mb-6">
+          <div className="flex-1 min-w-0 max-w-2xl">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 flex items-center gap-1.5 mb-1.5">
               <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
               <span>Featured Playable Build</span>
@@ -176,7 +176,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 label="Latest Project Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl leading-relaxed">
+            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
               <InlineEdit
                 value={
                   designerInfo?.flagshipQuote ||
@@ -187,6 +187,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 multiline={true}
                 label="Latest Project Subtitle"
                 as="p"
+                className="text-justify"
               />
             </div>
           </div>
@@ -299,7 +300,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="lg:col-span-7 flex flex-col"
           >
-            <div className="relative flex-1 min-h-[300px] sm:min-h-[380px] rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col">
+            <div className="relative flex-1 min-h-[260px] sm:min-h-[320px] rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col">
               {hasBuildVideo ? (
                 <>
                   <div className="relative flex-1 bg-black flex items-center justify-center">
@@ -426,7 +427,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                   <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block">
                     About The Game &amp; Build Notes
                   </span>
-                  <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                  <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed whitespace-pre-line text-justify">
                     <InlineEdit
                       value={
                         designerInfo?.flagshipGameSpecs ||
@@ -437,6 +438,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                       multiline={true}
                       label="Game Specifications Overview"
                       as="p"
+                      className="text-justify"
                     />
                   </div>
                 </div>

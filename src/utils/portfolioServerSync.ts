@@ -1,6 +1,5 @@
 import { PortfolioProfile, PortfolioState } from '../types/portfolio';
 import { PUBLISHED_PORTFOLIO_SNAPSHOT } from '../data/publishedPortfolio';
-import { OWNER_TOTP_SECRET, verifyTotpCode } from './totp';
 
 let memoryOwnerToken: string | null = null;
 let knownExpressAvailable: boolean | null = null;
@@ -208,7 +207,10 @@ export async function clearPreviewGitHubToken(): Promise<GitHubSyncStatus> {
   return fetchGitHubSyncStatus();
 }
 
-export async function verifyAdminPinWithServer(pin: string): Promise<{
+export async function verifyOwnerTwoFactorWithServer(
+  pin: string,
+  code: string
+): Promise<{
   ok: boolean;
   error?: string;
   status?: GitHubSyncStatus;
@@ -218,7 +220,7 @@ export async function verifyAdminPinWithServer(pin: string): Promise<{
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'verify-pin', pin })
+      body: JSON.stringify({ action: 'verify-owner-2fa', pin, code })
     });
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
@@ -256,12 +258,62 @@ export async function verifyAdminPinWithServer(pin: string): Promise<{
     }
     return {
       ok: false,
-      error: data.error || 'Incorrect Admin PIN. Please try again.'
+      error: data.error || 'Admin PIN or 6-digit Authenticator verification failed.'
     };
   } catch {
     return {
       ok: false,
-      error: 'Unable to reach /api/update-portfolio to verify Admin PIN.'
+      error: 'Unable to reach /api/update-portfolio to verify Admin PIN & Authenticator code.'
+    };
+  }
+}
+
+export async function verifyAdminPinWithServer(
+  pin: string,
+  code = ''
+): Promise<{
+  ok: boolean;
+  error?: string;
+  status?: GitHubSyncStatus;
+}> {
+  return verifyOwnerTwoFactorWithServer(pin, code);
+}
+
+export async function revealSetupQrWithAdminPin(pin: string): Promise<{
+  ok: boolean;
+  otpauthUri?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reveal-setup-qr', pin })
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return {
+        ok: false,
+        error: 'Server QR pairing endpoint (/api/update-portfolio) is unavailable.'
+      };
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      otpauthUri?: string;
+      error?: string;
+    };
+    if (res.ok && data.ok && data.otpauthUri) {
+      return { ok: true, otpauthUri: data.otpauthUri };
+    }
+    return {
+      ok: false,
+      error: data.error || 'Enter your valid Admin PIN first to show the Authenticator QR.'
+    };
+  } catch {
+    return {
+      ok: false,
+      error: 'Unable to reach /api/update-portfolio right now.'
     };
   }
 }
@@ -451,57 +503,11 @@ export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
 }
 
 export async function verifyOwnerTotpWithServer(
-  code: string
+  code: string,
+  pin = ''
 ): Promise<{ ok: boolean; error?: string; localOnly?: boolean }> {
-  try {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? window.setTimeout(() => controller.abort(), 6000) : null;
-    let res: Response;
-    try {
-      res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-        ...(controller ? { signal: controller.signal } : {})
-      });
-    } finally {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-    }
-
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        token?: string;
-        error?: string;
-      } | null;
-
-      if (res.ok && data?.ok && data?.token) {
-        setStoredOwnerToken(data.token);
-        return { ok: true };
-      }
-
-      if (data && !res.ok) {
-        return {
-          ok: false,
-          error: data.error || 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
-        };
-      }
-    }
-  } catch {
-    // Fall through to local WebCrypto TOTP verification if /api/auth/verify is unavailable
-  }
-
-  const matchedLocally = await verifyTotpCode(OWNER_TOTP_SECRET, code);
-  if (matchedLocally) {
-    return { ok: true, localOnly: true };
-  }
-
-  return {
-    ok: false,
-    error: 'Invalid or expired 2FA code. Check your Authenticator app and try again.'
-  };
+  const result = await verifyOwnerTwoFactorWithServer(pin, code);
+  return { ok: result.ok, error: result.error };
 }
 
 export async function requestOwnerRecoveryEmail(): Promise<{
@@ -627,6 +633,23 @@ export async function relinkAuthenticatorDevice(
     throw new Error('Failed to generate device link QR');
   }
   return (await res.json()) as { otpauthUri: string; rotated: boolean };
+}
+
+export async function unpairAuthenticatorDevice(): Promise<{
+  ok: boolean;
+  isPaired: boolean;
+  otpauthUri: string;
+}> {
+  const res = await fetch('/api/auth/unpair', {
+    method: 'POST',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('OWNER_AUTH_REQUIRED');
+    throw new Error('Failed to disconnect device pairing');
+  }
+  return (await res.json()) as { ok: boolean; isPaired: boolean; otpauthUri: string };
 }
 
 export async function logoutOwnerServer(): Promise<void> {

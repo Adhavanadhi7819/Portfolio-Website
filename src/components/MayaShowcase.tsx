@@ -57,7 +57,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   const selectedModel = currentModels.find(m => m.id === selectedModelId) || currentModels[0];
 
   return (
-    <section id="maya" className="py-10 sm:py-12 relative bg-[#09090c] border-t border-zinc-800/80">
+    <section id="maya" className="py-8 sm:py-10 relative bg-[#09090c] border-t border-zinc-800/80 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -82,7 +82,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
         
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
-          <div>
+          <div className="flex-1 min-w-0 max-w-2xl">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Box className="w-3.5 h-3.5 text-amber-400" />
               <span>Autodesk Maya Hard-Surface Suite</span>
@@ -95,13 +95,13 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 className="text-white font-black"
               />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl leading-relaxed">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
               <InlineEdit
                 value={designerInfo?.mayaSubheading || '“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ mayaSubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
-                className="text-zinc-400"
+                className="text-zinc-400 text-justify"
               />
             </p>
           </div>
@@ -217,7 +217,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
             </div>
 
             {/* Model Selector Tabs */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
               {currentModels.map((model) => (
                 <button
                   key={model.id}
@@ -250,24 +250,24 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
               <h3 className="text-2xl font-heading font-black text-white">
                 {selectedModel.title}
               </h3>
-              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify">
                 {selectedModel.description}
               </p>
             </div>
 
             {/* Topology & Materials Box */}
             <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                <span className="text-zinc-400 font-mono">Modeling Package:</span>
-                <span className="text-amber-400 font-semibold font-mono">{selectedModel.software}</span>
+              <div className="flex items-center justify-between gap-3 pb-2 border-b border-zinc-800">
+                <span className="text-zinc-400 font-mono shrink-0">Modeling Package:</span>
+                <span className="text-amber-400 font-semibold font-mono text-right">{selectedModel.software}</span>
               </div>
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                <span className="text-zinc-400 font-mono">Mesh Topology:</span>
-                <span className="text-zinc-200 font-medium">{selectedModel.specs.topology}</span>
+              <div className="flex items-center justify-between gap-3 pb-2 border-b border-zinc-800">
+                <span className="text-zinc-400 font-mono shrink-0">Mesh Topology:</span>
+                <span className="text-zinc-200 font-medium text-right">{selectedModel.specs.topology}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400 font-mono">Materials / Shading:</span>
-                <span className="text-zinc-200 font-medium">{selectedModel.specs.textures}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-zinc-400 font-mono shrink-0">Materials / Shading:</span>
+                <span className="text-zinc-200 font-medium text-right">{selectedModel.specs.textures}</span>
               </div>
             </div>
 

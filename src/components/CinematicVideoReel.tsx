@@ -356,7 +356,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <section id="reel" ref={containerRef} className="py-10 sm:py-12 relative bg-[#09090c] border-y border-zinc-800/80">
+    <section id="reel" ref={containerRef} className="py-8 sm:py-10 relative bg-[#09090c] border-b border-zinc-800/80 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -380,9 +380,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 sm:mb-5 gap-4">
-          <div>
-            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-1">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-5 gap-4">
+          <div className="flex-1 min-w-0 max-w-2xl">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-1.5">
               Original Work Showcase Reel
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-black uppercase text-white tracking-tight">
@@ -393,7 +393,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 label="Reel Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 max-w-2xl">
+            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
               <InlineEdit
                 value={designerInfo?.reelSubheading || 'Recorded directly from Unreal Engine and Autodesk Maya viewport sessions. Use the chapter navigator below to jump between projects.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ reelSubheading: val })}
@@ -401,11 +401,12 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 multiline={true}
                 label="Reel Description"
                 as="p"
+                className="text-justify"
               />
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {/* Owner-Only Video Upload Option */}
             {isOwnerMode && (
               <label 
@@ -515,16 +516,6 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 />
                 {/* Cinematic gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40 pointer-events-none" />
-
-                {/* Inspecting Scene HUD Badge */}
-                <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
-                  <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-mono font-bold text-[11px] tracking-wider uppercase shadow-md">
-                    {activeChapter.category}
-                  </span>
-                  <span className="hidden sm:inline-block px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-zinc-700/80 text-zinc-300 font-mono text-[11px]">
-                    {formatVideoTime(activeChapter.startTime)} — {formatVideoTime(activeChapter.endTime)}
-                  </span>
-                </div>
               </div>
             )}
 
@@ -550,24 +541,29 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               </div>
             )}
 
-            {/* Top HUD Overlay (Clean Watermark & Active Chapter) */}
-            <div className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/80 via-black/30 to-transparent flex items-center justify-between transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="flex items-center gap-3">
-                <div className="px-2.5 py-1 rounded bg-black/60 border border-zinc-700/80 backdrop-blur-md flex items-center gap-2">
+            {/* Top HUD Overlay (Clean Watermark, Chapter & Category — zero overlap) */}
+            <div className={`absolute top-0 left-0 right-0 p-3.5 sm:p-5 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start sm:items-center justify-between gap-3 transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="px-2 sm:px-2.5 py-1 rounded bg-black/70 border border-zinc-700/80 backdrop-blur-md flex items-center gap-1.5 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  <span className="text-[11px] font-mono font-bold tracking-widest text-zinc-200 uppercase">REEL</span>
+                  <span className="text-[10px] sm:text-[11px] font-mono font-bold tracking-widest text-zinc-200 uppercase">REEL</span>
                 </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide drop-shadow-md">
+                {activeChapter.category && (
+                  <span className="hidden xs:inline-block px-2 py-0.5 rounded bg-amber-500 text-black font-mono font-bold text-[10px] tracking-wider uppercase shadow-sm shrink-0">
+                    {activeChapter.category}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-base font-bold text-white tracking-wide drop-shadow-md truncate">
                     {activeChapter.title}
                   </h3>
-                  <p className="text-[11px] text-amber-400 font-mono tracking-wider">
+                  <p className="text-[10px] sm:text-[11px] text-amber-400 font-mono tracking-wider truncate">
                     {activeChapter.subtitle}
                   </p>
                 </div>
               </div>
 
-              <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-zinc-300 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-zinc-700/80">
+              <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-zinc-300 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-zinc-700/80 shrink-0">
                 <Clock className="w-3.5 h-3.5 text-amber-400" />
                 <span>{formatVideoTime(currentTime)}</span>
                 <span className="text-zinc-600">/</span>
@@ -703,12 +699,12 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Active Scene Inspection Details Card */}
-        <div className="mt-4 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-start gap-3">
+        <div className="mt-4 p-4 sm:p-5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="text-sm font-bold text-white tracking-wide">
                   {activeChapter.title}
@@ -720,13 +716,13 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   Keyframe: {formatVideoTime(activeChapter.startTime)} – {formatVideoTime(activeChapter.endTime)}
                 </span>
               </div>
-              <p className="text-xs text-zinc-300 mt-1 max-w-3xl leading-relaxed">
+              <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed text-justify hyphens-auto">
                 {activeChapter.description}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
             <button
               onClick={() => {
                 const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
@@ -775,7 +771,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
             {videoChapters.map((chapter) => {
               const isActive = activeChapter.id === chapter.id;
               return (

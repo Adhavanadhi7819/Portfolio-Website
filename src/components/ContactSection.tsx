@@ -328,7 +328,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   return (
     <section
       id="contact"
-      className="pt-20 sm:pt-24 pb-10 sm:pb-12 relative bg-[#050507] flex-1 flex flex-col justify-center"
+      className="py-8 sm:py-10 relative bg-[#050507] flex-1 flex flex-col justify-center scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -352,7 +352,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       {/* Subtle Ambient Monochromatic Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[560px] h-[340px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 space-y-8">
+      <div className="max-w-4xl w-full mx-auto px-4 sm:px-6 relative z-10 space-y-7">
         {/* 1. Centered Hero Title Block + Compact Live IST Pill */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -490,7 +490,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 >
                   {info.email}
                 </a>
-                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify">
                   Best for project inquiries and collaborations. I typically respond within 24–48 hours.
                 </p>
               </div>
@@ -550,7 +550,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 >
                   {displayPhone}
                 </a>
-                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify">
                   For urgent matters or quick calls. Available during IST business hours.
                 </p>
               </div>
@@ -579,7 +579,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.14, ease: EASE_OUT_EXPO }}
-          className="max-w-2xl mx-auto rounded-2xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl"
+          className="max-w-2xl w-full mx-auto rounded-2xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl"
         >
           <div className="flex items-center gap-2.5 mb-6">
             <MessageSquare className="w-4 h-4 text-amber-400" />

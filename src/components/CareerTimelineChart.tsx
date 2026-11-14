@@ -226,14 +226,15 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
           <Target className="w-3.5 h-3.5" />
           <span>Core Studio Statement:</span>
         </div>
-        <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic font-sans font-light">
+        <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic font-sans font-light text-justify">
           <InlineEdit
             value={objectiveQuote || defaultQuote}
             onSave={(val) => onUpdateObjectiveQuote?.(val)}
             isOwnerMode={isOwnerMode}
             multiline={true}
             label="Career Objective Quote"
-            className="text-zinc-200 italic"
+            as="p"
+            className="text-zinc-200 italic text-justify"
           />
         </div>
       </div>
@@ -372,9 +373,9 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
               transition={{ duration: 0.45, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
               className="relative group"
             >
-              {/* Timeline Node Marker */}
+              {/* Timeline Node Marker (Centered at track 12px mobile / 16px desktop) */}
               <div
-                className={`absolute -left-[30px] sm:-left-[35px] top-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110 ${
+                className={`absolute -left-[24px] sm:-left-[28px] top-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110 ${
                   isCurrent
                     ? 'bg-amber-500 text-black ring-4 ring-amber-500/20 shadow-lg shadow-amber-500/40'
                     : isCompleted
@@ -522,7 +523,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                       />
                     </h4>
 
-                    <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+                    <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify">
                       <InlineEdit
                         value={milestone.description}
                         onSave={(val) =>
@@ -532,7 +533,8 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                         }
                         isOwnerMode={isOwnerMode}
                         multiline={true}
-                        className="text-zinc-300"
+                        as="p"
+                        className="text-zinc-300 text-justify"
                       />
                     </div>
 
@@ -715,7 +717,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                       {activeLightboxMilestone.photoCaption}
                     </div>
                   )}
-                  <p className="text-xs text-zinc-300 leading-relaxed max-w-2xl">
+                  <p className="text-xs text-zinc-300 leading-relaxed max-w-2xl text-justify">
                     {activeLightboxMilestone.description}
                   </p>
                 </div>

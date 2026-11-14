@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import {
   handleUpdatePortfolioRequest,
   verifyAdminSessionToken,
+  verifyAdminPinValue,
   getGitHubConfigStatus,
   commitGitHubDataJson
 } from './api/update-portfolio';
@@ -880,6 +881,18 @@ async function startServer(): Promise<void> {
       await handleUpdatePortfolioRequest(req, res, {
         runtime: 'express',
         isTrustedOwner: isOwnerAuthenticated(req),
+        totpSecret: authStore.secret,
+        isPaired: authStore.paired,
+        onTwoFactorVerified: () => {
+          if (!authStore.paired) {
+            saveAuthStore({ ...authStore, paired: true });
+          }
+        },
+        onResetPairingRequested: () => {
+          if (authStore.paired) {
+            saveAuthStore({ ...authStore, paired: false });
+          }
+        },
         onLocalCommitted: (bundle) => {
           const dehydrated = dehydrateDataUrls(bundle.portfolios) as unknown[];
           const record: StoredPortfolioFile = {
@@ -962,7 +975,15 @@ async function startServer(): Promise<void> {
   });
 
   app.post('/api/auth/verify', express.json({ limit: '64kb' }), (req: Request, res: Response) => {
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin : '';
     const code = typeof req.body?.code === 'string' ? req.body.code : '';
+    if (!verifyAdminPinValue(pin)) {
+      res.status(401).json({
+        ok: false,
+        error: 'Incorrect Admin PIN. Check ADMIN_PIN and try again.'
+      });
+      return;
+    }
     if (!verifyTotpCode(authStore.secret, code)) {
       res.status(401).json({
         ok: false,
@@ -1183,6 +1204,18 @@ async function startServer(): Promise<void> {
       });
     }
   );
+
+  app.post('/api/auth/unpair', requireOwnerAuth, (_req: Request, res: Response) => {
+    saveAuthStore({
+      ...authStore,
+      paired: false
+    });
+    res.json({
+      ok: true,
+      isPaired: false,
+      otpauthUri: buildOtpAuthUri(authStore.secret)
+    });
+  });
 
   app.post('/api/auth/logout', (_req: Request, res: Response) => {
     res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });

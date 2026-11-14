@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "updatedAt": "2026-11-14T17:50:27.931Z",
+  "version": 28,
+  "updatedAt": "2026-11-14T18:01:15.802Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -8,7 +8,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:50:27.672Z",
+      "updatedAt": "2026-11-14T18:01:15.298Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -154,9 +154,10 @@
           "contactLocationNote": "Based in India · Available Worldwide",
           "contactInquiryOptions": [
             "Game Design & Level Design",
-            "3D Modeling & Environment Art",
+            "3D Modeling & Environment Arti",
             "Game Studio Role / Full-Time Inquiry",
-            "Freelance / Collaboration Inquiry"
+            "Freelance / Collaboration Inquiry",
+            "Coffee Chat / General Inquiry"
           ],
           "contactSlidePhotoUrl": "/showcase/contact-slide.jpg",
           "heroBadge": "Unreal Engine & Autodesk Maya Portfolio",
@@ -164,7 +165,7 @@
           "heroPhotoUrl": "/showcase/hero-portrait.jpg",
           "heroPhotoAlign": {
             "x": 50,
-            "y": 50,
+            "y": 48,
             "zoom": 1,
             "fit": "cover"
           },
@@ -181,21 +182,11 @@
             {
               "number": "3D RPG",
               "label": "Flagship Game In Progress"
-            },
-            {
-              "number": "Vehicle Rig",
-              "label": "Physics & Drift Sequencer"
-            },
-            {
-              "number": "Maya 3D",
-              "label": "Hard-Surface & Prop Art"
             }
           ],
           "heroDisciplines": [
             "Game Design",
-            "Level Layout",
-            "Vehicle Rigging",
-            "3D Arts (Maya)"
+            "Level Layout"
           ],
           "proficiencyHeading": "TECHNICAL PROFICIENCY",
           "proficiencySubheading": "Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.",
@@ -622,97 +613,6 @@
               "lighting": "Overcast urban street lighting with desaturated atmospheric mist",
               "mechanics": "Rigged 4-wheel physics, drift angle yaw, body roll under centrifugal force"
             }
-          },
-          {
-            "id": "temple-dual-concept",
-            "title": "Temple Dual Concept: Upside vs Downside",
-            "category": "environment",
-            "categoryLabel": "Environment Art",
-            "summary": "Contrasting environmental design exploring holy sunlit architecture versus dark subterranean ruined shrines.",
-            "description": "An architectural and lighting duality concept created in Unreal Engine. The \"Upside Concept\" portrays a pristine ancient Indian temple with carved stone vimanas, sanctum sanctorum with floral garlands, Lord Ganesha, and sacred Nandi under radiant sunshine. The \"Downside Concept\" reimagines the same space as an ancient subterranean ruin guarded by ceremonial flame braziers and misty night air.",
-            "keyFeatures": [
-              "Duality exploration: Sacred daylight atmosphere vs eerie underworld ruins",
-              "Authentic Indian temple stone architecture, sculptures, and ornamental columns",
-              "Particle-based fire braziers casting dynamic flickering light in the downside version",
-              "God-ray atmospheric volumetric fog and directional sunlight"
-            ],
-            "techStack": [
-              "Unreal Engine",
-              "Volumetric Fog",
-              "Niagara / Flame FX",
-              "Architectural Composition"
-            ],
-            "thumbnail": "/showcase/temple-upside.jpg",
-            "galleryImages": [
-              "/showcase/temple-upside.jpg",
-              "/showcase/temple-ruins.jpg"
-            ],
-            "videoTimestamp": 11,
-            "conceptNotes": {
-              "theme": "Sacred Sanctum Duality (Daylight Divinity vs Subterranean Shadow)",
-              "lighting": "Upside: Golden hour sun rays; Downside: Fiery torch orange highlights with cold mist shadows",
-              "mechanics": "Environmental storytelling through architectural weathering and lighting shifts"
-            }
-          },
-          {
-            "id": "tavern-island-galleon",
-            "title": "Tavern Island & Pirate Galleon Outpost",
-            "category": "environment",
-            "categoryLabel": "Environment Art",
-            "summary": "Cliffside fortress tavern with wooden piers, open ocean water, and sailing 18th-century pirate galleon.",
-            "description": "An expansive coastal island level featuring a multi-story hexagonal wooden tavern perched atop a sheer rocky cliff. Down at sea level, wooden catwalks and piers lead out past a weathered shipwreck toward a majestic, fully-rigged 18th-century pirate galleon vessel navigating the open waters, complete with detailed masts, sails, and deck helm.",
-            "keyFeatures": [
-              "Multi-level verticality: sea-level docks connected to clifftop tavern fortress via stairways",
-              "Full exterior and deck modeling of an authentic pirate warship",
-              "Water plane simulation with shoreline foam and shipwreck props",
-              "Cinematic flyover camera capturing the scale of the sea and rocky spires"
-            ],
-            "techStack": [
-              "Unreal Engine",
-              "Landscape & Cliffs",
-              "Ocean Water Shading",
-              "Prop Dressing"
-            ],
-            "thumbnail": "/showcase/pirate-ship.jpg",
-            "galleryImages": [
-              "/showcase/pirate-ship.jpg",
-              "/showcase/pirate-deck.jpg"
-            ],
-            "videoTimestamp": 33,
-            "conceptNotes": {
-              "theme": "Pirate Haven Island & High Seas Outpost",
-              "lighting": "Crisp midday ocean sky with natural horizon atmospheric haze",
-              "mechanics": "Player exploration paths from ship deck to fortress overlook"
-            }
-          },
-          {
-            "id": "autodesk-maya-3d-models",
-            "title": "Autodesk Maya 3D Asset Collection",
-            "category": "maya-3d",
-            "categoryLabel": "3D Modeling",
-            "summary": "Precision hard-surface 3D models including a vintage gramophone, streaming game room, and acoustic guitar.",
-            "description": "High-quality 3D props created from scratch in Autodesk Maya. Showcases clean edge-flow, subdivision surface modeling, realistic material assignment, and studio lighting setups for games and cinematic environments.",
-            "keyFeatures": [
-              "Vintage Brass Gramophone: detailed flared horn, crank handle, needle tone arm, and wooden base",
-              "Gaming Room Interior: multi-screen desk setup, gaming chair, acoustic foam wall panels, and RGB lighting",
-              "Classical Acoustic Guitar: contoured soundboard, rosette, bridge, fretboard wire, and tuning pegs"
-            ],
-            "techStack": [
-              "Autodesk Maya",
-              "Subdivision Modeling",
-              "Hard-Surface Topology",
-              "Studio Lighting & Shading"
-            ],
-            "thumbnail": "/showcase/maya-models.jpg",
-            "galleryImages": [
-              "/showcase/maya-models.jpg"
-            ],
-            "videoTimestamp": 110,
-            "conceptNotes": {
-              "theme": "Hard-Surface Prop Artistry & Architectural Interior",
-              "lighting": "Studio turntable lighting for gramophone, ambient RGB for gaming station",
-              "mechanics": "Game-ready topology optimized for real-time engine rendering"
-            }
           }
         ],
         "mayaModels": [
@@ -801,7 +701,7 @@
             "id": "maya",
             "title": "Maya 3D Models",
             "label": "3D Models",
-            "enabled": true,
+            "enabled": false,
             "order": 4
           },
           {

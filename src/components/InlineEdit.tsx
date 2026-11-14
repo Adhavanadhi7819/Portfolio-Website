@@ -136,13 +136,17 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     );
   }
 
+  const isBlockText = multiline || Component === 'p' || Component === 'blockquote' || Component === 'div';
+
   return (
     <span
       onClick={handleStart}
-      className={`group/inline relative inline-flex items-baseline cursor-pointer hover:outline-dashed hover:outline-1 hover:outline-amber-500/70 hover:bg-amber-500/5 rounded px-1 -mx-1 transition-all ${className}`}
+      className={`group/inline relative ${
+        isBlockText ? 'block w-full' : 'inline-flex items-baseline'
+      } cursor-pointer hover:outline-dashed hover:outline-1 hover:outline-amber-500/70 hover:bg-amber-500/5 rounded px-1 -mx-1 transition-all ${className}`}
       title={label ? `Click to edit ${label}` : 'Click to edit this text'}
     >
-      <Component className="inline">
+      <Component className={isBlockText ? 'inline' : 'inline'}>
         {children || value || <span className="italic text-zinc-600">{placeholder}</span>}
       </Component>
       <span className="opacity-0 group-hover/inline:opacity-100 transition-opacity ml-1.5 shrink-0 inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-mono leading-none align-middle pointer-events-none">

@@ -78,7 +78,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         ];
 
   return (
-    <section id="about" className="pt-20 sm:pt-24 pb-10 relative bg-[#050507] border-b border-zinc-800/80">
+    <section id="about" className="py-8 sm:py-10 relative bg-[#050507] border-b border-zinc-800/80 scroll-mt-[68px]">
       {/* Section Controls for Owner */}
       {isOwnerMode && (
         <SectionControls
@@ -114,7 +114,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 label="About Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed">
+            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
               <InlineEdit
                 value={
                   info.aboutSubheading ||
@@ -126,6 +126,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 multiline={true}
                 label="About Subtitle"
                 as="p"
+                className="text-justify"
               />
             </div>
           </div>
@@ -200,7 +201,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                   isOwnerMode={isOwnerMode}
                   multiline={true}
                   label="Callout Subtitle"
-                  className="text-zinc-400"
+                  className="text-zinc-400 text-justify"
                 />
               </div>
 
@@ -236,7 +237,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 )}
               </div>
 
-              <blockquote className="text-sm sm:text-base text-zinc-200 leading-relaxed">
+              <blockquote className="text-sm sm:text-base text-zinc-200 leading-relaxed text-justify">
                 <InlineEdit
                   value={info.aboutIntro || info.introQuote || ''}
                   onSave={(val) =>
@@ -245,6 +246,8 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                   isOwnerMode={isOwnerMode}
                   multiline={true}
                   label="Intro Philosophy Quote"
+                  as="p"
+                  className="text-justify"
                 />
               </blockquote>
             </div>
@@ -265,7 +268,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                       <Icon className="w-4 h-4" />
                     </div>
                     <h4 className="text-sm font-bold text-white">{pillar.title}</h4>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
+                    <p className="text-xs text-zinc-400 leading-relaxed text-justify hyphens-auto">
                       {pillar.description}
                     </p>
                   </motion.div>

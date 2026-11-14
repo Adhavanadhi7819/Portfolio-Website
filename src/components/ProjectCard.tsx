@@ -30,7 +30,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     <motion.div
       whileHover={{ y: -5 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      className="group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
+      className="h-full group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
     >
       
       {/* Top Image & Overlays */}
@@ -138,7 +138,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             {project.title}
           </h3>
 
-          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
+          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 text-justify">
             {project.summary}
           </p>
 
@@ -162,7 +162,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       </div>
 
       {/* Card Footer Actions */}
-      <div className="p-5 pt-0 border-t border-zinc-800/60 flex items-center justify-between gap-3 mt-2">
+      <div className="px-5 py-3.5 border-t border-zinc-800/60 flex items-center justify-between gap-3">
         <button
           onClick={() => onOpenModal(project)}
           className="text-xs font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 group/btn transition-colors py-2 cursor-pointer"

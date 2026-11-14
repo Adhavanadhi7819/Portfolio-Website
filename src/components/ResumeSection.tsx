@@ -165,7 +165,7 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
   return (
     <div ref={containerRef} className="bg-zinc-950/90 p-3 sm:p-4 space-y-3">
       {status === 'loading' && pageImages.length === 0 && (
-        <div className="py-16 flex flex-col items-center justify-center gap-2.5 text-xs font-mono text-zinc-400">
+        <div className="py-10 flex flex-col items-center justify-center gap-2.5 text-xs font-mono text-zinc-400">
           <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
           <span>Rendering resume preview...</span>
         </div>
@@ -303,7 +303,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   return (
     <section
       id="resume"
-      className="pt-20 sm:pt-24 pb-10 sm:pb-12 relative bg-[#050507] flex-1 flex flex-col justify-center"
+      className="py-8 sm:py-10 relative bg-[#050507] flex-1 flex flex-col justify-center scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -342,7 +342,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               label="Resume Heading"
             />
           </h2>
-          <div className="text-zinc-400 text-sm sm:text-base mt-2">
+          <div className="text-zinc-400 text-sm sm:text-base mt-2 max-w-xl leading-relaxed text-justify hyphens-auto">
             <InlineEdit
               value={
                 info.resumeSubheading ||
@@ -353,6 +353,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               multiline={true}
               label="Resume Subtitle"
               as="p"
+              className="text-justify hyphens-auto"
             />
           </div>
         </div>

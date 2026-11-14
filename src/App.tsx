@@ -1277,8 +1277,8 @@ export default function App() {
         onOpenSectionManager={() => setIsSectionManagerOpen(true)}
       />
 
-      {/* Main Content - Tab-specific with smooth motion transitions and zero negative space */}
-      <main className="flex-1 flex flex-col">
+      {/* Main Content - Tab-specific with fixed-navbar clearance and zero negative space */}
+      <main className="flex-1 flex flex-col pt-[58px] sm:pt-[60px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -1290,7 +1290,7 @@ export default function App() {
           >
             {/* On-Point Add Section Top Button in Owner Mode */}
             {isOwnerMode && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-1 flex items-center justify-center">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-1 flex items-center justify-center">
                 <button
                   onClick={() => {
                     setInsertBelowTargetId(undefined);
@@ -1719,9 +1719,9 @@ export default function App() {
         onUnreadCountChange={setUnreadMessageCount}
       />
 
-      {/* Subtle Floating Owner Edit & GitHub Sync Toggle */}
-      <div className="fixed bottom-4 left-4 z-[90] flex items-center gap-2">
-        {isOwnerMode ? (
+      {/* Subtle Floating GitHub Sync Toggle (Owner Mode only; Footer holds locked Owner Edit cleanly) */}
+      {isOwnerMode && (
+        <div className="fixed bottom-3.5 left-4 z-[90] flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsGitHubSyncOpen(true)}
@@ -1742,19 +1742,8 @@ export default function App() {
                 : 'GitHub Setup'}
             </span>
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsAuthModalOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-zinc-950/75 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 text-zinc-400 hover:text-zinc-100 text-[10px] font-mono uppercase tracking-wider shadow-lg backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Unlock Owner Edit Mode (Shift+O)"
-            aria-label="Unlock Owner Edit Mode"
-          >
-            <Lock className="w-3 h-3 text-amber-400/80" />
-            <span>Owner Edit</span>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Save Prompt Modal on Closing Owner Mode */}
       <AnimatePresence>
