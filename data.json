@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 19,
-  "updatedAt": "2026-11-14T17:58:34.682Z",
+  "version": 20,
+  "updatedAt": "2026-11-14T17:58:37.428Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:58:32.542Z",
+      "updatedAt": "2026-11-14T17:58:37.227Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -612,35 +612,6 @@
               "theme": "Tribute to Initial D Mountain/City Drifting",
               "lighting": "Overcast urban street lighting with desaturated atmospheric mist",
               "mechanics": "Rigged 4-wheel physics, drift angle yaw, body roll under centrifugal force"
-            }
-          },
-          {
-            "id": "autodesk-maya-3d-models",
-            "title": "Autodesk Maya 3D Asset Collection",
-            "category": "maya-3d",
-            "categoryLabel": "3D Modeling",
-            "summary": "Precision hard-surface 3D models including a vintage gramophone, streaming game room, and acoustic guitar.",
-            "description": "High-quality 3D props created from scratch in Autodesk Maya. Showcases clean edge-flow, subdivision surface modeling, realistic material assignment, and studio lighting setups for games and cinematic environments.",
-            "keyFeatures": [
-              "Vintage Brass Gramophone: detailed flared horn, crank handle, needle tone arm, and wooden base",
-              "Gaming Room Interior: multi-screen desk setup, gaming chair, acoustic foam wall panels, and RGB lighting",
-              "Classical Acoustic Guitar: contoured soundboard, rosette, bridge, fretboard wire, and tuning pegs"
-            ],
-            "techStack": [
-              "Autodesk Maya",
-              "Subdivision Modeling",
-              "Hard-Surface Topology",
-              "Studio Lighting & Shading"
-            ],
-            "thumbnail": "/showcase/maya-models.jpg",
-            "galleryImages": [
-              "/showcase/maya-models.jpg"
-            ],
-            "videoTimestamp": 110,
-            "conceptNotes": {
-              "theme": "Hard-Surface Prop Artistry & Architectural Interior",
-              "lighting": "Studio turntable lighting for gramophone, ambient RGB for gaming station",
-              "mechanics": "Game-ready topology optimized for real-time engine rendering"
             }
           }
         ],
