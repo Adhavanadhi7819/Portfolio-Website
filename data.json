@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 25,
-  "updatedAt": "2026-11-14T17:59:29.745Z",
+  "version": 26,
+  "updatedAt": "2026-11-14T17:59:46.905Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:59:27.286Z",
+      "updatedAt": "2026-11-14T17:59:46.460Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -157,7 +157,8 @@
             "Game Design & Level Design",
             "3D Modeling & Environment Arti",
             "Game Studio Role / Full-Time Inquiry",
-            "Freelance / Collaboration Inquiry"
+            "Freelance / Collaboration Inquiry",
+            "Coffee Chat / General Inquiry"
           ],
           "contactSlidePhotoUrl": "/showcase/contact-slide.jpg",
           "heroBadge": "Unreal Engine & Autodesk Maya Portfolio",
