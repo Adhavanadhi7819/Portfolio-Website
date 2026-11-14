@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 33,
-  "updatedAt": "2026-11-14T19:00:19.451Z",
+  "version": 34,
+  "updatedAt": "2026-11-14T19:58:24.234Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -729,5 +729,6 @@
         ]
       }
     }
-  ]
+  ],
+  "authenticatorPaired": true
 }
