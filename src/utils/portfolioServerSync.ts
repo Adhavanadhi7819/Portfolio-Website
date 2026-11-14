@@ -28,6 +28,7 @@ export interface GitHubSyncStatus {
   adminPinConfigured: boolean;
   isAuthenticated: boolean;
   runtime?: 'express' | 'vercel' | 'node';
+  tokenSource?: 'env' | 'preview-file' | 'none';
 }
 
 export interface ServerPortfolioResponse {
@@ -120,7 +121,8 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
         branch: json.branch || 'main',
         adminPinConfigured: Boolean(json.adminPinConfigured),
         isAuthenticated: Boolean(json.isAuthenticated),
-        runtime: json.runtime
+        runtime: json.runtime,
+        tokenSource: json.tokenSource || (json.hasToken ? 'env' : 'none')
       };
     }
   } catch {}
@@ -135,8 +137,75 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
     repo: '',
     branch: 'main',
     adminPinConfigured: false,
-    isAuthenticated: false
+    isAuthenticated: false,
+    tokenSource: 'none'
   };
+}
+
+export async function savePreviewGitHubToken(payload: {
+  token: string;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+}): Promise<{ ok: boolean; status?: GitHubSyncStatus; error?: string }> {
+  try {
+    const res = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'set-preview-token',
+        token: payload.token,
+        owner: payload.owner,
+        repo: payload.repo,
+        branch: payload.branch
+      })
+    });
+    const json = (await res.json().catch(() => ({}))) as Partial<GitHubSyncStatus> & {
+      ok?: boolean;
+      error?: string;
+    };
+    if (!res.ok || !json.ok) {
+      return {
+        ok: false,
+        error: json.error || `Failed to save preview token (HTTP ${res.status}).`
+      };
+    }
+    return {
+      ok: true,
+      status: {
+        githubConfigured: Boolean(json.githubConfigured),
+        canPullFromGitHub: Boolean(json.canPullFromGitHub ?? true),
+        hasToken: Boolean(json.hasToken),
+        hasOwner: Boolean(json.hasOwner),
+        hasRepo: Boolean(json.hasRepo),
+        owner: json.owner || '',
+        repo: json.repo || '',
+        branch: json.branch || 'main',
+        adminPinConfigured: Boolean(json.adminPinConfigured),
+        isAuthenticated: Boolean(json.isAuthenticated),
+        runtime: json.runtime,
+        tokenSource: json.tokenSource || 'preview-file'
+      }
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Network error connecting preview GitHub token.'
+    };
+  }
+}
+
+export async function clearPreviewGitHubToken(): Promise<GitHubSyncStatus> {
+  try {
+    await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action: 'clear-preview-token' })
+    });
+  } catch {}
+  return fetchGitHubSyncStatus();
 }
 
 export async function verifyAdminPinWithServer(pin: string): Promise<{
@@ -171,6 +240,7 @@ export async function verifyAdminPinWithServer(pin: string): Promise<{
         ok: true,
         status: {
           githubConfigured: Boolean(data.githubConfigured),
+          canPullFromGitHub: Boolean(data.canPullFromGitHub ?? (data.hasOwner && data.hasRepo)),
           hasToken: Boolean(data.hasToken),
           hasOwner: Boolean(data.hasOwner),
           hasRepo: Boolean(data.hasRepo),
@@ -178,7 +248,9 @@ export async function verifyAdminPinWithServer(pin: string): Promise<{
           repo: data.repo || '',
           branch: data.branch || 'main',
           adminPinConfigured: Boolean(data.adminPinConfigured),
-          isAuthenticated: true
+          isAuthenticated: true,
+          runtime: data.runtime,
+          tokenSource: data.tokenSource || (data.hasToken ? 'env' : 'none')
         }
       };
     }
@@ -247,7 +319,8 @@ export async function pullLatestFromGitHub(forcePull = false): Promise<{
       branch: json.branch || 'main',
       adminPinConfigured: Boolean(json.adminPinConfigured),
       isAuthenticated: Boolean(json.isAuthenticated),
-      runtime: json.runtime
+      runtime: json.runtime,
+      tokenSource: json.tokenSource || (json.hasToken ? 'env' : 'none')
     };
 
     if (!res.ok || !json.ok) {
@@ -297,20 +370,29 @@ export async function commitPortfolioToGitHub(payload: {
   portfolios: PortfolioProfile[];
   commitMessage?: string;
 }): Promise<GitHubCommitResponse> {
-  const res = await fetch('/api/update-portfolio', {
-    method: 'POST',
-    credentials: 'include',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      commitMessage: payload.commitMessage,
-      data: {
-        initialized: true,
-        updatedAt: new Date().toISOString(),
-        activePortfolioId: payload.activePortfolioId,
-        portfolios: payload.portfolios
-      }
-    })
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        commitMessage: payload.commitMessage,
+        data: {
+          initialized: true,
+          updatedAt: new Date().toISOString(),
+          activePortfolioId: payload.activePortfolioId,
+          portfolios: payload.portfolios
+        }
+      })
+    });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error && err.message !== 'Failed to fetch'
+        ? err.message
+        : 'Could not reach /api/update-portfolio. Make sure your payload size is under 4.5 MB and the server is running.'
+    );
+  }
 
   if (res.status === 413) {
     throw new Error(

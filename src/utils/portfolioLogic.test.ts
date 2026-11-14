@@ -20,7 +20,10 @@ import {
   reorderSections,
   addCustomSection,
   removeSection,
-  updateSectionConfig
+  updateSectionConfig,
+  getSectionTargetTab,
+  moveSectionToTab,
+  applyDraggedSectionOrder
 } from './portfolioLogic';
 import { VideoChapter, ProjectItem, PortfolioSectionConfig } from '../types/portfolio';
 import {
@@ -670,5 +673,59 @@ test('isRemoteNewerThanLocal compares versions and timestamps safely and default
     else process.env.GITHUB_REPO = prevRepo;
   }
 });
+
+test('getSectionTargetTab, moveSectionToTab, and applyDraggedSectionOrder align tabs and section order cleanly', () => {
+  const sections: PortfolioSectionConfig[] = [
+    { id: 'hero', title: 'Hero', label: 'Home', enabled: true, order: 0 },
+    { id: 'flagship', title: 'Flagship', label: 'Flagship', enabled: true, order: 1 },
+    { id: 'reel', title: 'Showreel', label: 'Reel', enabled: true, order: 2 },
+    { id: 'projects', title: 'Projects', label: 'Projects', enabled: true, order: 3 },
+    {
+      id: 'custom_1',
+      title: 'Devlog Clip',
+      label: 'Devlog',
+      enabled: true,
+      order: 4,
+      isCustom: true,
+      targetTab: 'projects'
+    }
+  ];
+
+  // Default & explicit tab resolution
+  assert.equal(getSectionTargetTab(sections[0]), 'hero');
+  assert.equal(getSectionTargetTab(sections[2]), 'projects');
+  assert.equal(getSectionTargetTab(sections[4]), 'projects');
+
+  // Move section to About tab and Own Navbar tab
+  const movedToAbout = moveSectionToTab(sections, 'custom_1', 'about');
+  assert.equal(getSectionTargetTab(movedToAbout.find(s => s.id === 'custom_1')!), 'about');
+
+  const movedToOwn = moveSectionToTab(movedToAbout, 'custom_1', 'own');
+  assert.equal(getSectionTargetTab(movedToOwn.find(s => s.id === 'custom_1')!), 'custom_1');
+
+  // Dragged subset inside Work tab re-aligns order indices automatically
+  const reordered = applyDraggedSectionOrder(sections, ['projects', 'custom_1', 'flagship', 'reel']);
+  const sortedIds = [...reordered].sort((a, b) => a.order - b.order).map(s => s.id);
+  assert.deepEqual(sortedIds, ['hero', 'projects', 'custom_1', 'flagship', 'reel']);
+  assert.deepEqual(
+    [...reordered].sort((a, b) => a.order - b.order).map(s => s.order),
+    [0, 1, 2, 3, 4]
+  );
+});
+
+test('getGitHubConfigStatus reports tokenSource as env when GITHUB_TOKEN env is configured', async () => {
+  const { getGitHubConfigStatus } = await import('../../api/update-portfolio');
+  const prev = process.env.GITHUB_TOKEN;
+  try {
+    process.env.GITHUB_TOKEN = 'ghp_env_source_check';
+    const st = getGitHubConfigStatus();
+    assert.equal(st.hasToken, true);
+    assert.equal(st.tokenSource, 'env');
+  } finally {
+    if (prev === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prev;
+  }
+});
+
 
 

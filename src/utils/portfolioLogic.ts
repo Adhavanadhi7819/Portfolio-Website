@@ -368,4 +368,64 @@ export function updateSectionConfig(
   return sections.map(s => s.id === sectionId ? { ...s, ...updates } : s);
 }
 
+/**
+ * Resolve which navigation tab a section belongs to
+ */
+export function getSectionTargetTab(section: PortfolioSectionConfig): string {
+  if (section.targetTab) {
+    return section.targetTab === 'own' ? section.id : section.targetTab;
+  }
+  switch (section.id) {
+    case 'hero':
+      return 'hero';
+    case 'flagship':
+    case 'reel':
+    case 'projects':
+    case 'maya':
+      return 'projects';
+    case 'about':
+    case 'proficiency':
+      return 'about';
+    case 'resume':
+      return 'resume';
+    case 'contact':
+      return 'contact';
+    default:
+      return section.id;
+  }
+}
+
+/**
+ * Move any section to a specific tab ('hero' | 'projects' | 'about' | 'resume' | 'contact' | 'own')
+ */
+export function moveSectionToTab(
+  sections: PortfolioSectionConfig[],
+  sectionId: string,
+  targetTab: 'hero' | 'projects' | 'about' | 'resume' | 'contact' | 'own'
+): PortfolioSectionConfig[] {
+  if (!sections) return [];
+  return sections.map(s => (s.id === sectionId ? { ...s, targetTab } : s));
+}
+
+/**
+ * Reorder sections after drag-and-drop of a subset (or full list) of IDs, auto-aligning order indices
+ */
+export function applyDraggedSectionOrder(
+  sections: PortfolioSectionConfig[],
+  draggedSubsetIds: string[]
+): PortfolioSectionConfig[] {
+  if (!sections || draggedSubsetIds.length === 0) return sections || [];
+  const sorted = [...sections].sort((a, b) => a.order - b.order);
+  const subsetSet = new Set(draggedSubsetIds);
+  const byId = new Map(sorted.map(s => [s.id, s]));
+
+  let subsetPointer = 0;
+  const result = sorted.map(sec => {
+    if (!subsetSet.has(sec.id)) return sec;
+    const replacementId = draggedSubsetIds[subsetPointer++];
+    return byId.get(replacementId) || sec;
+  });
+
+  return result.map((sec, idx) => ({ ...sec, order: idx }));
+}
 

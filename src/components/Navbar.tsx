@@ -14,6 +14,8 @@ interface NavbarProps {
   onOpenSectionManager?: () => void;
 }
 
+import { getSectionTargetTab } from '../utils/portfolioLogic';
+
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab: propActiveTab,
   onSelectTab,
@@ -28,7 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentTab = propActiveTab || localActiveTab;
 
   const navLinks = useMemo(() => {
-    const defaultTabs = [
+    const coreTabs = [
       { label: 'Home', id: 'hero' },
       { label: 'Work', id: 'projects' },
       { label: 'About', id: 'about' },
@@ -36,13 +38,19 @@ export const Navbar: React.FC<NavbarProps> = ({
       { label: 'Contact', id: 'contact' }
     ];
 
-    const customSections = sections
-      ? sections
-          .filter((s) => s.enabled && s.isCustom)
-          .map((s) => ({ label: s.label || s.title, id: s.id }))
-      : [];
+    if (!sections || sections.length === 0) {
+      return coreTabs;
+    }
 
-    return [...defaultTabs, ...customSections];
+    const enabled = sections.filter((s) => s.enabled).sort((a, b) => a.order - b.order);
+    const activeCoreTabIds = new Set(enabled.map((s) => getSectionTargetTab(s)));
+    const visibleCore = coreTabs.filter((t) => activeCoreTabIds.has(t.id));
+
+    const ownSections = enabled
+      .filter((s) => !coreTabs.some((t) => t.id === getSectionTargetTab(s)))
+      .map((s) => ({ label: s.label || s.title, id: s.id }));
+
+    return [...(visibleCore.length > 0 ? visibleCore : coreTabs), ...ownSections];
   }, [sections]);
 
   useEffect(() => {

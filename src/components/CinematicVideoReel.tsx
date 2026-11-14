@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { VIDEO_PATH, VIDEO_CHAPTERS } from '../data/portfolioData';
 import { formatVideoTime, findCurrentChapter } from '../utils/portfolioLogic';
-import { VideoChapter, DesignerInfo } from '../types/portfolio';
+import { VideoChapter, DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
@@ -48,6 +48,10 @@ interface CinematicVideoReelProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelProps>(({ 
@@ -67,7 +71,11 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -355,6 +363,10 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         <SectionControls
           sectionId="reel"
           sectionTitle="Cinematic Showreel"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}

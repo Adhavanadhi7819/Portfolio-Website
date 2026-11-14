@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Sparkles, Filter, Search, Plus } from 'lucide-react';
-import { ProjectItem, ProjectCategory, DesignerInfo } from '../types/portfolio';
+import { ProjectItem, ProjectCategory, DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { filterProjects } from '../utils/portfolioLogic';
 import { ProjectCard } from './ProjectCard';
 import { InlineEdit } from './InlineEdit';
@@ -24,6 +24,10 @@ interface ProjectGalleryProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
@@ -42,7 +46,11 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }) => {
   const [activeCategory, setActiveCategory] = useState<ProjectCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,6 +81,10 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         <SectionControls
           sectionId="projects"
           sectionTitle="Projects Gallery"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}

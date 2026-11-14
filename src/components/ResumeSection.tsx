@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { FileText, Download, Upload, ArrowUpRight, Trash2, Loader2 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs';
-import { DesignerInfo } from '../types/portfolio';
+import { DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
@@ -25,6 +25,10 @@ interface ResumeSectionProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 function dataUrlToUint8Array(dataUrl: string): Uint8Array | null {
@@ -212,7 +216,11 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const [confirmRemovePdf, setConfirmRemovePdf] = useState(false);
@@ -302,6 +310,10 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
         <SectionControls
           sectionId="resume"
           sectionTitle="Game Designer Resume"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}

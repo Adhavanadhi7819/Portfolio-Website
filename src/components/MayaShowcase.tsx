@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Box, Play, CheckCircle2, Plus, Edit3, Trash2 } from 'lucide-react';
 import { MAYA_MODELS } from '../data/portfolioData';
-import { MayaModelItem, DesignerInfo } from '../types/portfolio';
+import { MayaModelItem, DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
@@ -23,6 +23,10 @@ interface MayaShowcaseProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
@@ -40,7 +44,11 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }) => {
   const currentModels = models && models.length > 0 ? models : MAYA_MODELS;
   const [selectedModelId, setSelectedModelId] = useState(currentModels[0]?.id || '');
@@ -56,6 +64,10 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
         <SectionControls
           sectionId="maya"
           sectionTitle="Autodesk Maya 3D Assets"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}

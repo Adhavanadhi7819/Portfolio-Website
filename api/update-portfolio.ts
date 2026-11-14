@@ -17,34 +17,86 @@ export interface GitHubConfigStatus {
   repo: string;
   branch: string;
   adminPinConfigured: boolean;
+  tokenSource?: 'env' | 'preview-file' | 'none';
 }
 
 const DEFAULT_GITHUB_OWNER = 'Adhavanadhi7819';
 const DEFAULT_GITHUB_REPO = 'Portfolio-Website';
 
+interface LocalPreviewGitHubConfig {
+  token?: string;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+}
+
+function resolvePreviewGitHubConfigPath(): string {
+  return path.resolve(process.cwd(), 'portfolio-data', '.github-token.json');
+}
+
+function readLocalPreviewGitHubConfig(): LocalPreviewGitHubConfig | null {
+  try {
+    const filePath = resolvePreviewGitHubConfigPath();
+    if (!fs.existsSync(filePath)) return null;
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as LocalPreviewGitHubConfig;
+    if (raw && typeof raw === 'object') return raw;
+  } catch {}
+  return null;
+}
+
+function writeLocalPreviewGitHubConfig(cfg: LocalPreviewGitHubConfig | null): boolean {
+  try {
+    const filePath = resolvePreviewGitHubConfigPath();
+    if (!cfg) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return true;
+    }
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600, encoding: 'utf8' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function readServerEnv(): {
   token: string;
+  tokenSource: 'env' | 'preview-file' | 'none';
   owner: string;
   repo: string;
   branch: string;
   adminPin: string;
 } {
+  const envToken = (process.env.GITHUB_TOKEN || '').trim();
+  const previewCfg = !envToken ? readLocalPreviewGitHubConfig() : null;
+  const previewToken = (previewCfg?.token || '').trim();
+  const token = envToken || previewToken;
+  const tokenSource: 'env' | 'preview-file' | 'none' = envToken
+    ? 'env'
+    : previewToken
+    ? 'preview-file'
+    : 'none';
+
   return {
-    token: (process.env.GITHUB_TOKEN || '').trim(),
+    token,
+    tokenSource,
     owner: (
       process.env.GITHUB_OWNER ||
       process.env.VERCEL_GIT_REPO_OWNER ||
+      previewCfg?.owner ||
       DEFAULT_GITHUB_OWNER
     ).trim(),
     repo: (
       process.env.GITHUB_REPO ||
       process.env.VERCEL_GIT_REPO_SLUG ||
+      previewCfg?.repo ||
       DEFAULT_GITHUB_REPO
     ).trim(),
     branch:
       (
         process.env.GITHUB_BRANCH ||
         process.env.VERCEL_GIT_COMMIT_REF ||
+        previewCfg?.branch ||
         'main'
       ).trim() || 'main',
     adminPin: (process.env.ADMIN_PIN || '906').trim() || '906'
@@ -62,7 +114,8 @@ export function getGitHubConfigStatus(): GitHubConfigStatus {
     owner: env.owner,
     repo: env.repo,
     branch: env.branch,
-    adminPinConfigured: Boolean(process.env.ADMIN_PIN && process.env.ADMIN_PIN.trim())
+    adminPinConfigured: Boolean(process.env.ADMIN_PIN && process.env.ADMIN_PIN.trim()),
+    tokenSource: env.tokenSource
   };
 }
 
@@ -686,7 +739,7 @@ export async function handleUpdatePortfolioRequest(
     return;
   }
 
-  // Authorize update/commit request
+  // Authorize admin-only write / preview token configuration actions
   const headerPin = typeof req.headers['x-admin-pin'] === 'string' ? req.headers['x-admin-pin'] : '';
   const bodyPin = typeof body.pin === 'string' ? body.pin : '';
   const hasValidPinOverride =
@@ -697,6 +750,98 @@ export async function handleUpdatePortfolioRequest(
       ok: false,
       ...status,
       error: 'Admin authorization required. Unlock Owner Edit Mode with your Admin PIN.'
+    });
+    return;
+  }
+
+  if (action === 'set-preview-token') {
+    if (runtimeMode === 'vercel') {
+      sendJson(res, 400, {
+        ok: false,
+        ...status,
+        error: 'Vercel uses GITHUB_TOKEN from Vercel Environment Variables.'
+      });
+      return;
+    }
+    const incomingToken = typeof body.token === 'string' ? body.token.trim() : '';
+    const incomingOwner =
+      (typeof body.owner === 'string' && body.owner.trim()) || status.owner || DEFAULT_GITHUB_OWNER;
+    const incomingRepo =
+      (typeof body.repo === 'string' && body.repo.trim()) || status.repo || DEFAULT_GITHUB_REPO;
+    const incomingBranch =
+      (typeof body.branch === 'string' && body.branch.trim()) || status.branch || 'main';
+
+    if (!incomingToken) {
+      sendJson(res, 400, { ok: false, error: 'Please paste a valid GitHub Personal Access Token.' });
+      return;
+    }
+
+    try {
+      const verifyRes = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(incomingOwner)}/${encodeURIComponent(
+          incomingRepo
+        )}`,
+        {
+          method: 'GET',
+          headers: buildGitHubHeaders(incomingToken),
+          cache: 'no-store'
+        }
+      );
+      const repoJson = (await verifyRes.json().catch(() => ({}))) as {
+        message?: string;
+        permissions?: { push?: boolean };
+      };
+      if (!verifyRes.ok) {
+        sendJson(res, 400, {
+          ok: false,
+          error: repoJson.message || `GitHub rejected token (HTTP ${verifyRes.status}).`
+        });
+        return;
+      }
+      if (repoJson.permissions && repoJson.permissions.push === false) {
+        sendJson(res, 403, {
+          ok: false,
+          error: 'Token only has read access. Enable Contents: Read and write permission.'
+        });
+        return;
+      }
+
+      const saved = writeLocalPreviewGitHubConfig({
+        token: incomingToken,
+        owner: incomingOwner,
+        repo: incomingRepo,
+        branch: incomingBranch
+      });
+      if (!saved) {
+        sendJson(res, 500, { ok: false, error: 'Failed to store server-side preview token.' });
+        return;
+      }
+
+      const nextStatus = getGitHubConfigStatus();
+      sendJson(res, 200, {
+        ok: true,
+        runtime: runtimeMode,
+        ...nextStatus,
+        isAuthenticated: true
+      });
+      return;
+    } catch (err) {
+      sendJson(res, 502, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Failed to verify GitHub token.'
+      });
+      return;
+    }
+  }
+
+  if (action === 'clear-preview-token') {
+    writeLocalPreviewGitHubConfig(null);
+    const nextStatus = getGitHubConfigStatus();
+    sendJson(res, 200, {
+      ok: true,
+      runtime: runtimeMode,
+      ...nextStatus,
+      isAuthenticated: true
     });
     return;
   }
@@ -730,12 +875,11 @@ export async function handleUpdatePortfolioRequest(
       ? body.commitMessage.trim().slice(0, 240)
       : `chore(portfolio): update data.json (v${nextBundle.version})`;
 
-  const wroteLocal = writeLocalDataJsonIfWritable(nextBundle);
-  if (wroteLocal) {
-    options.onLocalCommitted?.(nextBundle);
-  }
-
   if (!status.githubConfigured) {
+    const wroteLocal = writeLocalDataJsonIfWritable(nextBundle);
+    if (wroteLocal) {
+      options.onLocalCommitted?.(nextBundle);
+    }
     sendJson(res, 400, {
       ok: false,
       committed: false,
@@ -743,7 +887,7 @@ export async function handleUpdatePortfolioRequest(
       ...status,
       data: nextBundle,
       error:
-        'GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO is not configured on the server. Add them in Vercel Environment Variables to push edits directly to GitHub.'
+        'GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO is not configured on the server. Add them in Vercel Environment Variables (or connect a Preview Token) to commit & push edits directly to GitHub.'
     });
     return;
   }
@@ -753,6 +897,10 @@ export async function handleUpdatePortfolioRequest(
       bundle: nextBundle,
       commitMessage
     });
+    const wroteLocal = writeLocalDataJsonIfWritable(nextBundle);
+    if (wroteLocal) {
+      options.onLocalCommitted?.(nextBundle);
+    }
     sendJson(res, 200, {
       ok: true,
       committed: true,
@@ -768,10 +916,11 @@ export async function handleUpdatePortfolioRequest(
     sendJson(res, 502, {
       ok: false,
       committed: false,
-      savedLocally: wroteLocal,
+      savedLocally: false,
+      runtime: runtimeMode,
       ...status,
       error:
-        err instanceof Error ? err.message : 'Failed to commit data.json update to GitHub.'
+        err instanceof Error ? err.message : 'Failed to commit data.json update to GitHub. Save was not applied.'
     });
   }
 }

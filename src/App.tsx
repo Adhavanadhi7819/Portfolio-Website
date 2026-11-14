@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig, Reorder, useDragControls } from 'motion/react';
 import { Plus, Save, RotateCcw, Lock, X, CheckCircle2, GitBranch } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { InteractiveCursor } from './components/InteractiveCursor';
@@ -32,7 +32,8 @@ import {
   PortfolioSectionConfig,
   CustomSectionData,
   CustomSectionCard,
-  PortfolioProfile
+  PortfolioProfile,
+  SectionTargetTab
 } from './types/portfolio';
 import { 
   addProject, 
@@ -49,7 +50,11 @@ import {
   reorderSections,
   addCustomSection,
   removeSection,
-  updateSectionConfig
+  updateSectionConfig,
+  getSectionTargetTab,
+  moveSectionToTab,
+  applyDraggedSectionOrder,
+  importPortfolioJson
 } from './utils/portfolioLogic';
 import {
   fetchServerAuthStatus,
@@ -79,6 +84,30 @@ function getInitialPublishedProfile(): PortfolioProfile | null {
   }
   return null;
 }
+
+interface SortablePageSectionProps {
+  sectionId: string;
+  renderSection: (dragStartPointer: (e: React.PointerEvent) => void) => React.ReactNode;
+}
+
+const SortablePageSection: React.FC<SortablePageSectionProps> = ({
+  sectionId,
+  renderSection
+}) => {
+  const dragControls = useDragControls();
+  return (
+    <Reorder.Item
+      value={sectionId}
+      dragListener={false}
+      dragControls={dragControls}
+      layout="position"
+      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+      className="relative"
+    >
+      {renderSection((e) => dragControls.start(e))}
+    </Reorder.Item>
+  );
+};
 
 export default function App() {
   const reelRef = useRef<VideoReelRef>(null);
@@ -827,12 +856,45 @@ export default function App() {
     }));
   };
 
-  const handleAddCustomSection = (newSection: PortfolioSectionConfig) => {
+  const handleDragReorderSections = (draggedSubsetIds: string[]) => {
     setPortfolioState(prev => ({
       ...prev,
-      sections: addCustomSection(prev.sections || DEFAULT_PORTFOLIO_SECTIONS, newSection, insertBelowTargetId)
+      sections: applyDraggedSectionOrder(
+        prev.sections || DEFAULT_PORTFOLIO_SECTIONS,
+        draggedSubsetIds
+      )
+    }));
+  };
+
+  const handleMoveSectionToTab = (sectionId: string, targetTab: SectionTargetTab) => {
+    setPortfolioState(prev => ({
+      ...prev,
+      sections: moveSectionToTab(prev.sections || DEFAULT_PORTFOLIO_SECTIONS, sectionId, targetTab)
+    }));
+    const resolvedTab = targetTab === 'own' ? sectionId : targetTab;
+    setActiveTab(resolvedTab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setSaveToast('Moved section & updated navigation tab');
+  };
+
+  const handleAddCustomSection = (newSection: PortfolioSectionConfig) => {
+    const withTargetTab: PortfolioSectionConfig = {
+      ...newSection,
+      targetTab: newSection.targetTab || (activeTab as SectionTargetTab)
+    };
+    setPortfolioState(prev => ({
+      ...prev,
+      sections: addCustomSection(
+        prev.sections || DEFAULT_PORTFOLIO_SECTIONS,
+        withTargetTab,
+        insertBelowTargetId
+      )
     }));
     setInsertBelowTargetId(undefined);
+    const resolvedTab = getSectionTargetTab(withTargetTab);
+    if (resolvedTab) {
+      setActiveTab(resolvedTab);
+    }
   };
 
   const handleRemoveSection = (sectionId: string) => {
@@ -1029,24 +1091,20 @@ export default function App() {
 
   // Tab-aware Navigation & Reel Playback
   const handleNavigate = (sectionId: string) => {
+    const allSections = portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS;
+    const matchedSection = allSections.find(s => s.id === sectionId);
     let targetTab = sectionId;
-    if (sectionId === 'hero') {
-      targetTab = 'hero';
-    } else if (['projects', 'flagship', 'reel', 'maya'].includes(sectionId)) {
-      targetTab = 'projects';
-    } else if (sectionId === 'about') {
-      targetTab = 'about';
-    } else if (sectionId === 'resume') {
-      targetTab = 'resume';
-    } else if (sectionId === 'contact') {
-      targetTab = 'contact';
+
+    if (matchedSection) {
+      targetTab = getSectionTargetTab(matchedSection);
+    } else if (['hero', 'projects', 'about', 'resume', 'contact'].includes(sectionId)) {
+      targetTab = sectionId;
     }
 
     setActiveTab(targetTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // If targeting an anchor inside a multi-section tab, smoothly position to it
-    if (!['hero', 'projects', 'about', 'resume', 'contact'].includes(sectionId)) {
+    if (sectionId !== targetTab) {
       setTimeout(() => {
         const el = document.getElementById(sectionId);
         if (el) {
@@ -1063,18 +1121,22 @@ export default function App() {
   };
 
   const handlePlayInReel = (timestamp: number) => {
-    setActiveTab('projects');
+    const reelSection = (portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS).find(s => s.id === 'reel');
+    const reelTab = reelSection ? getSectionTargetTab(reelSection) : 'projects';
+    setActiveTab(reelTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
       reelRef.current?.scrollTo();
       setTimeout(() => {
         reelRef.current?.seekTo(timestamp);
-      }, 350);
+      }, 320);
     }, 120);
   };
 
   const handleJumpToChapter = (chapterId: string) => {
-    setActiveTab('projects');
+    const reelSection = (portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS).find(s => s.id === 'reel');
+    const reelTab = reelSection ? getSectionTargetTab(reelSection) : 'projects';
+    setActiveTab(reelTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     const ch = portfolioState.videoChapters.find(c => c.id === chapterId);
     if (ch) {
@@ -1082,7 +1144,7 @@ export default function App() {
         reelRef.current?.scrollTo();
         setTimeout(() => {
           reelRef.current?.seekTo(ch.startTime);
-        }, 350);
+        }, 320);
       }, 120);
     }
   };
@@ -1099,32 +1161,74 @@ export default function App() {
   const flagshipProject = portfolioState.projects.find(p => p.isFlagship) || portfolioState.projects[0];
   const activeSections = getActiveSections(portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS);
 
-  // Map tab IDs to the respective sections they contain
-  const getSectionsForTab = (tabId: string): string[] => {
-    switch (tabId) {
-      case 'hero':
-        // Home tab contains ONLY the home section
-        return ['hero'];
-      case 'projects':
-        // Work tab contains the work showcase: Flagship RPG, Showreel, Curated Projects, Maya 3D
-        return ['flagship', 'reel', 'projects', 'maya'];
-      case 'about':
-        // About tab contains About & Philosophy and Career Timeline
-        return ['about'];
-      case 'resume':
-        // Resume tab contains complete CV and credentials
-        return ['resume'];
-      case 'contact':
-        // Contact tab contains direct contact channels, ArtStation, LinkedIn, WhatsApp, form
-        return ['contact'];
-      default:
-        // Custom section or directly selected section
-        return [tabId];
-    }
+  const currentTabSections = activeSections.filter(sec => {
+    const secTab = getSectionTargetTab(sec);
+    return secTab === activeTab || sec.id === activeTab;
+  });
+
+  const handleDownloadDataJson = () => {
+    const mergedPortfolios = portfolios.map((p) =>
+      p.id === activePortfolioId
+        ? { ...p, state: portfolioState, updatedAt: new Date().toISOString() }
+        : p
+    );
+    const fullBundle = {
+      initialized: true,
+      version: Math.max(1, serverVersionRef.current),
+      updatedAt: new Date().toISOString(),
+      activePortfolioId,
+      portfolios: mergedPortfolios
+    };
+    const blob = new Blob([JSON.stringify(fullBundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'data.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setSaveToast('Downloaded data.json snapshot');
   };
 
-  const visibleSectionIds = getSectionsForTab(activeTab);
-  const currentTabSections = activeSections.filter(sec => visibleSectionIds.includes(sec.id));
+  const handleImportDataJson = (jsonText: string): { ok: boolean; error?: string } => {
+    try {
+      const parsed = JSON.parse(jsonText) as {
+        portfolios?: PortfolioProfile[];
+        activePortfolioId?: string;
+        version?: number;
+      };
+      if (parsed && Array.isArray(parsed.portfolios) && parsed.portfolios.length > 0) {
+        const nextActiveId =
+          parsed.activePortfolioId && parsed.portfolios.some((p) => p.id === parsed.activePortfolioId)
+            ? parsed.activePortfolioId
+            : parsed.portfolios[0].id;
+        const activeP = parsed.portfolios.find((p) => p.id === nextActiveId) || parsed.portfolios[0];
+        if (activeP?.state) {
+          setPortfolios(parsed.portfolios);
+          setActivePortfolioId(nextActiveId);
+          setPortfolioState({
+            ...activeP.state,
+            sections:
+              Array.isArray(activeP.state.sections) && activeP.state.sections.length > 0
+                ? activeP.state.sections
+                : DEFAULT_PORTFOLIO_SECTIONS
+          });
+          setSaveToast('Imported data.json into portfolio');
+          return { ok: true };
+        }
+      }
+      const imported = importPortfolioJson(jsonText);
+      if (imported.isValid && imported.state) {
+        setPortfolioState(imported.state);
+        setSaveToast('Imported portfolio JSON');
+        return { ok: true };
+      }
+      return { ok: false, error: imported.error || 'Invalid data.json format.' };
+    } catch {
+      return { ok: false, error: 'Could not parse JSON file.' };
+    }
+  };
 
   return (
     <MotionConfig reducedMotion="user">
@@ -1178,244 +1282,331 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 16, scale: 0.992 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.995 }}
-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="w-full flex-1 flex flex-col"
           >
             {/* On-Point Add Section Top Button in Owner Mode */}
             {isOwnerMode && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-1 flex items-center justify-center">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-1 flex items-center justify-center">
                 <button
                   onClick={() => {
                     setInsertBelowTargetId(undefined);
                     setIsSectionManagerOpen(true);
                   }}
-                  className="px-4 py-1.5 rounded-full bg-zinc-900/90 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-lg flex items-center gap-1.5 cursor-pointer hover:scale-105"
-                  title="Add a new custom section at the top of your portfolio"
+                  className="px-4 py-1.5 rounded-full bg-zinc-900/90 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer"
+                  title="Add a new custom section with video/photo or drag-reorder sections"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>+ Add Section at Top</span>
+                  <span>Add Section at Top</span>
                 </button>
               </div>
             )}
 
-            {currentTabSections.map((sec, idx) => {
-          const canMoveUp = idx > 0;
-          const canMoveDown = idx < activeSections.length - 1;
-          const onMoveUp = () => handleReorderSection(sec.id, 'up');
-          const onMoveDown = () => handleReorderSection(sec.id, 'down');
-          const onHide = () => handleToggleSectionVisibility(sec.id, false);
-          const onAddSectionBelow = () => handlePromptAddSectionBelow(sec.id);
+            {currentTabSections.length === 0 && isOwnerMode && (
+              <div className="max-w-2xl mx-auto my-20 p-8 rounded-2xl bg-zinc-950 border border-dashed border-zinc-800 text-center space-y-4">
+                <p className="text-sm font-mono text-zinc-400">
+                  No sections are currently placed inside this tab.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsSectionManagerOpen(true)}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  Manage &amp; Add Sections
+                </button>
+              </div>
+            )}
 
-          let sectionNode = null;
+            {(() => {
+              const renderSectionItem = (
+                sec: PortfolioSectionConfig,
+                idx: number,
+                dragStartPointer?: (e: React.PointerEvent) => void
+              ) => {
+                const canMoveUp = idx > 0;
+                const canMoveDown = idx < currentTabSections.length - 1;
+                const moveWithinTab = (dir: 'up' | 'down') => {
+                  const ids = currentTabSections.map((s) => s.id);
+                  const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+                  if (swapIdx < 0 || swapIdx >= ids.length) return;
+                  [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
+                  handleDragReorderSections(ids);
+                };
+                const onMoveUp = () => moveWithinTab('up');
+                const onMoveDown = () => moveWithinTab('down');
+                const onHide = () => handleToggleSectionVisibility(sec.id, false);
+                const onAddSectionBelow = () => handlePromptAddSectionBelow(sec.id);
+                const resolvedTabValue: SectionTargetTab = sec.targetTab
+                  ? sec.targetTab
+                  : (['hero', 'projects', 'about', 'resume', 'contact'].includes(
+                      getSectionTargetTab(sec)
+                    )
+                      ? (getSectionTargetTab(sec) as SectionTargetTab)
+                      : 'own');
+                const onChangeTab = (nextTab: SectionTargetTab) =>
+                  handleMoveSectionToTab(sec.id, nextTab);
+                const showDragHandle = isOwnerMode && currentTabSections.length > 1;
 
-          if (sec.id === 'hero') {
-            sectionNode = (
-              <HeroSection
-                key="hero"
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onEditHero={() => handleOpenEditModal('hero')}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                onPlayReel={() => handlePlayInReel(0)}
-                onExploreProjects={() => handleNavigate('projects')}
-                onJumpToChapter={handleJumpToChapter}
-                onOpenResume={() => handleNavigate('resume')}
-                onOpenContact={() => handleNavigate('contact')}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'reel') {
-            sectionNode = (
-              <CinematicVideoReel
-                key="reel"
-                ref={reelRef}
-                videoChapters={portfolioState.videoChapters}
-                videoPath={portfolioState.videoPath}
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onAddChapter={() => handleOpenEditModal('chapter')}
-                onEditChapter={(ch) => handleOpenEditModal('chapter', ch)}
-                onDeleteChapter={handleDeleteChapter}
-                onEditReelSettings={() => handleOpenEditModal('video_reel')}
-                onUploadVideo={handleSaveVideoPath}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'flagship') {
-            sectionNode = (
-              <FlagshipGameFeature
-                key="flagship"
-                flagshipProject={flagshipProject}
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onEditFlagship={(p) => handleOpenEditModal('project', p)}
-                onEditFlagshipDetails={() => handleOpenEditModal('flagship')}
-                onPlayWalkthrough={(timestamp: number) => handlePlayInReel(timestamp)}
-                onOpenProjectModal={handleOpenProjectModal}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'projects') {
-            sectionNode = (
-              <ProjectGallery
-                key="projects"
-                projects={portfolioState.projects}
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onOpenModal={(project: ProjectItem) => setSelectedProject(project)}
-                onPlayInReel={handlePlayInReel}
-                onAddProject={() => handleOpenEditModal('project')}
-                onEditProject={(p) => handleOpenEditModal('project', p)}
-                onSaveProject={handleSaveProject}
-                onDeleteProject={handleDeleteProject}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'maya') {
-            sectionNode = (
-              <MayaShowcase
-                key="maya"
-                models={portfolioState.mayaModels}
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onPlayInReel={handlePlayInReel}
-                onAddModel={() => handleOpenEditModal('model')}
-                onEditModel={(m) => handleOpenEditModal('model', m)}
-                onSaveModel={handleSaveModel}
-                onDeleteModel={handleDeleteModel}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'about') {
-            sectionNode = (
-              <AboutSection
-                key="about"
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onContactClick={() => handleNavigate('contact')}
-                onEditAbout={() => handleOpenEditModal('about')}
-                onWatchReelClick={() => handlePlayInReel(0)}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'resume') {
-            sectionNode = (
-              <ResumeSection
-                key="resume"
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onEditResume={() => handleOpenEditModal('resume')}
-                onContactClick={() => handleNavigate('contact')}
-                onWatchReelClick={() => handlePlayInReel(0)}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else if (sec.id === 'contact') {
-            sectionNode = (
-              <ContactSection 
-                key="contact"
-                designerInfo={portfolioState.designerInfo}
-                isOwnerMode={isOwnerMode}
-                onEditContact={() => handleOpenEditModal('contact')}
-                onUpdateDesignerInfo={handleSaveDesignerInfo}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onAddSectionBelow={onAddSectionBelow}
-              />
-            );
-          } else {
-            // Any custom section created by the user
-            sectionNode = (
-              <CustomSection
-                key={sec.id}
-                section={sec}
-                isOwnerMode={isOwnerMode}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onHide={onHide}
-                onDelete={() => handleRemoveSection(sec.id)}
-                onEditSettings={() => {
-                  setInsertBelowTargetId(undefined);
-                  setIsSectionManagerOpen(true);
-                }}
-                onAddSectionBelow={onAddSectionBelow}
-                onUpdateSectionData={(dataUpdates) => handleUpdateCustomSectionData(sec.id, dataUpdates)}
-                onAddCard={() => handleAddCustomCard(sec.id)}
-                onDeleteCard={(cardId) => handleDeleteCustomCard(sec.id, cardId)}
-              />
-            );
-          }
+                let sectionNode: React.ReactNode = null;
 
-          return (
-            <React.Fragment key={sec.id}>
-              {sectionNode}
+                if (sec.id === 'hero') {
+                  sectionNode = (
+                    <HeroSection
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onEditHero={() => handleOpenEditModal('hero')}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      onPlayReel={() => handlePlayInReel(0)}
+                      onExploreProjects={() => handleNavigate('projects')}
+                      onJumpToChapter={handleJumpToChapter}
+                      onOpenResume={() => handleNavigate('resume')}
+                      onOpenContact={() => handleNavigate('contact')}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'reel') {
+                  sectionNode = (
+                    <CinematicVideoReel
+                      ref={reelRef}
+                      videoChapters={portfolioState.videoChapters}
+                      videoPath={portfolioState.videoPath}
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onAddChapter={() => handleOpenEditModal('chapter')}
+                      onEditChapter={(ch) => handleOpenEditModal('chapter', ch)}
+                      onDeleteChapter={handleDeleteChapter}
+                      onEditReelSettings={() => handleOpenEditModal('video_reel')}
+                      onUploadVideo={handleSaveVideoPath}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'flagship') {
+                  sectionNode = (
+                    <FlagshipGameFeature
+                      flagshipProject={flagshipProject}
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onEditFlagship={(p) => handleOpenEditModal('project', p)}
+                      onEditFlagshipDetails={() => handleOpenEditModal('flagship')}
+                      onPlayWalkthrough={(timestamp: number) => handlePlayInReel(timestamp)}
+                      onOpenProjectModal={handleOpenProjectModal}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'projects') {
+                  sectionNode = (
+                    <ProjectGallery
+                      projects={portfolioState.projects}
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onOpenModal={(project: ProjectItem) => setSelectedProject(project)}
+                      onPlayInReel={handlePlayInReel}
+                      onAddProject={() => handleOpenEditModal('project')}
+                      onEditProject={(p) => handleOpenEditModal('project', p)}
+                      onSaveProject={handleSaveProject}
+                      onDeleteProject={handleDeleteProject}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'maya') {
+                  sectionNode = (
+                    <MayaShowcase
+                      models={portfolioState.mayaModels}
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onPlayInReel={handlePlayInReel}
+                      onAddModel={() => handleOpenEditModal('model')}
+                      onEditModel={(m) => handleOpenEditModal('model', m)}
+                      onSaveModel={handleSaveModel}
+                      onDeleteModel={handleDeleteModel}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'about') {
+                  sectionNode = (
+                    <AboutSection
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onContactClick={() => handleNavigate('contact')}
+                      onEditAbout={() => handleOpenEditModal('about')}
+                      onWatchReelClick={() => handlePlayInReel(0)}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'resume') {
+                  sectionNode = (
+                    <ResumeSection
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onEditResume={() => handleOpenEditModal('resume')}
+                      onContactClick={() => handleNavigate('contact')}
+                      onWatchReelClick={() => handlePlayInReel(0)}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else if (sec.id === 'contact') {
+                  sectionNode = (
+                    <ContactSection
+                      designerInfo={portfolioState.designerInfo}
+                      isOwnerMode={isOwnerMode}
+                      onEditContact={() => handleOpenEditModal('contact')}
+                      onUpdateDesignerInfo={handleSaveDesignerInfo}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onAddSectionBelow={onAddSectionBelow}
+                    />
+                  );
+                } else {
+                  sectionNode = (
+                    <CustomSection
+                      section={sec}
+                      isOwnerMode={isOwnerMode}
+                      currentTab={resolvedTabValue}
+                      onChangeTab={onChangeTab}
+                      showDragHandle={showDragHandle}
+                      onDragStartPointer={dragStartPointer}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onHide={onHide}
+                      onDelete={() => handleRemoveSection(sec.id)}
+                      onEditSettings={() => {
+                        setInsertBelowTargetId(undefined);
+                        setIsSectionManagerOpen(true);
+                      }}
+                      onAddSectionBelow={onAddSectionBelow}
+                      onUpdateSectionData={(dataUpdates) =>
+                        handleUpdateCustomSectionData(sec.id, dataUpdates)
+                      }
+                      onAddCard={() => handleAddCustomCard(sec.id)}
+                      onDeleteCard={(cardId) => handleDeleteCustomCard(sec.id, cardId)}
+                    />
+                  );
+                }
 
-              {/* On-Point Add Section Divider directly after each section in Owner Mode */}
-              {isOwnerMode && (
-                <div className="relative py-2 flex items-center justify-center group/add-divider z-20">
-                  <div className="absolute inset-x-4 sm:inset-x-8 h-px border-t border-dashed border-amber-500/25 group-hover/add-divider:border-amber-500/70 transition-colors"></div>
-                  <button
-                    onClick={() => handlePromptAddSectionBelow(sec.id)}
-                    className="relative px-3.5 py-1 rounded-full bg-zinc-950 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 hover:border-amber-400 text-[11px] font-mono font-bold uppercase tracking-wider transition-all shadow-xl flex items-center gap-1.5 cursor-pointer hover:scale-105"
-                    title={`Add a new section directly below ${sec.title}`}
+                return (
+                  <React.Fragment key={sec.id}>
+                    {sectionNode}
+                    {isOwnerMode && (
+                      <div className="relative py-2 flex items-center justify-center group/add-divider z-20">
+                        <div className="absolute inset-x-4 sm:inset-x-8 h-px border-t border-dashed border-amber-500/25 group-hover/add-divider:border-amber-500/70 transition-colors" />
+                        <button
+                          onClick={() => handlePromptAddSectionBelow(sec.id)}
+                          className="relative px-3.5 py-1 rounded-full bg-zinc-950 hover:bg-amber-500 text-zinc-300 hover:text-black border border-amber-500/40 hover:border-amber-400 text-[11px] font-mono font-bold uppercase tracking-wider transition-colors shadow-xl flex items-center gap-1.5 cursor-pointer"
+                          title={`Add a new section directly below ${sec.title}`}
+                        >
+                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Add Section Here</span>
+                        </button>
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              };
+
+              if (isOwnerMode && currentTabSections.length > 1) {
+                return (
+                  <Reorder.Group
+                    axis="y"
+                    values={currentTabSections.map((s) => s.id)}
+                    onReorder={handleDragReorderSections}
+                    className="flex flex-col"
                   >
-                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>+ Add Section Here</span>
-                  </button>
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
+                    {currentTabSections.map((sec, idx) => (
+                      <SortablePageSection
+                        key={sec.id}
+                        sectionId={sec.id}
+                        renderSection={(dragStartPointer) =>
+                          renderSectionItem(sec, idx, dragStartPointer)
+                        }
+                      />
+                    ))}
+                  </Reorder.Group>
+                );
+              }
+
+              return currentTabSections.map((sec, idx) => renderSectionItem(sec, idx));
+            })()}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1432,6 +1623,8 @@ export default function App() {
         sections={portfolioState.sections || DEFAULT_PORTFOLIO_SECTIONS}
         onToggleVisibility={handleToggleSectionVisibility}
         onReorder={handleReorderSection}
+        onDragReorder={handleDragReorderSections}
+        onMoveToTab={handleMoveSectionToTab}
         onAddSection={(newSec) => {
           handleAddCustomSection(newSec);
           setIsSectionManagerOpen(false);
@@ -1490,14 +1683,18 @@ export default function App() {
         onClose={() => setIsGitHubSyncOpen(false)}
         githubStatus={githubStatus}
         onRefreshStatus={handleRefreshGitHubStatus}
+        onStatusUpdated={setGithubStatus}
         commitMessage={commitMessage}
         onCommitMessageChange={setCommitMessage}
         autoPushOnSave={autoPushOnSave}
         onAutoPushOnSaveChange={setAutoPushOnSave}
         onSaveAndCommitToGitHub={handleSaveAndCommitToGitHub}
         onPullLatestFromGitHub={handlePullLatestFromGitHub}
+        onDownloadDataJson={handleDownloadDataJson}
+        onImportDataJson={handleImportDataJson}
         lastCommitInfo={lastCommitInfo}
         activeVersion={serverVersionRef.current}
+        lastUpdatedAt={portfolios.find((p) => p.id === activePortfolioId)?.updatedAt}
       />
 
       {/* Universal Owner Edit Modal */}

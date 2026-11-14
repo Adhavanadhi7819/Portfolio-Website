@@ -210,12 +210,21 @@ export interface DesignerInfo {
   outroText?: string;
 }
 
+export interface CustomMediaBlock {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  title?: string;
+  caption?: string;
+}
+
 export interface CustomSectionCard {
   id: string;
   title: string;
   description: string;
   tag?: string;
   imageUrl?: string;
+  videoUrl?: string;
   link?: string;
   linkLabel?: string;
 }
@@ -227,10 +236,13 @@ export interface CustomSectionData {
   bodyText?: string;
   imageUrl?: string;
   videoUrl?: string;
+  mediaItems?: CustomMediaBlock[];
   cards?: CustomSectionCard[];
   callToActionText?: string;
   callToActionLink?: string;
 }
+
+export type SectionTargetTab = 'hero' | 'projects' | 'about' | 'resume' | 'contact' | 'own';
 
 export interface PortfolioSectionConfig {
   id: string; // 'hero' | 'reel' | 'flagship' | 'projects' | 'maya' | 'proficiency' | 'about' | 'resume' | 'contact' | or custom id
@@ -238,6 +250,7 @@ export interface PortfolioSectionConfig {
   label: string; // for navbar navigation
   enabled: boolean;
   order: number;
+  targetTab?: SectionTargetTab;
   isCustom?: boolean;
   customData?: CustomSectionData;
 }

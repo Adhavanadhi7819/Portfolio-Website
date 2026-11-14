@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { validateContactForm } from '../utils/portfolioLogic';
-import { ContactFormData, ContactFormErrors, DesignerInfo } from '../types/portfolio';
+import { ContactFormData, ContactFormErrors, DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { submitContactMessage } from '../utils/portfolioServerSync';
@@ -34,6 +34,10 @@ interface ContactSectionProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -116,7 +120,11 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const inquiryOptions =
@@ -327,6 +335,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         <SectionControls
           sectionId="contact"
           sectionTitle="Contact & Inquiry Section"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}

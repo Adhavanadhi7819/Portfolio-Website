@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+portfolio-data/.github-token.json
+.playwright-cli/

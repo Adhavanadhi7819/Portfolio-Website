@@ -98,11 +98,11 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
         </div>
 
         {/* Center / Right: Action buttons */}
-        <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
+        <div className="flex flex-nowrap items-center gap-1 sm:gap-1.5 shrink-0">
           
           <button
             onClick={onAddProject}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-[10px] shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-[10px] shadow-sm transition-colors whitespace-nowrap cursor-pointer"
           >
             <Plus className="w-3 h-3" />
             <span>New Project</span>
@@ -110,7 +110,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
 
           <button
             onClick={onAddChapter}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
           >
             <Film className="w-3 h-3" />
             <span>Chapter</span>
@@ -119,7 +119,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           {onOpenSectionManager && (
             <button
               onClick={onOpenSectionManager}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm"
               title="Add, remove, reorder, or hide sections on the website"
             >
               <Layers className="w-3 h-3" />
@@ -130,7 +130,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           {onOpenPortfolioManager && (
             <button
               onClick={onOpenPortfolioManager}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm max-w-[170px]"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm max-w-[140px]"
               title={`Portfolios (${activePortfolioName || 'Main'})`}
             >
               <Briefcase className="w-3 h-3 shrink-0" />
@@ -148,7 +148,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
               }}
               defaultValue=""
               aria-label="Select section to edit"
-              className="px-2 py-1 rounded-lg bg-zinc-900 text-amber-300 border border-amber-500/40 text-[10px] font-mono uppercase tracking-wider focus:outline-none cursor-pointer hidden xl:block"
+              className="px-2 py-1 rounded-lg bg-zinc-900 text-amber-300 border border-amber-500/40 text-[10px] font-mono uppercase tracking-wider focus:outline-none cursor-pointer hidden 2xl:block"
             >
               <option value="" disabled>Edit Section...</option>
               <option value="hero">Hero, Title &amp; Stats</option>
@@ -162,16 +162,17 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
 
           <button
             onClick={onEditBio}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+            title="Global Hero & Portfolio Settings"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
           >
             <Settings className="w-3 h-3 text-amber-400" />
-            <span className="hidden lg:inline">Settings</span>
+            <span className="hidden 2xl:inline">Settings</span>
           </button>
 
           <button
             onClick={onExportJson}
             title="Download or Restore JSON backup file"
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[10px]"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden 2xl:flex items-center gap-1 text-[10px]"
           >
             <Download className="w-3 h-3 text-zinc-400" />
           </button>
@@ -179,7 +180,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           <button
             onClick={onImportJson}
             title="Restore or import portfolio JSON"
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[10px]"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden 2xl:flex items-center gap-1 text-[10px]"
           >
             <Upload className="w-3 h-3 text-zinc-400" />
           </button>
@@ -187,7 +188,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           <button
             onClick={onResetDefaults}
             title="Reset to original showcase data"
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer hidden lg:block"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer hidden xl:block"
           >
             <RotateCcw className="w-3 h-3" />
           </button>
@@ -195,16 +196,34 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           {onOpenGitHubSync && (
             <button
               onClick={onOpenGitHubSync}
-              title="GitHub Sync Status, Commit Controls & Vercel Setup Guide"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-amber-500/40 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+              title="Open GitHub Repository Sync (data.json) — Commit, Push & Pull"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                syncStatus === 'error'
+                  ? 'bg-red-950/70 hover:bg-red-900 text-red-200 border border-red-500/60'
+                  : githubConfigured
+                  ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/50'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-amber-500/40'
+              }`}
             >
               <span
                 className={`w-2 h-2 rounded-full shrink-0 ${
-                  githubConfigured ? 'bg-emerald-400' : 'bg-amber-400'
+                  syncStatus === 'saving'
+                    ? 'bg-amber-400 animate-pulse'
+                    : syncStatus === 'error'
+                    ? 'bg-red-400'
+                    : githubConfigured
+                    ? 'bg-emerald-400'
+                    : 'bg-amber-400'
                 }`}
               />
               <GitBranch className="w-3 h-3 text-amber-400" />
-              <span className="hidden sm:inline">GitHub</span>
+              <span className="hidden sm:inline">
+                {syncStatus === 'saving'
+                  ? 'Pushing...'
+                  : githubConfigured
+                  ? 'GitHub Sync'
+                  : 'Commit GitHub'}
+              </span>
             </button>
           )}
 
@@ -212,7 +231,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
             <button
               onClick={onOpenInbox}
               title="View received Direct Messages & test email forwarding"
-              className="relative flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+              className="relative flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
             >
               <Inbox className="w-3 h-3 text-amber-400" />
               <span className="hidden sm:inline">Inbox</span>
@@ -228,7 +247,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
             <button
               onClick={onOpenSecurity}
               title="Owner Security & Auth Settings"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
             >
               <ShieldCheck className="w-3 h-3 text-amber-400" />
               <span className="hidden sm:inline">Auth</span>
@@ -237,7 +256,7 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
 
           <button
             onClick={onLockMode}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wider text-[10px] font-bold transition-colors whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wider text-[10px] font-bold transition-colors whitespace-nowrap cursor-pointer"
           >
             <Lock className="w-3 h-3 text-red-400" />
             <span>Lock</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   GitBranch,
@@ -12,15 +12,24 @@ import {
   CloudDownload,
   Copy,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  Download,
+  Upload,
+  KeyRound,
+  Trash2
 } from 'lucide-react';
-import { GitHubSyncStatus } from '../utils/portfolioServerSync';
+import {
+  GitHubSyncStatus,
+  savePreviewGitHubToken,
+  clearPreviewGitHubToken
+} from '../utils/portfolioServerSync';
 
 interface GitHubSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   githubStatus: GitHubSyncStatus;
   onRefreshStatus: () => Promise<GitHubSyncStatus>;
+  onStatusUpdated?: (status: GitHubSyncStatus) => void;
   commitMessage: string;
   onCommitMessageChange: (msg: string) => void;
   autoPushOnSave: boolean;
@@ -37,8 +46,11 @@ interface GitHubSyncModalProps {
     version?: number;
     error?: string;
   }>;
+  onDownloadDataJson?: () => void;
+  onImportDataJson?: (jsonText: string) => { ok: boolean; error?: string };
   lastCommitInfo?: { sha: string; url: string; committedAt: string } | null;
   activeVersion?: number;
+  lastUpdatedAt?: string;
 }
 
 const VERCEL_ENV_VARS = [
@@ -74,16 +86,20 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   onClose,
   githubStatus,
   onRefreshStatus,
+  onStatusUpdated,
   commitMessage,
   onCommitMessageChange,
   autoPushOnSave,
   onAutoPushOnSaveChange,
   onSaveAndCommitToGitHub,
   onPullLatestFromGitHub,
+  onDownloadDataJson,
+  onImportDataJson,
   lastCommitInfo,
-  activeVersion
+  activeVersion,
+  lastUpdatedAt
 }) => {
-  const [activeTab, setActiveTab] = useState<'sync' | 'setup'>('sync');
+  const [activeTab, setActiveTab] = useState<'sync' | 'setup' | 'json'>('sync');
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
@@ -95,15 +111,46 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
   } | null>(null);
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
 
+  // Preview server token connector (only shown in local/AI Studio preview if GITHUB_TOKEN is missing)
+  const [showTokenConnect, setShowTokenConnect] = useState(false);
+  const [previewTokenInput, setPreviewTokenInput] = useState('');
+  const [previewOwnerInput, setPreviewOwnerInput] = useState('');
+  const [previewRepoInput, setPreviewRepoInput] = useState('');
+  const [isSavingToken, setIsSavingToken] = useState(false);
+
+  // JSON import input ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     setFeedback(null);
+    setShowTokenConnect(false);
+    setPreviewTokenInput('');
     setIsCheckingStatus(true);
-    onRefreshStatus().finally(() => setIsCheckingStatus(false));
+    onRefreshStatus()
+      .then((s) => {
+        setPreviewOwnerInput(s.owner || 'Adhavanadhi7819');
+        setPreviewRepoInput(s.repo || 'Portfolio-Website');
+      })
+      .finally(() => setIsCheckingStatus(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const isVercelRuntime = githubStatus.runtime === 'vercel';
+  const repoLabel =
+    githubStatus.owner && githubStatus.repo
+      ? `${githubStatus.owner}/${githubStatus.repo}`
+      : 'Adhavanadhi7819/Portfolio-Website';
+
+  const formattedLastSynced = (() => {
+    const iso = lastCommitInfo?.committedAt || lastUpdatedAt;
+    if (!iso) return 'Just now';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  })();
 
   const handleRefresh = async () => {
     setIsCheckingStatus(true);
@@ -123,7 +170,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       if (result.ok) {
         setFeedback({
           type: 'success',
-          message: `Committed data.json to ${githubStatus.owner}/${githubStatus.repo} (${githubStatus.branch || 'main'})`,
+          message: `Committed data.json to ${repoLabel} (${githubStatus.branch || 'main'})`,
           commitSha: result.commitSha,
           commitUrl: result.commitUrl
         });
@@ -153,7 +200,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       if (result.ok) {
         setFeedback({
           type: 'success',
-          message: `Pulled latest data.json (${result.source === 'github' ? 'GitHub repository' : 'local repository'}${result.version ? ` · v${result.version}` : ''}).`
+          message: `Pulled latest data.json from ${repoLabel}${result.version ? ` · v${result.version}` : ''}.`
         });
       } else {
         setFeedback({
@@ -171,10 +218,73 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
     }
   };
 
+  const handleConnectPreviewToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!previewTokenInput.trim()) return;
+    setIsSavingToken(true);
+    setFeedback(null);
+    try {
+      const res = await savePreviewGitHubToken({
+        token: previewTokenInput.trim(),
+        owner: previewOwnerInput.trim() || undefined,
+        repo: previewRepoInput.trim() || undefined,
+        branch: githubStatus.branch || 'main'
+      });
+      if (res.ok && res.status) {
+        onStatusUpdated?.(res.status);
+        setShowTokenConnect(false);
+        setPreviewTokenInput('');
+        setFeedback({
+          type: 'success',
+          message: `Preview server connected to ${res.status.owner}/${res.status.repo}. Edits here now commit straight to GitHub!`
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: res.error || 'Could not verify GitHub token.'
+        });
+      }
+    } finally {
+      setIsSavingToken(false);
+    }
+  };
+
+  const handleClearPreviewToken = async () => {
+    const next = await clearPreviewGitHubToken();
+    onStatusUpdated?.(next);
+    setFeedback({
+      type: 'success',
+      message: 'Disconnected preview GitHub token.'
+    });
+  };
+
   const handleCopyEnvName = (name: string) => {
     navigator.clipboard?.writeText(name);
     setCopiedVar(name);
     window.setTimeout(() => setCopiedVar(null), 1600);
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onImportDataJson) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      const res = onImportDataJson(text);
+      if (res.ok) {
+        setFeedback({
+          type: 'success',
+          message: 'Imported data.json into portfolio.'
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: res.error || 'Invalid portfolio JSON file.'
+        });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -182,11 +292,11 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="github-sync-modal-title"
-      className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -198,12 +308,12 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
             <div>
               <h2
                 id="github-sync-modal-title"
-                className="text-lg font-heading font-black text-white uppercase tracking-tight"
+                className="text-base sm:text-lg font-heading font-black text-white tracking-tight"
               >
-                GitHub <span className="text-amber-500">CMS Sync</span>
+                GitHub Repository Sync (<code className="text-amber-400 font-mono text-sm">data.json</code>)
               </h2>
               <p className="text-[11px] font-mono text-zinc-400">
-                Permanently commits data.json to GitHub without localStorage or external DBs
+                Direct Contents API commits — zero localStorage dependency
               </p>
             </div>
           </div>
@@ -218,36 +328,47 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
           </button>
         </div>
 
-        {/* Sub-navigation Tabs */}
-        <div className="px-6 pt-4">
-          <div role="tablist" aria-label="GitHub CMS views" className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-zinc-900 border border-zinc-800">
+        {/* Sub-navigation Underline Tabs */}
+        <div className="px-5 sm:px-6 border-b border-zinc-800/90 bg-zinc-900/30">
+          <div role="tablist" aria-label="GitHub CMS views" className="flex flex-wrap sm:flex-nowrap items-center gap-4 sm:gap-6">
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'sync'}
               onClick={() => setActiveTab('sync')}
-              className={`py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`py-3 text-[11px] sm:text-xs font-mono font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'sync'
-                  ? 'bg-amber-500 text-black shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'border-amber-500 text-white'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <GitCommitHorizontal className="w-3.5 h-3.5" />
-              <span>Sync &amp; Commit</span>
+              Commit &amp; Repo Status
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'setup'}
               onClick={() => setActiveTab('setup')}
-              className={`py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`py-3 text-[11px] sm:text-xs font-mono font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'setup'
-                  ? 'bg-amber-500 text-black shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'border-amber-500 text-white'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Vercel Setup Guide</span>
+              Vercel Token Setup Guide
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'json'}
+              onClick={() => setActiveTab('json')}
+              className={`py-3 text-[11px] sm:text-xs font-mono font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                activeTab === 'json'
+                  ? 'border-amber-500 text-white'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Download / Import <code className="text-[11px]">data.json</code>
             </button>
           </div>
         </div>
@@ -256,174 +377,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
         <div className="p-6 overflow-y-auto space-y-5">
           {activeTab === 'sync' ? (
             <>
-              {/* Connection Status Indicator Card */}
-              <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`inline-block w-2.5 h-2.5 rounded-full ${
-                        githubStatus.githubConfigured
-                          ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.75)]'
-                          : 'bg-amber-400'
-                      }`}
-                    />
-                    <span className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-100">
-                      {githubStatus.githubConfigured
-                        ? 'GITHUB_TOKEN Connected'
-                        : 'Server Token Not Configured'}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleRefresh}
-                    disabled={isCheckingStatus}
-                    className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                    title="Re-check server GitHub connection status"
-                    aria-label="Refresh connection status"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 ${isCheckingStatus ? 'animate-spin text-amber-400' : ''}`}
-                    />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
-                  <div className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-zinc-400">TOKEN</span>
-                    <span
-                      className={githubStatus.hasToken ? 'text-emerald-400 font-bold' : 'text-red-400'}
-                    >
-                      {githubStatus.hasToken ? 'SET' : 'MISSING'}
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-zinc-400">OWNER</span>
-                    <span
-                      className={githubStatus.hasOwner ? 'text-emerald-400 font-bold' : 'text-red-400'}
-                    >
-                      {githubStatus.hasOwner ? githubStatus.owner : 'MISSING'}
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-zinc-400">REPO</span>
-                    <span
-                      className={githubStatus.hasRepo ? 'text-emerald-400 font-bold' : 'text-red-400'}
-                    >
-                      {githubStatus.hasRepo ? githubStatus.repo : 'MISSING'}
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-zinc-400">BRANCH</span>
-                    <span className="text-zinc-200 font-bold">{githubStatus.branch || 'main'}</span>
-                  </div>
-                </div>
-
-                {!githubStatus.githubConfigured && (
-                  <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Add <code className="text-amber-300">GITHUB_TOKEN</code>,{' '}
-                    <code className="text-amber-300">GITHUB_OWNER</code>, and{' '}
-                    <code className="text-amber-300">GITHUB_REPO</code> in Vercel Environment Variables
-                    so edits commit straight to <code className="text-zinc-200">data.json</code>. See the{' '}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('setup')}
-                      className="text-amber-400 underline cursor-pointer"
-                    >
-                      Vercel Setup Guide
-                    </button>{' '}
-                    tab.
-                  </p>
-                )}
-              </div>
-
-              {/* Auto-Push on Save Toggle */}
-              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">
-                      Auto-Push to GitHub on Save
-                    </span>
-                    {githubStatus.githubConfigured && (
-                      <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        Required
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Every Owner Mode save commits &amp; pushes <code className="text-zinc-300">data.json</code>{' '}
-                    to GitHub first. Without a successful push, the save is rolled back.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={githubStatus.githubConfigured ? true : autoPushOnSave}
-                  disabled={githubStatus.githubConfigured}
-                  onClick={() => onAutoPushOnSaveChange(!autoPushOnSave)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
-                    githubStatus.githubConfigured || autoPushOnSave
-                      ? 'bg-amber-500 border-amber-400'
-                      : 'bg-zinc-800 border-zinc-700'
-                  } ${githubStatus.githubConfigured ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${
-                      githubStatus.githubConfigured || autoPushOnSave ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Customizable Git Commit Message Input */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="github-commit-message-input"
-                    className="block text-xs font-mono text-zinc-300 uppercase tracking-wider"
-                  >
-                    Git Commit Message
-                  </label>
-                  {activeVersion ? (
-                    <span className="text-[10px] font-mono text-zinc-500">
-                      data.json v{activeVersion}
-                    </span>
-                  ) : null}
-                </div>
-                <input
-                  type="text"
-                  id="github-commit-message-input"
-                  value={commitMessage}
-                  onChange={(e) => onCommitMessageChange(e.target.value)}
-                  placeholder="chore(portfolio): update data.json from Owner Mode"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={handlePushClick}
-                  disabled={isPushing || isPulling}
-                  className="py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <CloudUpload className={`w-4 h-4 ${isPushing ? 'animate-pulse' : ''}`} />
-                  <span>{isPushing ? 'Committing...' : 'Save & Commit to GitHub'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePullClick}
-                  disabled={isPulling || isPushing}
-                  className="py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-zinc-100 border border-zinc-700 font-bold uppercase tracking-wider text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <CloudDownload className={`w-4 h-4 text-amber-400 ${isPulling ? 'animate-pulse' : ''}`} />
-                  <span>{isPulling ? 'Pulling...' : 'Pull Latest from GitHub'}</span>
-                </button>
-              </div>
-
-              {/* Feedback Banner */}
+              {/* Feedback Banner at top if error or success */}
               {feedback && (
                 <div
                   className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
@@ -461,28 +415,293 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                 </div>
               )}
 
-              {/* Last Commit Footer Info */}
-              {lastCommitInfo && !feedback && (
-                <div className="px-3.5 py-2.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
-                  <span>
-                    Last pushed commit:{' '}
-                    <strong className="text-zinc-200">{lastCommitInfo.sha.slice(0, 7)}</strong>
+              {/* Server Connection Status Card */}
+              <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                    Server Connection Status
                   </span>
-                  {lastCommitInfo.url && (
-                    <a
-                      href={lastCommitInfo.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300"
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border ${
+                        feedback?.type === 'error'
+                          ? 'bg-red-950/50 border-red-500/40 text-red-300'
+                          : githubStatus.githubConfigured
+                          ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
+                          : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
+                      }`}
                     >
-                      <span>View on GitHub</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
+                      {feedback?.type === 'error' ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Commit Error</span>
+                        </>
+                      ) : githubStatus.githubConfigured ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Connected &amp; Synced</span>
+                        </>
+                      ) : (
+                        <>
+                          <CloudDownload className="w-3 h-3" />
+                          <span>Pull Ready · Connect Token to Push</span>
+                        </>
+                      )}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      disabled={isCheckingStatus}
+                      className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Refresh GitHub connection status"
+                      aria-label="Refresh connection status"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isCheckingStatus ? 'animate-spin text-amber-400' : ''}`}
+                      />
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {/* 4-cell Repository Info Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono">
+                  <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/80 space-y-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">
+                      Target Repository
+                    </span>
+                    <span className="block text-zinc-100 font-semibold truncate">{repoLabel}</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/80 space-y-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">
+                      Branch &amp; File Path
+                    </span>
+                    <span className="block text-zinc-100 font-semibold">
+                      {githubStatus.branch || 'main'} · /data.json
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/80 space-y-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">
+                      Server GITHUB_TOKEN
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={
+                          githubStatus.hasToken
+                            ? 'text-emerald-400 font-semibold'
+                            : 'text-amber-400 font-semibold'
+                        }
+                      >
+                        {githubStatus.hasToken
+                          ? githubStatus.tokenSource === 'preview-file'
+                            ? 'Connected in Preview Server'
+                            : 'Configured in Server Env'
+                          : 'Not Set in Preview Env'}
+                      </span>
+                      {!isVercelRuntime && githubStatus.tokenSource === 'preview-file' && (
+                        <button
+                          type="button"
+                          onClick={handleClearPreviewToken}
+                          className="p-1 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                          title="Disconnect preview token"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/80 space-y-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-zinc-500">
+                      Last Synced
+                    </span>
+                    <span className="block text-zinc-200 font-semibold">
+                      {formattedLastSynced}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Inline Preview Token Connect Form (only when missing in local/AI Studio preview) */}
+                {!githubStatus.hasToken && !isVercelRuntime && (
+                  <div className="p-3 rounded-xl bg-zinc-950/80 border border-amber-500/30 space-y-2.5">
+                    {!showTokenConnect ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        <span className="text-zinc-300">
+                          Vercel already has <code className="text-amber-300">GITHUB_TOKEN</code>. Connect a token here if you also want to push directly from AI Studio Preview.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowTokenConnect(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 font-mono font-bold uppercase text-[10px] transition-colors cursor-pointer shrink-0"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          <span>Connect Preview Token</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleConnectPreviewToken} className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-mono font-bold uppercase text-amber-400">
+                            Server-Side Preview GitHub Token
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowTokenConnect(false)}
+                            className="text-[11px] text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={previewOwnerInput}
+                            onChange={(e) => setPreviewOwnerInput(e.target.value)}
+                            placeholder="Owner (Adhavanadhi7819)"
+                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
+                          />
+                          <input
+                            type="text"
+                            value={previewRepoInput}
+                            onChange={(e) => setPreviewRepoInput(e.target.value)}
+                            placeholder="Repo (Portfolio-Website)"
+                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="password"
+                            value={previewTokenInput}
+                            onChange={(e) => setPreviewTokenInput(e.target.value)}
+                            placeholder="github_pat_... (stored strictly server-side, never in browser)"
+                            className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                            required
+                          />
+                          <button
+                            type="submit"
+                            disabled={isSavingToken}
+                            className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
+                          >
+                            {isSavingToken ? 'Verifying...' : 'Save'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {/* Latest Commit Link */}
+                {lastCommitInfo && (
+                  <div className="pt-1 flex items-center justify-between gap-2 text-xs font-mono">
+                    <span className="text-emerald-400 flex items-center gap-1.5">
+                      <GitCommitHorizontal className="w-3.5 h-3.5" />
+                      <span>Latest Commit: {lastCommitInfo.sha.slice(0, 7)}</span>
+                    </span>
+                    {lastCommitInfo.url && (
+                      <a
+                        href={lastCommitInfo.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-white text-[11px] transition-colors"
+                      >
+                        <span>View on GitHub</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Mandatory Auto-Push Enforcement Card */}
+              <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">
+                      Auto-Commit &amp; Push on Every Save
+                    </span>
+                    {githubStatus.githubConfigured && (
+                      <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Every Owner Mode edit commits &amp; pushes <code className="text-zinc-300">data.json</code>{' '}
+                    first. Without a successful GitHub push, changes are rolled back.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={githubStatus.githubConfigured ? true : autoPushOnSave}
+                  disabled={githubStatus.githubConfigured}
+                  onClick={() => onAutoPushOnSaveChange(!autoPushOnSave)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
+                    githubStatus.githubConfigured || autoPushOnSave
+                      ? 'bg-amber-500 border-amber-400'
+                      : 'bg-zinc-800 border-zinc-700'
+                  } ${githubStatus.githubConfigured ? 'opacity-85 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${
+                      githubStatus.githubConfigured || autoPushOnSave ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Customizable Git Commit Message Input */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="github-commit-message-input"
+                    className="block text-xs font-mono text-zinc-300"
+                  >
+                    GitHub Commit Message
+                  </label>
+                  {activeVersion ? (
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      data.json v{activeVersion}
+                    </span>
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  id="github-commit-message-input"
+                  value={commitMessage}
+                  onChange={(e) => onCommitMessageChange(e.target.value)}
+                  placeholder="chore(portfolio): update data.json via Owner Mode"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs sm:text-sm font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handlePushClick}
+                  disabled={isPushing || isPulling}
+                  className="flex-1 min-w-[200px] py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <CloudUpload className={`w-4 h-4 ${isPushing ? 'animate-pulse' : ''}`} />
+                  <span>{isPushing ? 'Committing...' : 'Commit data.json to GitHub'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePullClick}
+                  disabled={isPulling || isPushing}
+                  className="py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-zinc-100 border border-zinc-700 font-bold uppercase tracking-wider text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <CloudDownload className={`w-4 h-4 text-amber-400 ${isPulling ? 'animate-pulse' : ''}`} />
+                  <span>{isPulling ? 'Pulling...' : 'Pull Latest from GitHub'}</span>
+                </button>
+              </div>
             </>
-          ) : (
+          ) : activeTab === 'setup' ? (
             /* Vercel Setup Guide Tab */
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
@@ -491,11 +710,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   <span>Vercel Environment Variables</span>
                 </div>
                 <p className="text-xs text-zinc-300 leading-relaxed">
-                  Add these environment variables in your Vercel Project Dashboard under{' '}
-                  <strong className="text-white">Settings → Environment Variables</strong>, then
-                  redeploy once. Tokens stay strictly server-side inside{' '}
-                  <code className="text-amber-300">/api/update-portfolio</code> and are never sent to
-                  browsers.
+                  In Vercel under <strong className="text-white">Settings → Environment Variables</strong>, keep only server-side variables (never <code className="text-red-300">VITE_GITHUB_TOKEN</code>). With <strong className="text-white">System Environment Variables</strong> enabled, owner/repo/branch are auto-detected.
                 </p>
               </div>
 
@@ -517,7 +732,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                               : 'bg-zinc-800 text-zinc-400'
                           }`}
                         >
-                          {item.required ? 'Required' : 'Optional'}
+                          {item.required ? 'Required' : 'Auto / Optional'}
                         </span>
                       </div>
 
@@ -538,22 +753,50 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : (
+            /* Download / Import data.json Tab */
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
+                  Backup &amp; Restore Central data.json
+                </h3>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Export your full portfolio snapshot (sections, custom videos/photos, projects, resume, and timeline) as <code className="text-zinc-100">data.json</code> or restore from a saved backup file.
+                </p>
 
-              <div className="p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800 text-[11px] text-zinc-400 space-y-1">
-                <div className="font-mono font-bold text-zinc-200 uppercase">How Auto-Sync Works</div>
-                <p>
-                  1. Unlock Owner Edit Mode on your deployed site using your{' '}
-                  <code className="text-zinc-200">ADMIN_PIN</code>.
-                </p>
-                <p>
-                  2. Make edits anywhere and click Save — <code className="text-zinc-200">/api/update-portfolio</code>{' '}
-                  automatically commits the updated <code className="text-zinc-200">data.json</code> to your{' '}
-                  <code className="text-zinc-200">{githubStatus.branch || 'main'}</code> branch.
-                </p>
-                <p>
-                  3. Visitors immediately receive the live updated <code className="text-zinc-200">data.json</code>{' '}
-                  straight from GitHub even before Vercel finishes rebuilding.
-                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {onDownloadDataJson && (
+                    <button
+                      type="button"
+                      onClick={onDownloadDataJson}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download data.json</span>
+                    </button>
+                  )}
+
+                  {onImportDataJson && (
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={handleImportFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                      >
+                        <Upload className="w-4 h-4 text-amber-400" />
+                        <span>Import data.json</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}

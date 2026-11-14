@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight, Download, Edit3, Compass, Mail, Plus, Trash2, X } from 'lucide-react';
 import { DESIGNER_INFO } from '../data/portfolioData';
-import { DesignerInfo } from '../types/portfolio';
+import { DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
@@ -24,6 +24,10 @@ interface HeroSectionProps {
   onMoveDown?: () => void;
   onHide?: () => void;
   onAddSectionBelow?: () => void;
+  currentTab?: SectionTargetTab;
+  onChangeTab?: (tab: SectionTargetTab) => void;
+  showDragHandle?: boolean;
+  onDragStartPointer?: (e: React.PointerEvent) => void;
 }
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -41,7 +45,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onMoveUp,
   onMoveDown,
   onHide,
-  onAddSectionBelow
+  onAddSectionBelow,
+  currentTab,
+  onChangeTab,
+  showDragHandle,
+  onDragStartPointer
 }) => {
   const defaultStats = [
     { number: '6+', label: 'Unreal Environments & Levels' },
@@ -122,6 +130,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <SectionControls
           sectionId="hero"
           sectionTitle="Hero & Introduction"
+          currentTab={currentTab}
+          onChangeTab={onChangeTab}
+          showDragHandle={showDragHandle}
+          onDragStartPointer={onDragStartPointer}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           onMoveUp={onMoveUp}
