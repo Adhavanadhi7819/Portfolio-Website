@@ -78,7 +78,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         ];
 
   return (
-    <section id="about" className="py-8 sm:py-10 relative bg-[#050507] border-b border-zinc-800/80 scroll-mt-[68px]">
+    <section id="about" className="py-8 sm:py-10 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
       {/* Section Controls for Owner */}
       {isOwnerMode && (
         <SectionControls
@@ -98,10 +98,10 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         />
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="max-w-3xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-8">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 mb-1.5">
               <UserCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>Profile · Philosophy · Career Trajectory</span>
@@ -114,7 +114,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 label="About Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={
                   info.aboutSubheading ||
@@ -125,10 +125,10 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 isOwnerMode={isOwnerMode}
                 multiline={true}
                 label="About Subtitle"
-                as="p"
-                className="text-justify"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
-            </div>
+            </p>
           </div>
 
           {isOwnerMode && (
@@ -146,7 +146,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         {/* Balanced 12-Column Identity + Philosophy Split (Zero Wasted Vertical Space) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {/* Left Column (4 cols): Portrait & Quick Studio Summary Card */}
-          <div className="lg:col-span-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col justify-between shadow-xl">
+          <div className="lg:col-span-4 bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 rounded-2xl overflow-hidden flex flex-col justify-between shadow-xl">
             <div className="relative aspect-[4/3.8] w-full overflow-hidden bg-zinc-950">
               <img
                 src={info.heroPhotoUrl || '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png'}
@@ -192,17 +192,20 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                   label="Callout Title"
                   className="font-semibold text-white block mb-1"
                 />
-                <InlineEdit
-                  value={
-                    info.aboutCalloutText ||
-                    'Available for Junior Game Designer, Level Designer, or 3D Artist roles with game studios worldwide.'
-                  }
-                  onSave={(val) => onUpdateDesignerInfo?.({ aboutCalloutText: val })}
-                  isOwnerMode={isOwnerMode}
-                  multiline={true}
-                  label="Callout Subtitle"
-                  className="text-zinc-400 text-justify"
-                />
+                <p className="text-zinc-400 text-justify [text-justify:inter-word] hyphens-auto">
+                  <InlineEdit
+                    value={
+                      info.aboutCalloutText ||
+                      'Available for Junior Game Designer, Level Designer, or 3D Artist roles with game studios worldwide.'
+                    }
+                    onSave={(val) => onUpdateDesignerInfo?.({ aboutCalloutText: val })}
+                    isOwnerMode={isOwnerMode}
+                    multiline={true}
+                    label="Callout Subtitle"
+                    as="span"
+                    className="text-zinc-400 text-justify [text-justify:inter-word]"
+                  />
+                </p>
               </div>
 
               {onContactClick && (
@@ -221,7 +224,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
           {/* Right Column (8 cols): Introduction & Philosophy + 3 Core Design Pillars */}
           <div className="lg:col-span-8 flex flex-col justify-between gap-5">
             {/* Introduction & Philosophy Box */}
-            <div className="flex-1 p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-center space-y-3">
+            <div className="flex-1 p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 flex flex-col justify-center space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
                   Introduction &amp; Design Philosophy
@@ -237,7 +240,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                 )}
               </div>
 
-              <blockquote className="text-sm sm:text-base text-zinc-200 leading-relaxed text-justify">
+              <blockquote className="text-sm sm:text-base text-zinc-200 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                 <InlineEdit
                   value={info.aboutIntro || info.introQuote || ''}
                   onSave={(val) =>
@@ -246,8 +249,8 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                   isOwnerMode={isOwnerMode}
                   multiline={true}
                   label="Intro Philosophy Quote"
-                  as="p"
-                  className="text-justify"
+                  as="span"
+                  className="text-zinc-200 text-justify [text-justify:inter-word]"
                 />
               </blockquote>
             </div>
@@ -262,7 +265,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                     key={idx}
                     whileHover={{ y: -3, borderColor: 'rgba(192, 169, 223, 0.45)' }}
                     transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                    className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 space-y-2.5 flex flex-col justify-start"
+                    className="p-5 rounded-2xl bg-zinc-950/60 backdrop-blur-md border border-zinc-800/80 space-y-2.5 flex flex-col justify-start"
                   >
                     <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                       <Icon className="w-4 h-4" />

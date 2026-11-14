@@ -126,6 +126,7 @@ export interface CanonicalDataBundle {
   version: number;
   updatedAt: string;
   activePortfolioId: string;
+  authenticatorPaired?: boolean;
   portfolios: unknown[];
 }
 
@@ -219,6 +220,7 @@ export interface HandleUpdateOptions {
   isPaired?: boolean;
   onTwoFactorVerified?: () => void;
   onResetPairingRequested?: () => void;
+  onRemotePairingSynced?: (paired: boolean) => void;
 }
 
 type NodeReq = IncomingMessage & {
@@ -519,6 +521,9 @@ function readLocalDataJson(): CanonicalDataBundle | null {
         version: typeof parsed.version === 'number' ? parsed.version : 1,
         updatedAt: parsed.updatedAt || new Date().toISOString(),
         activePortfolioId: parsed.activePortfolioId || 'default_portfolio',
+        ...(typeof parsed.authenticatorPaired === 'boolean'
+          ? { authenticatorPaired: parsed.authenticatorPaired }
+          : {}),
         portfolios: parsed.portfolios
       };
     }
@@ -546,11 +551,18 @@ function writeLocalDataJsonIfWritable(bundle: CanonicalDataBundle): boolean {
 
 export function normalizeIncomingBundle(
   rawPayload: unknown,
-  fallbackVersion = 0
+  fallbackVersion = 0,
+  preserveAuthenticatorPaired?: boolean
 ): CanonicalDataBundle | null {
   if (!rawPayload || typeof rawPayload !== 'object') return null;
   const obj = rawPayload as Record<string, unknown>;
   const now = new Date().toISOString();
+  const resolvedPaired =
+    typeof obj.authenticatorPaired === 'boolean'
+      ? obj.authenticatorPaired
+      : typeof preserveAuthenticatorPaired === 'boolean'
+      ? preserveAuthenticatorPaired
+      : undefined;
 
   // Case 1: Full bundle with portfolios[]
   if (Array.isArray(obj.portfolios) && obj.portfolios.length > 0) {
@@ -564,6 +576,7 @@ export function normalizeIncomingBundle(
         typeof obj.activePortfolioId === 'string' && obj.activePortfolioId.trim()
           ? obj.activePortfolioId.trim()
           : 'default_portfolio',
+      ...(typeof resolvedPaired === 'boolean' ? { authenticatorPaired: resolvedPaired } : {}),
       portfolios: obj.portfolios
     };
   }
@@ -579,6 +592,7 @@ export function normalizeIncomingBundle(
       version: fallbackVersion + 1,
       updatedAt: now,
       activePortfolioId: activeId,
+      ...(typeof resolvedPaired === 'boolean' ? { authenticatorPaired: resolvedPaired } : {}),
       portfolios: [
         {
           id: activeId,
@@ -599,6 +613,7 @@ export function normalizeIncomingBundle(
       version: fallbackVersion + 1,
       updatedAt: now,
       activePortfolioId: 'default_portfolio',
+      ...(typeof resolvedPaired === 'boolean' ? { authenticatorPaired: resolvedPaired } : {}),
       portfolios: [
         {
           id: 'default_portfolio',
@@ -914,6 +929,9 @@ export async function fetchGitHubDataJson(): Promise<{
             version: typeof rawObj.version === 'number' ? rawObj.version : 1,
             updatedAt: rawObj.updatedAt || new Date().toISOString(),
             activePortfolioId: rawObj.activePortfolioId || 'default_portfolio',
+            ...(typeof rawObj.authenticatorPaired === 'boolean'
+              ? { authenticatorPaired: rawObj.authenticatorPaired }
+              : {}),
             portfolios: rawObj.portfolios
           }
         };
@@ -964,6 +982,9 @@ export async function fetchGitHubDataJson(): Promise<{
         version: typeof rawObj.version === 'number' ? rawObj.version : 1,
         updatedAt: rawObj.updatedAt || new Date().toISOString(),
         activePortfolioId: rawObj.activePortfolioId || 'default_portfolio',
+        ...(typeof rawObj.authenticatorPaired === 'boolean'
+          ? { authenticatorPaired: rawObj.authenticatorPaired }
+          : {}),
         portfolios: rawObj.portfolios
       };
     }
@@ -1063,6 +1084,121 @@ function getQueryParam(req: NodeReq, key: string): string {
   }
 }
 
+export async function resolveCanonicalPairingStatus(params: {
+  cookieHeader?: string;
+  localPaired?: boolean;
+  skipRemote?: boolean;
+  onRemotePairingSynced?: (paired: boolean) => void;
+}): Promise<{ isPaired: boolean; source: 'remote' | 'local-data' | 'local-auth' | 'cookie' }> {
+  const cookies = parseCookies(params.cookieHeader);
+  const hasPairedCookie = verifyTotpPairedToken(cookies[TOTP_PAIRED_COOKIE]);
+  const authMeta = readLocalAuthStoreMeta();
+  const localBundle = readLocalDataJson();
+  const status = getGitHubConfigStatus();
+
+  if (!params.skipRemote && status.canPullFromGitHub) {
+    try {
+      const remote = await Promise.race([
+        fetchGitHubDataJson(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))
+      ]);
+      if (
+        remote?.exists &&
+        remote.data &&
+        typeof remote.data.authenticatorPaired === 'boolean'
+      ) {
+        const remotePaired = remote.data.authenticatorPaired;
+        if (localBundle && localBundle.authenticatorPaired !== remotePaired) {
+          writeLocalDataJsonIfWritable({ ...localBundle, authenticatorPaired: remotePaired });
+        }
+        params.onRemotePairingSynced?.(remotePaired);
+        return { isPaired: remotePaired, source: 'remote' };
+      }
+    } catch {}
+  }
+
+  if (typeof localBundle?.authenticatorPaired === 'boolean') {
+    return { isPaired: localBundle.authenticatorPaired, source: 'local-data' };
+  }
+
+  if (typeof params.localPaired === 'boolean') {
+    return {
+      isPaired: Boolean(params.localPaired || hasPairedCookie || authMeta.paired),
+      source: hasPairedCookie ? 'cookie' : 'local-auth'
+    };
+  }
+
+  return {
+    isPaired: Boolean(hasPairedCookie || authMeta.paired),
+    source: hasPairedCookie ? 'cookie' : 'local-auth'
+  };
+}
+
+export async function syncAuthenticatorPairedState(
+  paired: boolean,
+  onLocalCommitted?: (bundle: CanonicalDataBundle) => void
+): Promise<void> {
+  const status = getGitHubConfigStatus();
+  const localBundle = readLocalDataJson();
+
+  if (localBundle && localBundle.authenticatorPaired !== paired) {
+    const updatedLocal: CanonicalDataBundle = {
+      ...localBundle,
+      authenticatorPaired: paired
+    };
+    if (writeLocalDataJsonIfWritable(updatedLocal)) {
+      onLocalCommitted?.(updatedLocal);
+    }
+  }
+
+  if (!status.githubConfigured) {
+    return;
+  }
+
+  try {
+    const remote = await Promise.race([
+      fetchGitHubDataJson(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+    ]);
+    const baseBundle =
+      remote?.exists && remote.data && isRemoteNewerThanLocal(remote.data, localBundle)
+        ? remote.data
+        : remote?.exists && remote.data
+        ? remote.data
+        : localBundle;
+
+    if (!baseBundle) return;
+    if (baseBundle.authenticatorPaired === paired) {
+      if (localBundle && localBundle.authenticatorPaired !== paired) {
+        writeLocalDataJsonIfWritable({ ...baseBundle, authenticatorPaired: paired });
+      }
+      return;
+    }
+
+    const nextVersion = Math.max(baseBundle.version || 0, localBundle?.version || 0) + 1;
+    const nextBundle: CanonicalDataBundle = {
+      ...baseBundle,
+      version: nextVersion,
+      updatedAt: new Date().toISOString(),
+      authenticatorPaired: paired
+    };
+
+    await Promise.race([
+      commitGitHubDataJson({
+        bundle: nextBundle,
+        commitMessage: `chore(security): mark authenticator ${paired ? 'connected' : 'disconnected'}`
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500))
+    ]);
+
+    if (writeLocalDataJsonIfWritable(nextBundle)) {
+      onLocalCommitted?.(nextBundle);
+    }
+  } catch {
+    // Non-fatal: cookie and local pairing state still apply immediately
+  }
+}
+
 export async function handleUpdatePortfolioRequest(
   req: NodeReq,
   res: ServerResponse,
@@ -1101,13 +1237,31 @@ export async function handleUpdatePortfolioRequest(
     }
 
     if (action === 'status') {
-      const cookies = parseCookies(req.headers.cookie);
-      const hasPairedCookie = verifyTotpPairedToken(cookies[TOTP_PAIRED_COOKIE]);
       const authMeta = readLocalAuthStoreMeta();
-      const effectivePaired =
-        typeof options.isPaired === 'boolean'
-          ? options.isPaired
-          : Boolean(hasPairedCookie || authMeta.paired);
+      const skipRemotePairing = getQueryParam(req, 'skipRemotePairing') === '1';
+      let effectivePaired: boolean;
+      if (typeof options.isPaired === 'boolean') {
+        if (!skipRemotePairing) {
+          const resolved = await resolveCanonicalPairingStatus({
+            cookieHeader: req.headers.cookie,
+            localPaired: options.isPaired,
+            onRemotePairingSynced: options.onRemotePairingSynced
+          });
+          effectivePaired = resolved.source === 'remote' || resolved.source === 'local-data'
+            ? resolved.isPaired
+            : options.isPaired;
+        } else {
+          effectivePaired = options.isPaired;
+        }
+      } else {
+        const resolved = await resolveCanonicalPairingStatus({
+          cookieHeader: req.headers.cookie,
+          skipRemote: skipRemotePairing,
+          onRemotePairingSynced: options.onRemotePairingSynced
+        });
+        effectivePaired = resolved.isPaired;
+      }
+
       const canShowInitialSetupQr = !effectivePaired;
       const activeSecret = resolveOwnerTotpSecret(options.totpSecret || authMeta.secret);
       sendJson(res, 200, {
@@ -1234,6 +1388,7 @@ export async function handleUpdatePortfolioRequest(
       return;
     }
     options.onResetPairingRequested?.();
+    await syncAuthenticatorPairedState(false, options.onLocalCommitted);
     sendJson(res, 200, {
       ok: true,
       runtime: runtimeMode,
@@ -1275,6 +1430,7 @@ export async function handleUpdatePortfolioRequest(
     }
 
     options.onTwoFactorVerified?.();
+    await syncAuthenticatorPairedState(true, options.onLocalCommitted);
     const token = createAdminSessionToken();
     setSessionCookie(req, res, token);
     setTotpPairedCookie(req, res);
@@ -1398,6 +1554,7 @@ export async function handleUpdatePortfolioRequest(
     if (relinkDevice) {
       clearTotpPairedCookie(res);
       options.onResetPairingRequested?.();
+      await syncAuthenticatorPairedState(false, options.onLocalCommitted);
       sendJson(res, 200, {
         ok: true,
         token,
@@ -1409,6 +1566,7 @@ export async function handleUpdatePortfolioRequest(
     }
 
     setTotpPairedCookie(req, res);
+    await syncAuthenticatorPairedState(true, options.onLocalCommitted);
     sendJson(res, 200, {
       ok: true,
       token,
@@ -1531,6 +1689,7 @@ export async function handleUpdatePortfolioRequest(
   if (action === 'unpair-2fa') {
     clearTotpPairedCookie(res);
     options.onResetPairingRequested?.();
+    await syncAuthenticatorPairedState(false, options.onLocalCommitted);
     sendJson(res, 200, {
       ok: true,
       isPaired: false,
@@ -1609,6 +1768,7 @@ export async function handleUpdatePortfolioRequest(
   const rawData = body.data !== undefined ? body.data : body;
   const localExisting = readLocalDataJson();
   let baselineVersion = localExisting?.version ?? 0;
+  let existingPaired = localExisting?.authenticatorPaired;
 
   if (status.githubConfigured) {
     try {
@@ -1616,12 +1776,15 @@ export async function handleUpdatePortfolioRequest(
       if (remoteExisting.data?.version && remoteExisting.data.version > baselineVersion) {
         baselineVersion = remoteExisting.data.version;
       }
+      if (typeof remoteExisting.data?.authenticatorPaired === 'boolean') {
+        existingPaired = remoteExisting.data.authenticatorPaired;
+      }
     } catch {
       // Proceed using local baseline version; commitGitHubDataJson fetches SHA separately
     }
   }
 
-  const nextBundle = normalizeIncomingBundle(rawData, baselineVersion);
+  const nextBundle = normalizeIncomingBundle(rawData, baselineVersion, existingPaired);
   if (!nextBundle) {
     sendJson(res, 400, {
       ok: false,

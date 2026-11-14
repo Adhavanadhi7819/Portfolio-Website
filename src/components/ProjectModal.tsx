@@ -122,7 +122,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <h2 id="modal-title" className="text-2xl sm:text-3xl font-heading font-black text-white">
               {project.title}
             </h2>
-            <p className="text-sm text-zinc-300 mt-3 leading-relaxed text-justify">
+            <p className="text-sm text-zinc-300 mt-3 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               {project.description}
             </p>
           </div>
@@ -134,26 +134,26 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <span className="font-mono text-zinc-400 uppercase tracking-wider block mb-1">
                   Visual Theme & Mood:
                 </span>
-                <p className="text-zinc-200 font-medium">{project.conceptNotes.theme}</p>
+                <p className="text-zinc-200 font-medium text-justify [text-justify:inter-word] hyphens-auto">{project.conceptNotes.theme}</p>
               </div>
               <div>
                 <span className="font-mono text-zinc-400 uppercase tracking-wider block mb-1">
                   Lighting & Post-Processing:
                 </span>
-                <p className="text-amber-400 font-medium">{project.conceptNotes.lighting}</p>
+                <p className="text-amber-400 font-medium text-justify [text-justify:inter-word] hyphens-auto">{project.conceptNotes.lighting}</p>
               </div>
               <div>
                 <span className="font-mono text-zinc-400 uppercase tracking-wider block mb-1">
                   Gameplay & Mechanics:
                 </span>
-                <p className="text-zinc-200 font-medium">{project.conceptNotes.mechanics}</p>
+                <p className="text-zinc-200 font-medium text-justify [text-justify:inter-word] hyphens-auto">{project.conceptNotes.mechanics}</p>
               </div>
               {project.conceptNotes.levelScale && (
                 <div>
                   <span className="font-mono text-zinc-400 uppercase tracking-wider block mb-1">
                     Level Scale:
                   </span>
-                  <p className="text-zinc-200 font-medium">{project.conceptNotes.levelScale}</p>
+                  <p className="text-zinc-200 font-medium text-justify [text-justify:inter-word] hyphens-auto">{project.conceptNotes.levelScale}</p>
                 </div>
               )}
             </div>
@@ -168,7 +168,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               {project.keyFeatures.map((feat, idx) => (
                 <li key={idx} className="flex items-start gap-2 text-xs text-zinc-300">
                   <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <span>{feat}</span>
+                  <span className="text-justify [text-justify:inter-word] hyphens-auto">{feat}</span>
                 </li>
               ))}
             </ul>

@@ -208,6 +208,21 @@ export interface DesignerInfo {
   mayaSubheading?: string;
   outroTitle?: string;
   outroText?: string;
+  // Persistent 3D Plexus Background Editor configuration (saved in data.json)
+  backgroundConfig?: PlexusBackgroundConfig;
+}
+
+export interface PlexusBackgroundConfig {
+  enabled: boolean;
+  voidInnerHex: string;
+  voidOuterHex: string;
+  paletteHexes: string[];
+  colorCycleEnabled: boolean;
+  cycleSpeed: number;
+  nodeDensity: number;
+  facetOpacity: number;
+  cursorRadius: number;
+  cursorMode: 'attract' | 'repel';
 }
 
 export interface CustomMediaBlock {

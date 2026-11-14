@@ -1066,6 +1066,61 @@ test('status auto-detects unpaired 2FA and emits otpauthUri until 2FA verificati
   assert.ok(String(unpairRes.data.otpauthUri || '').startsWith('otpauth://totp/'));
 });
 
+test('plexusColors handles HEX/RGB conversions, cycling interpolation, and config clamping', async () => {
+  const {
+    DEFAULT_PLEXUS_BACKGROUND_CONFIG,
+    normalizeHex,
+    hexToRgb,
+    rgbToHex,
+    parseRgbString,
+    formatRgbLabel,
+    rgbaStr,
+    sampleCycledColor,
+    getResolvedBackgroundConfig
+  } = await import('./plexusColors');
 
+  assert.equal(normalizeHex('00F0FF'), '#00f0ff');
+  assert.equal(normalizeHex('#abc'), '#aabbcc');
+  assert.equal(normalizeHex('invalid'), null);
 
+  assert.deepEqual(hexToRgb('#c026d3'), { r: 192, g: 38, b: 211 });
+  assert.equal(rgbToHex(16, 185, 129), '#10b981');
+  assert.equal(rgbToHex(-12, 300, 128.4), '#00ff80');
 
+  assert.deepEqual(parseRgbString('rgb(37, 99, 235)'), { r: 37, g: 99, b: 235 });
+  assert.deepEqual(parseRgbString('244, 63, 94'), { r: 244, g: 63, b: 94 });
+  assert.equal(parseRgbString('rgb(256, 0, 0)'), null);
+  assert.equal(formatRgbLabel('#00f0ff'), 'rgb(0, 240, 255)');
+  assert.equal(rgbaStr({ r: 0, g: 240, b: 255 }, 0.5), 'rgba(0, 240, 255, 0.500)');
+
+  const palette = [
+    { r: 0, g: 0, b: 0 },
+    { r: 100, g: 200, b: 250 }
+  ];
+  assert.deepEqual(sampleCycledColor(palette, 0), { r: 0, g: 0, b: 0 });
+  assert.deepEqual(sampleCycledColor(palette, 0.5), { r: 50, g: 100, b: 125 });
+  assert.deepEqual(sampleCycledColor(palette, 2), { r: 0, g: 0, b: 0 });
+  assert.deepEqual(sampleCycledColor(palette, -0.5), { r: 50, g: 100, b: 125 });
+
+  const resolved = getResolvedBackgroundConfig({
+    enabled: false,
+    voidInnerHex: '112233',
+    voidOuterHex: 'not-a-hex',
+    paletteHexes: ['#fff', 'bad-color', '#10b981'],
+    cycleSpeed: 99,
+    nodeDensity: 0.1,
+    facetOpacity: 1,
+    cursorRadius: 20,
+    cursorMode: 'repel'
+  });
+
+  assert.equal(resolved.enabled, false);
+  assert.equal(resolved.voidInnerHex, '#112233');
+  assert.equal(resolved.voidOuterHex, DEFAULT_PLEXUS_BACKGROUND_CONFIG.voidOuterHex);
+  assert.deepEqual(resolved.paletteHexes, ['#ffffff', '#10b981']);
+  assert.equal(resolved.cycleSpeed, 3);
+  assert.equal(resolved.nodeDensity, 0.4);
+  assert.equal(resolved.facetOpacity, 0.28);
+  assert.equal(resolved.cursorRadius, 80);
+  assert.equal(resolved.cursorMode, 'repel');
+});

@@ -226,17 +226,17 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
           <Target className="w-3.5 h-3.5" />
           <span>Core Studio Statement:</span>
         </div>
-        <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic font-sans font-light text-justify">
+        <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic font-sans font-light text-justify [text-justify:inter-word] hyphens-auto">
           <InlineEdit
             value={objectiveQuote || defaultQuote}
             onSave={(val) => onUpdateObjectiveQuote?.(val)}
             isOwnerMode={isOwnerMode}
             multiline={true}
             label="Career Objective Quote"
-            as="p"
-            className="text-zinc-200 italic text-justify"
+            as="span"
+            className="text-zinc-200 italic text-justify [text-justify:inter-word]"
           />
-        </div>
+        </p>
       </div>
 
       {uploadError && (
@@ -523,7 +523,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                       />
                     </h4>
 
-                    <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify">
+                    <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                       <InlineEdit
                         value={milestone.description}
                         onSave={(val) =>
@@ -533,10 +533,10 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                         }
                         isOwnerMode={isOwnerMode}
                         multiline={true}
-                        as="p"
-                        className="text-zinc-300 text-justify"
+                        as="span"
+                        className="text-zinc-300 text-justify [text-justify:inter-word]"
                       />
-                    </div>
+                    </p>
 
                     {milestone.highlights && milestone.highlights.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-2">
@@ -711,13 +711,13 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
 
               {/* Footer with Narrative & Next/Prev Milestone Navigation */}
               <div className="p-5 bg-zinc-950 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
+                <div className="space-y-1 flex-1 min-w-0">
                   {activeLightboxMilestone.photoCaption && (
                     <div className="text-xs font-mono text-amber-400 font-semibold">
                       {activeLightboxMilestone.photoCaption}
                     </div>
                   )}
-                  <p className="text-xs text-zinc-300 leading-relaxed max-w-2xl text-justify">
+                  <p className="text-xs text-zinc-300 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                     {activeLightboxMilestone.description}
                   </p>
                 </div>

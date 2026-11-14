@@ -328,7 +328,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   return (
     <section
       id="contact"
-      className="py-8 sm:py-10 relative bg-[#050507] flex-1 flex flex-col justify-center scroll-mt-[68px]"
+      className="py-8 sm:py-10 relative bg-transparent flex-1 flex flex-col justify-center scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -352,13 +352,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       {/* Subtle Ambient Monochromatic Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[560px] h-[340px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-4xl w-full mx-auto px-4 sm:px-6 relative z-10 space-y-7">
+      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
         {/* 1. Centered Hero Title Block + Compact Live IST Pill */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
-          className="text-center max-w-2xl mx-auto space-y-3"
+          className="text-center max-w-3xl mx-auto space-y-2.5"
         >
           <div className="text-xs font-mono tracking-[0.2em] text-amber-400 uppercase font-semibold">
             <InlineEdit
@@ -378,7 +378,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             />
           </h1>
 
-          <p className="text-sm sm:text-base text-zinc-400 leading-relaxed max-w-lg mx-auto">
+          <p className="text-sm sm:text-base text-zinc-400 leading-relaxed max-w-2xl mx-auto text-justify [text-align-last:center] hyphens-auto">
             <InlineEdit
               value={
                 info.contactSubheading ||
@@ -387,7 +387,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
               onSave={(val) => onUpdateDesignerInfo?.({ contactSubheading: val })}
               isOwnerMode={isOwnerMode}
               multiline={true}
-              className="text-zinc-400"
+              className="text-zinc-400 text-justify [text-align-last:center]"
             />
           </p>
 
@@ -490,7 +490,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 >
                   {info.email}
                 </a>
-                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify">
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                   Best for project inquiries and collaborations. I typically respond within 24–48 hours.
                 </p>
               </div>
@@ -550,7 +550,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 >
                   {displayPhone}
                 </a>
-                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify">
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                   For urgent matters or quick calls. Available during IST business hours.
                 </p>
               </div>
@@ -579,7 +579,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.14, ease: EASE_OUT_EXPO }}
-          className="max-w-2xl w-full mx-auto rounded-2xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl"
+          className="w-full rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 p-6 sm:p-8 shadow-2xl"
         >
           <div className="flex items-center gap-2.5 mb-6">
             <MessageSquare className="w-4 h-4 text-amber-400" />
@@ -602,7 +602,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <ShieldCheck className="w-7 h-7" />
                 </div>
                 <h4 className="text-lg font-bold text-white">Message Sent!</h4>
-                <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
+                <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed text-justify [text-align-last:center] hyphens-auto">
                   Your message has been sent to{' '}
                   <strong className="text-amber-400">
                     {submittedDetails?.recipientEmail || info.email}

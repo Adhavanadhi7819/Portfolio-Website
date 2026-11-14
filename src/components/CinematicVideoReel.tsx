@@ -7,7 +7,6 @@ import {
   Maximize, 
   RotateCcw, 
   Sparkles, 
-  ChevronRight, 
   Clock, 
   Layers,
   Plus,
@@ -356,7 +355,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <section id="reel" ref={containerRef} className="py-8 sm:py-10 relative bg-[#09090c] border-b border-zinc-800/80 scroll-mt-[68px]">
+    <section id="reel" ref={containerRef} className="py-8 sm:py-10 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -380,8 +379,8 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-5 gap-4">
-          <div className="flex-1 min-w-0 max-w-2xl">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-5 gap-4 lg:gap-8">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-1.5">
               Original Work Showcase Reel
             </span>
@@ -393,22 +392,22 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 label="Reel Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={designerInfo?.reelSubheading || 'Recorded directly from Unreal Engine and Autodesk Maya viewport sessions. Use the chapter navigator below to jump between projects.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ reelSubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
                 label="Reel Description"
-                as="p"
-                className="text-justify"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
-            </div>
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Owner-Only Video Upload Option */}
-            {isOwnerMode && (
+          {isOwnerMode && (
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {/* Owner-Only Video Upload Option */}
               <label 
                 className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                 title="Upload your MP4 video reel file from your computer"
@@ -436,46 +435,25 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   }}
                 />
               </label>
-            )}
 
-            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest hidden sm:inline">
-              <InlineEdit
-                value={designerInfo?.reelResolutionNote || 'Resolution: 1080p 30fps'}
-                onSave={(val) => onUpdateDesignerInfo?.({ reelResolutionNote: val })}
-                isOwnerMode={isOwnerMode}
-                label="Resolution Badge"
-              />
-            </span>
-
-            {isOwnerMode && (
-              <>
-                <button
-                  onClick={onEditReelSettings}
-                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all flex items-center gap-1.5 cursor-pointer"
-                  title="Change Video Path or Showreel Details"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>Edit Video & Reel</span>
-                </button>
-                <button
-                  onClick={onAddChapter}
-                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
-                  title="Add Keyframe Chapter"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Chapter</span>
-                </button>
-              </>
-            )}
-
-            <button
-              onClick={() => handleSeek(171)}
-              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Jump to Pirate RPG (02:51)</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+              <button
+                onClick={onEditReelSettings}
+                className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Change Video Path or Showreel Details"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Edit Video & Reel</span>
+              </button>
+              <button
+                onClick={onAddChapter}
+                className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                title="Add Keyframe Chapter"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Chapter</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Video Player Frame with Unreal HUD Styling */}
@@ -699,7 +677,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Active Scene Inspection Details Card */}
-        <div className="mt-4 p-4 sm:p-5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+        <div className="mt-4 p-4 sm:p-5 rounded-xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
               <Sparkles className="w-4 h-4" />
@@ -716,7 +694,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   Keyframe: {formatVideoTime(activeChapter.startTime)} – {formatVideoTime(activeChapter.endTime)}
                 </span>
               </div>
-              <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed text-justify hyphens-auto">
+              <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                 {activeChapter.description}
               </p>
             </div>

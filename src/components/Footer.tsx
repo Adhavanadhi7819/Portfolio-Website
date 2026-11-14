@@ -22,7 +22,7 @@ export const Footer: React.FC<FooterProps> = ({
   const info = designerInfo || DESIGNER_INFO;
 
   return (
-    <footer className="relative bg-[#050507] border-t border-zinc-800/80 text-zinc-400">
+    <footer className="relative bg-zinc-950/55 backdrop-blur-md border-t border-zinc-800/70 text-zinc-400">
       {/* Clean Minimal Bottom Footer Bar */}
       <div
         className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 ${

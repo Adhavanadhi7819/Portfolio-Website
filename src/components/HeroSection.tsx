@@ -115,14 +115,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   return (
     <section
       id="hero"
-      className="relative py-6 sm:py-8 flex-1 flex flex-col justify-center overflow-hidden bg-[#050507] scroll-mt-[68px]"
+      className="relative py-6 sm:py-8 flex-1 flex flex-col justify-center overflow-hidden bg-transparent scroll-mt-[68px]"
     >
       {/* Subtle atmospheric glow */}
-      <div className="absolute inset-0 bg-radial-vignette pointer-events-none" />
       <motion.div
-        animate={{ opacity: [0.65, 1, 0.65], scale: [1, 1.04, 1] }}
+        animate={{ opacity: [0.45, 0.75, 0.45], scale: [1, 1.04, 1] }}
         transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[420px] bg-amber-500/8 blur-[140px] rounded-full pointer-events-none"
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[420px] bg-amber-500/5 blur-[140px] rounded-full pointer-events-none"
       />
 
       {/* Section Controls for Owner */}
@@ -144,8 +143,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         />
       )}
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-2 sm:py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-1 sm:py-2">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
           {/* Left Column: Kicker, Headline, Lead Copy, Actions */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
@@ -194,11 +193,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </motion.h1>
 
             {/* Lead Narrative Copy */}
-            <motion.div
+            <motion.p
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, delay: 0.16, ease: EASE_OUT_EXPO }}
-              className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed font-normal text-justify"
+              className="text-base sm:text-lg text-zinc-300 w-full leading-relaxed font-normal text-justify [text-justify:inter-word] hyphens-auto"
             >
               <InlineEdit
                 value={designerInfo.tagline}
@@ -206,10 +205,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 isOwnerMode={isOwnerMode}
                 multiline={true}
                 label="Hero Tagline"
-                as="p"
-                className="text-justify"
+                as="span"
+                className="text-zinc-300 text-justify [text-justify:inter-word]"
               />
-            </motion.div>
+            </motion.p>
 
             {/* Action Buttons Row */}
             <motion.div
@@ -366,7 +365,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <div className="relative group max-w-sm sm:max-w-md lg:max-w-none mx-auto">
               <div className="absolute -inset-1 bg-gradient-to-tr from-amber-500/20 via-zinc-800/10 to-amber-500/25 rounded-3xl blur-xl opacity-70 group-hover:opacity-100 transition duration-500" />
 
-              <div className="relative bg-zinc-900/80 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
+              <div className="relative bg-zinc-950/65 border border-zinc-800/80 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
                 {/* Clean Unobstructed Portrait Photo Frame */}
                 <div className="relative aspect-[4/4] sm:aspect-[4/4.1] w-full overflow-hidden bg-zinc-950">
                   <div className="w-full h-full group-hover:scale-[1.03] transition-transform duration-700 ease-out">
@@ -427,7 +426,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.34, ease: EASE_OUT_EXPO }}
-            className="mt-6 sm:mt-7 pt-5 border-t border-zinc-800/80 relative"
+            className="mt-5 sm:mt-6 pt-5 border-t border-zinc-800/80 relative"
           >
             {isOwnerMode && (
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -464,7 +463,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     key={idx}
                     whileHover={{ y: -2 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                    className={`relative group/stat px-5 py-3.5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/40 transition-colors flex flex-col justify-center min-w-0 ${
+                    className={`relative group/stat px-5 py-3.5 rounded-2xl bg-zinc-950/60 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-colors flex flex-col justify-center min-w-0 ${
                       isOwnerMode ? 'pr-10' : ''
                     }`}
                   >

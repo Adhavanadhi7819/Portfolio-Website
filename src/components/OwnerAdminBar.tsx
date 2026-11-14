@@ -14,7 +14,8 @@ import {
   Briefcase,
   ShieldCheck,
   Inbox,
-  GitBranch
+  GitBranch,
+  Palette
 } from 'lucide-react';
 
 import { EditModalMode } from './OwnerEditModal';
@@ -40,6 +41,7 @@ interface OwnerAdminBarProps {
   isStaticHost?: boolean;
   onOpenInbox?: () => void;
   unreadMessageCount?: number;
+  onOpenBackgroundEditor?: () => void;
 }
 
 export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
@@ -62,7 +64,8 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   syncStatus = 'idle',
   isStaticHost = false,
   onOpenInbox,
-  unreadMessageCount = 0
+  unreadMessageCount = 0,
+  onOpenBackgroundEditor
 }) => {
   return (
     <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-3 sm:px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
@@ -124,6 +127,17 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
             >
               <Layers className="w-3 h-3" />
               <span>Sections</span>
+            </button>
+          )}
+
+          {onOpenBackgroundEditor && (
+            <button
+              onClick={onOpenBackgroundEditor}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-400 text-cyan-300 hover:text-black border border-cyan-400/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm"
+              title="Open Background Editor (3D Plexus HEX & RGB Color Studio)"
+            >
+              <Palette className="w-3 h-3" />
+              <span>Background Editor</span>
             </button>
           )}
 

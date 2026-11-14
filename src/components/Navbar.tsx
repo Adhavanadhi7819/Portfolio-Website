@@ -87,8 +87,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         isOwnerMode ? 'top-[44px]' : 'top-0'
       } ${
         isScrolled
-          ? 'bg-[#070709]/95 backdrop-blur-md border-zinc-800/90 shadow-xl shadow-black/60'
-          : 'bg-[#070709]/85 backdrop-blur-md border-zinc-800/60'
+          ? 'bg-[#03050a]/85 backdrop-blur-xl border-zinc-800/80 shadow-xl shadow-black/60'
+          : 'bg-[#03050a]/65 backdrop-blur-lg border-zinc-800/50'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">

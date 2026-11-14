@@ -197,7 +197,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   return (
     <section
       id={section.id}
-      className="py-8 sm:py-10 relative bg-[#070709] border-t border-zinc-800/80 scroll-mt-[68px]"
+      className="py-8 sm:py-10 relative bg-transparent border-t border-zinc-800/60 scroll-mt-[68px]"
     >
       {/* Floating Section Controls for Owner */}
       {isOwnerMode && (
@@ -222,8 +222,8 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 sm:mb-8 gap-4">
-          <div className="max-w-3xl space-y-2">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4 md:gap-8">
+          <div className="flex-1 min-w-0 space-y-2">
             <div>
               <InlineEdit
                 value={data.badge || 'CUSTOM SHOWCASE'}
@@ -248,7 +248,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
               />
             </h2>
 
-            <p className="text-zinc-400 text-sm sm:text-base max-w-2xl leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm sm:text-base w-full leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={data.subheading || ''}
                 onSave={(val) => handleUpdateField('subheading', val)}
@@ -257,7 +257,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                 label="Section Subheading"
                 placeholder="Click to add a subheading description..."
                 as="span"
-                className="text-justify"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
             </p>
           </div>
@@ -484,7 +484,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                           <div className="text-sm font-bold text-white">{item.title}</div>
                         )}
                         {item.caption && (
-                          <p className="text-xs text-zinc-400 mt-0.5 text-justify">{item.caption}</p>
+                          <p className="text-xs text-zinc-400 mt-0.5 text-justify [text-justify:inter-word] hyphens-auto">{item.caption}</p>
                         )}
                       </div>
                     )}
@@ -497,16 +497,18 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
         {/* Narrative / Body Text */}
         {data.bodyText && (
-          <div className="mb-8 p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 w-full">
-            <InlineEdit
-              value={data.bodyText}
-              onSave={(val) => handleUpdateField('bodyText', val)}
-              isOwnerMode={isOwnerMode}
-              multiline={true}
-              label="Body Text"
-              as="p"
-              className="text-zinc-300 text-base leading-relaxed text-justify"
-            />
+          <div className="mb-6 p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 w-full">
+            <p className="text-zinc-300 text-base leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
+              <InlineEdit
+                value={data.bodyText}
+                onSave={(val) => handleUpdateField('bodyText', val)}
+                isOwnerMode={isOwnerMode}
+                multiline={true}
+                label="Body Text"
+                as="span"
+                className="text-zinc-300 text-justify [text-justify:inter-word]"
+              />
+            </p>
           </div>
         )}
 
@@ -516,7 +518,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
             {data.cards.map((card) => (
               <div
                 key={card.id}
-                className="p-6 rounded-2xl bg-zinc-900/50 border border-zinc-800/90 hover:border-amber-500/40 transition-all group flex flex-col justify-between space-y-4 relative"
+                className="p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group flex flex-col justify-between space-y-4 relative"
               >
                 {isOwnerMode && (
                   <div className="absolute top-3 right-3 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity z-10">
@@ -578,7 +580,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                       label="Card Title"
                     />
                   </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed text-justify">
+                  <p className="text-xs text-zinc-400 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                     <InlineEdit
                       value={card.description}
                       onSave={(val) => {
@@ -591,7 +593,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                       multiline={true}
                       label="Card Description"
                       as="span"
-                      className="text-justify"
+                      className="text-zinc-400 text-justify [text-justify:inter-word]"
                     />
                   </p>
                 </div>

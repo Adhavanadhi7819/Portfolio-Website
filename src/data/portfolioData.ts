@@ -1,4 +1,5 @@
 import { ProjectItem, VideoChapter, MayaModelItem, DesignerInfo, PortfolioState, PortfolioSectionConfig } from '../types/portfolio';
+import { DEFAULT_PLEXUS_BACKGROUND_CONFIG } from '../utils/plexusColors';
 
 export const VIDEO_PATH = '/assets/aistudio/Portfolio_46956db1.mp4';
 
@@ -101,6 +102,7 @@ export const DESIGNER_INFO: DesignerInfo = {
     'Freelance / Collaboration Inquiry'
   ],
   contactSlidePhotoUrl: '/showcase/contact-slide.jpg',
+  backgroundConfig: DEFAULT_PLEXUS_BACKGROUND_CONFIG,
   heroBadge: 'Unreal Engine & Autodesk Maya Portfolio',
   heroSubtitle: 'Crafting immersive Unreal Engine worlds, cinematic camera sequences, and stylized gameplay mechanics.',
   heroPhotoUrl: '/showcase/hero-portrait.jpg',

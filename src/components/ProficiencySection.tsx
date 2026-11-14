@@ -78,7 +78,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
   ];
 
   return (
-    <section id="proficiency" className="py-12 relative bg-[#09090c] border-b border-zinc-800/80">
+    <section id="proficiency" className="py-10 relative bg-transparent border-b border-zinc-800/60">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -102,8 +102,8 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
-          <div className="max-w-3xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4 md:gap-8">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Sliders className="w-3.5 h-3.5 text-amber-400" />
               <span>Skills & Competencies</span>
@@ -116,16 +116,17 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                 label="Proficiency Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={info.proficiencySubheading || 'Unreal Engine 5 level blockouts, responsive player mechanics, Chaos vehicle physics, and Autodesk Maya 3D hard-surface art.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ proficiencySubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
                 label="Proficiency Subtitle"
-                as="p"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
-            </div>
+            </p>
           </div>
 
           {isOwnerMode && (
@@ -174,7 +175,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                     />
                   </div>
                   
-                  <p className="text-xs text-zinc-400 font-mono leading-relaxed">
+                  <p className="text-xs text-zinc-400 font-mono leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                     {skill.desc}
                   </p>
                 </div>
@@ -185,7 +186,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
           {/* Right Column: Software Toolbelt & Engine Stack */}
           <div className="lg:col-span-5 space-y-6">
             
-            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-5">
+            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 space-y-5">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-amber-400" />
@@ -204,7 +205,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                 )}
               </div>
 
-              <p className="text-xs text-zinc-400 leading-relaxed">
+              <p className="text-xs text-zinc-400 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                 Daily tools and pipeline utilities utilized across level creation, hard-surface asset modeling, and sequence playback.
               </p>
 
@@ -248,16 +249,17 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                     label="Callout Title"
                   />
                 </h4>
-                <div className="text-xs text-zinc-400">
+                <p className="text-xs text-zinc-400 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                   <InlineEdit
                     value={info.proficiencyCalloutText || 'Ready to assist lead level designers, white-box test environments, and construct interactive blueprint mechanics.'}
                     onSave={(val) => onUpdateDesignerInfo?.({ proficiencyCalloutText: val })}
                     isOwnerMode={isOwnerMode}
                     multiline={true}
                     label="Callout Subtitle"
-                    as="p"
+                    as="span"
+                    className="text-zinc-400 text-justify [text-justify:inter-word]"
                   />
-                </div>
+                </p>
               </div>
 
               {onContactClick && (
@@ -276,7 +278,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
         </div>
 
         {/* 4 Specialized Discipline Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {(info.proficiencyCompetencyCards && info.proficiencyCompetencyCards.length > 0
             ? info.proficiencyCompetencyCards
             : [
@@ -307,7 +309,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
             return (
               <div 
                 key={idx}
-                className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/40 transition-all group space-y-4"
+                className="p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group space-y-4"
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-black transition-colors">
                   <Icon className="w-5 h-5" />
@@ -317,7 +319,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
                   <h4 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors">
                     {card.title}
                   </h4>
-                  <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                     {card.description}
                   </p>
                 </div>

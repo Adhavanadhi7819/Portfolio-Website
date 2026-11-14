@@ -30,7 +30,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     <motion.div
       whileHover={{ y: -5 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      className="h-full group rounded-2xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
+      className="h-full group rounded-2xl bg-zinc-950/65 hover:bg-zinc-900/80 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
     >
       
       {/* Top Image & Overlays */}
@@ -138,7 +138,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             {project.title}
           </h3>
 
-          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 text-justify">
+          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 text-justify [text-justify:inter-word] hyphens-auto">
             {project.summary}
           </p>
 

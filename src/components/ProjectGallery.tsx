@@ -74,7 +74,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   });
 
   return (
-    <section id="projects" className="py-8 sm:py-10 border-b border-zinc-800/80 relative bg-[#070709] scroll-mt-[68px]">
+    <section id="projects" className="py-8 sm:py-10 border-b border-zinc-800/60 relative bg-transparent scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -98,8 +98,8 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
-          <div className="flex-1 min-w-0 max-w-2xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 gap-4 md:gap-8">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 mb-1.5">
               <Layers className="w-3.5 h-3.5 text-amber-400" />
               <span>Portfolio · Case Studies</span>
@@ -112,19 +112,20 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                 className="text-white font-bold"
               />
             </h2>
-            <p className="text-zinc-400 text-sm mt-1.5 leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={designerInfo?.projectsSubheading || 'Explorations spanning Unreal Engine level layout, dynamic vehicle rigging, lighting duality concepts, and Autodesk Maya models.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ projectsSubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
-                className="text-zinc-400 text-justify"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
             </p>
           </div>
 
           {/* Right actions: Search + Owner Add Project */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
             {isOwnerMode && (
               <button
                 onClick={onAddProject}
@@ -149,7 +150,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         </div>
 
         {/* Segmented Filter Tabs Bar matching demo layout */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-8 p-1.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none" role="tablist">
+        <div className="flex flex-wrap items-center gap-1.5 mb-6 p-1.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none" role="tablist">
           {categories.map((cat) => {
             const count = filterProjects(projects, cat.value).length;
             const isSelected = activeCategory === cat.value;
@@ -218,8 +219,8 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
             </AnimatePresence>
           </motion.div>
         ) : (
-          <div className="py-16 text-center rounded-2xl bg-zinc-900/40 border border-zinc-800/80 p-8">
-            <p className="text-zinc-400 text-sm">No projects matched your search criteria.</p>
+          <div className="py-10 text-center rounded-2xl bg-zinc-900/40 border border-zinc-800/80 p-8">
+            <p className="text-zinc-400 text-sm text-justify [text-align-last:center] hyphens-auto">No projects matched your search criteria.</p>
             <button
               onClick={() => {
                 setActiveCategory('all');

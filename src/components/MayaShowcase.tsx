@@ -57,7 +57,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   const selectedModel = currentModels.find(m => m.id === selectedModelId) || currentModels[0];
 
   return (
-    <section id="maya" className="py-8 sm:py-10 relative bg-[#09090c] border-t border-zinc-800/80 scroll-mt-[68px]">
+    <section id="maya" className="py-8 sm:py-10 relative bg-transparent border-t border-zinc-800/60 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -81,8 +81,8 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4">
-          <div className="flex-1 min-w-0 max-w-2xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4 md:gap-8">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Box className="w-3.5 h-3.5 text-amber-400" />
               <span>Autodesk Maya Hard-Surface Suite</span>
@@ -95,18 +95,19 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 className="text-white font-black"
               />
             </h2>
-            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={designerInfo?.mayaSubheading || '“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.'}
                 onSave={(val) => onUpdateDesignerInfo?.({ mayaSubheading: val })}
                 isOwnerMode={isOwnerMode}
                 multiline={true}
-                className="text-zinc-400 text-justify"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             {isOwnerMode && (
               <button
                 onClick={onAddModel}
@@ -128,7 +129,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
         </div>
 
         {/* Interactive Maya Model Showcase Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center rounded-2xl bg-zinc-950 border border-zinc-800 p-6 sm:p-8 shadow-2xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 p-6 sm:p-8 shadow-2xl">
           
           {/* Left: Interactive 3D Asset Viewport Frame */}
           <div className="lg:col-span-7 space-y-4">
@@ -250,7 +251,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
               <h3 className="text-2xl font-heading font-black text-white">
                 {selectedModel.title}
               </h3>
-              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify">
+              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
                 {selectedModel.description}
               </p>
             </div>
@@ -280,7 +281,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                 {selectedModel.details.map((detail, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-xs text-zinc-300">
                     <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <span>{detail}</span>
+                    <span className="text-justify [text-justify:inter-word] hyphens-auto">{detail}</span>
                   </li>
                 ))}
               </ul>

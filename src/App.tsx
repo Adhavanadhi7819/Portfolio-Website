@@ -21,6 +21,8 @@ import { OwnerAuthModal } from './components/OwnerAuthModal';
 import { OwnerEditModal, EditModalMode } from './components/OwnerEditModal';
 import { OwnerInboxModal } from './components/OwnerInboxModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { PlexusBackground } from './components/PlexusBackground';
+import { BackgroundEditorModal } from './components/BackgroundEditorModal';
 import { INITIAL_PORTFOLIO_STATE, DEFAULT_OWNER_PASSCODE, DEFAULT_PORTFOLIO_SECTIONS } from './data/portfolioData';
 import { PUBLISHED_PORTFOLIO_SNAPSHOT } from './data/publishedPortfolio';
 import { 
@@ -273,6 +275,7 @@ export default function App() {
   });
 
   const [isPortfolioManagerOpen, setIsPortfolioManagerOpen] = useState(false);
+  const [isBackgroundEditorOpen, setIsBackgroundEditorOpen] = useState(false);
 
   // Keep active portfolio state synchronized into the portfolios vault
   useEffect(() => {
@@ -1390,11 +1393,13 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div
-        className={`min-h-screen flex flex-col bg-[#050507] text-zinc-100 selection:bg-amber-500 selection:text-black ${
-          isOwnerMode ? 'pt-[44px]' : ''
-        }`}
-      >
+      <div className="relative min-h-screen flex flex-col bg-transparent text-zinc-100 selection:bg-amber-500 selection:text-black">
+        <PlexusBackground config={portfolioState.designerInfo.backgroundConfig} />
+        <div
+          className={`relative z-10 min-h-screen flex flex-col ${
+            isOwnerMode ? 'pt-[44px]' : ''
+          }`}
+        >
         <InteractiveCursor />
         
         {/* Owner Admin Top HUD Bar (Only shown to authenticated owner) */}
@@ -1405,6 +1410,7 @@ export default function App() {
           onEditBio={() => handleOpenEditModal('hero')}
           onOpenSection={handleOpenEditModal}
           onOpenSectionManager={() => setIsSectionManagerOpen(true)}
+          onOpenBackgroundEditor={() => setIsBackgroundEditorOpen(true)}
           activePortfolioName={portfolios.find(p => p.id === activePortfolioId)?.name}
           onOpenPortfolioManager={() => setIsPortfolioManagerOpen(true)}
           onExportJson={() => handleOpenEditModal('json_backup')}
@@ -2000,6 +2006,27 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Owner Mode Background Editor Modal (HEX & RGB 3D Plexus Studio) */}
+      <BackgroundEditorModal
+        isOpen={isBackgroundEditorOpen}
+        onClose={() => setIsBackgroundEditorOpen(false)}
+        config={portfolioState.designerInfo.backgroundConfig}
+        onLiveChange={(nextConfig) =>
+          setPortfolioState((prev) => ({
+            ...prev,
+            designerInfo: {
+              ...prev.designerInfo,
+              backgroundConfig: nextConfig
+            }
+          }))
+        }
+        onSaveAndCommit={(nextConfig) => {
+          handleSaveDesignerInfo({ backgroundConfig: nextConfig });
+          setSaveToast('3D Plexus background saved & synced');
+        }}
+      />
+
+        </div>
       </div>
     </MotionConfig>
   );

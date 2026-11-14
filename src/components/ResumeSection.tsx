@@ -46,12 +46,34 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array | null {
 
 interface PdfCanvasPreviewProps {
   src: string;
+  fallbackUrl?: string | null;
   fileName?: string;
 }
 
-const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) => {
+function canvasToImageUrl(canvas: HTMLCanvasElement, createdUrls: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    if (typeof canvas.toBlob === 'function') {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            createdUrls.push(url);
+            resolve(url);
+            return;
+          }
+          resolve(canvas.toDataURL('image/png'));
+        },
+        'image/png'
+      );
+      return;
+    }
+    resolve(canvas.toDataURL('image/png'));
+  });
+}
+
+const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fallbackUrl, fileName }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback' | 'error'>('loading');
   const [pageImages, setPageImages] = useState<string[]>([]);
 
   useEffect(() => {
@@ -64,6 +86,7 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | null = null;
     let activeRenderTask: RenderTask | null = null;
+    const createdBlobUrls: string[] = [];
 
     const isCancellationError = (err: unknown) => {
       if (cancelled) return true;
@@ -76,24 +99,49 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
       );
     };
 
+    const loadPdfBytes = async (): Promise<Uint8Array> => {
+      if (src.startsWith('data:')) {
+        const decoded = dataUrlToUint8Array(src);
+        if (decoded && decoded.byteLength > 0) return decoded;
+      }
+      const response = await fetch(src, { cache: 'no-cache' });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF (${response.status})`);
+      }
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    };
+
     const renderPdf = async () => {
       setStatus('loading');
       setPageImages([]);
 
       try {
-        const [pdfjsLib, pdfjsWorker] = await Promise.all([
+        const [pdfBytes, pdfjsLib, workerAsset] = await Promise.all([
+          loadPdfBytes(),
           import('pdfjs-dist'),
-          import('pdfjs-dist/build/pdf.worker.min.mjs')
+          import('pdfjs-dist/build/pdf.worker.min.mjs?url')
         ]);
         if (cancelled) return;
-        (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
 
-        const bytes = src.startsWith('data:') ? dataUrlToUint8Array(src) : null;
-        loadingTask = bytes
-          ? pdfjsLib.getDocument({ data: bytes })
-          : pdfjsLib.getDocument({ url: src });
+        let pdf;
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = workerAsset.default;
+          loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+          pdf = await loadingTask.promise;
+        } catch (workerErr) {
+          if (cancelled || isCancellationError(workerErr)) return;
+          try {
+            await loadingTask?.destroy().catch(() => {});
+          } catch {}
+          const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs');
+          if (cancelled) return;
+          (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+          loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+          pdf = await loadingTask.promise;
+        }
 
-        const pdf = await loadingTask.promise;
         if (cancelled) return;
 
         const containerWidth = containerRef.current?.clientWidth || 760;
@@ -108,7 +156,7 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
 
           const baseViewport = page.getViewport({ scale: 1 });
           const fitScale = targetDisplayWidth / baseViewport.width;
-          const renderScale = Math.max(fitScale * dpr, 1.8);
+          const renderScale = Math.min(Math.max(fitScale * dpr, 1.5), 2.25);
           const viewport = page.getViewport({ scale: renderScale });
 
           const canvas = document.createElement('canvas');
@@ -132,20 +180,22 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
           activeRenderTask = null;
 
           if (cancelled) return;
-          renderedPages.push(canvas.toDataURL('image/png'));
+          const imageUrl = await canvasToImageUrl(canvas, createdBlobUrls);
+          if (cancelled) return;
+          renderedPages.push(imageUrl);
           setPageImages([...renderedPages]);
         }
 
         if (!cancelled) {
-          setStatus(renderedPages.length > 0 ? 'ready' : 'error');
+          setStatus(renderedPages.length > 0 ? 'ready' : fallbackUrl || src ? 'fallback' : 'error');
         }
       } catch (err) {
         if (isCancellationError(err)) {
           return;
         }
-        console.error('PDF preview render failed:', err);
+        console.error('PDF preview render failed, switching to browser PDF fallback:', err);
         if (!cancelled) {
-          setStatus('error');
+          setStatus(fallbackUrl || src ? 'fallback' : 'error');
         }
       }
     };
@@ -162,8 +212,15 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
       if (loadingTask) {
         loadingTask.destroy().catch(() => {});
       }
+      for (const url of createdBlobUrls) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      }
     };
-  }, [src]);
+  }, [src, fallbackUrl]);
+
+  const effectiveFallbackUrl = fallbackUrl || src;
 
   return (
     <div ref={containerRef} className="bg-zinc-950/90 p-3 sm:p-4 space-y-3">
@@ -174,12 +231,28 @@ const PdfCanvasPreview: React.FC<PdfCanvasPreviewProps> = ({ src, fileName }) =>
         </div>
       )}
 
+      {status === 'fallback' && pageImages.length === 0 && effectiveFallbackUrl && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1 text-[11px] font-mono text-zinc-400">
+            <span>Document Preview</span>
+            <span>PDF Viewer</span>
+          </div>
+          <iframe
+            src={`${effectiveFallbackUrl}#toolbar=0&navpanes=0&view=FitH`}
+            title={`${fileName || 'Resume'} Preview`}
+            className="w-full h-[680px] rounded-lg border border-zinc-800 bg-white block"
+          />
+        </div>
+      )}
+
       {status === 'error' && pageImages.length === 0 && (
         <div className="p-8 rounded-xl border border-zinc-800 bg-zinc-900/50 text-center space-y-2 text-xs font-mono text-zinc-400">
           <p className="text-zinc-200 font-semibold">
             Preview could not render for this PDF format.
           </p>
-          <p>Click the Download Resume button above to view the full file directly.</p>
+          <p className="text-justify [text-align-last:center]">
+            Click the Download Resume button above to view the full file directly.
+          </p>
         </div>
       )}
 
@@ -295,7 +368,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
 
   const isPdfDocument =
     Boolean(info.resumePdfUrl?.startsWith('data:application/pdf')) ||
-    Boolean(info.resumePdfUrl?.toLowerCase().endsWith('.pdf')) ||
+    Boolean(/\.pdf(\?|#|$)/i.test(info.resumePdfUrl || '')) ||
     Boolean(info.resumeFileName?.toLowerCase().endsWith('.pdf'));
 
   const isImageDocument =
@@ -306,7 +379,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   return (
     <section
       id="resume"
-      className="py-8 sm:py-10 relative bg-[#050507] flex-1 flex flex-col justify-center scroll-mt-[68px]"
+      className="py-8 sm:py-10 relative bg-transparent flex-1 flex flex-col justify-center scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -330,7 +403,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
       {/* Subtle monochromatic backdrop glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] h-[360px] bg-amber-500/6 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
+      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-5">
         {/* Clean Section Header */}
         <div>
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 flex items-center gap-1.5 mb-1.5">
@@ -345,7 +418,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               label="Resume Heading"
             />
           </h2>
-          <div className="text-zinc-400 text-sm sm:text-base mt-2 max-w-xl leading-relaxed text-justify hyphens-auto">
+          <p className="text-zinc-400 text-sm sm:text-base mt-2 w-full leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
             <InlineEdit
               value={
                 info.resumeSubheading ||
@@ -355,10 +428,10 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               isOwnerMode={isOwnerMode}
               multiline={true}
               label="Resume Subtitle"
-              as="p"
-              className="text-justify hyphens-auto"
+              as="span"
+              className="text-zinc-400 text-justify [text-justify:inter-word]"
             />
-          </div>
+          </p>
         </div>
 
         {uploadError && (
@@ -376,7 +449,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl overflow-hidden"
+            className="rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 shadow-2xl overflow-hidden"
           >
             {/* File Metadata & Single Primary Download Action Bar */}
             <div className="p-5 sm:p-6 bg-gradient-to-r from-amber-500/10 via-zinc-900/90 to-zinc-950 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -471,6 +544,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
             {isPdfDocument ? (
               <PdfCanvasPreview
                 src={info.resumePdfUrl}
+                fallbackUrl={downloadBlobUrl}
                 fileName={info.resumeFileName}
               />
             ) : isImageDocument ? (
@@ -483,8 +557,10 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               </div>
             ) : (
               <div className="p-6 text-center text-xs font-mono text-zinc-400 bg-zinc-950/80">
-                Document attached ({info.resumeFileName || 'Resume File'}). Click{' '}
-                <strong className="text-amber-400">Download Resume</strong> above to open it.
+                <p className="max-w-md mx-auto text-justify [text-align-last:center] leading-relaxed">
+                  Document attached ({info.resumeFileName || 'Resume File'}). Click{' '}
+                  <strong className="text-amber-400">Download Resume</strong> above to open it.
+                </p>
               </div>
             )}
           </motion.div>
@@ -505,7 +581,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               <h3 className="text-lg font-heading font-bold text-white">
                 Upload Your Resume Document
               </h3>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-justify [text-align-last:center] hyphens-auto">
                 Upload your own crafted PDF, image, or DOCX resume here. Once uploaded, visitors can
                 preview and download it directly from this tab.
               </p>
@@ -539,7 +615,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               <h3 className="text-lg font-heading font-bold text-white">
                 Resume Download Coming Soon
               </h3>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-justify [text-align-last:center] hyphens-auto">
                 My downloadable resume file is being prepared. Please reach out directly if you
                 would like a copy sent to you.
               </p>

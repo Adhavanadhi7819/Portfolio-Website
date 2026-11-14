@@ -135,7 +135,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
   return (
     <section
       id="flagship"
-      className="py-8 sm:py-10 relative overflow-hidden bg-gradient-to-b from-[#09090d] via-[#0b0a10] to-[#050507] border-b border-zinc-800/80 scroll-mt-[68px]"
+      className="py-8 sm:py-10 relative overflow-hidden bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -162,8 +162,8 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Clean Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5 sm:mb-6">
-          <div className="flex-1 min-w-0 max-w-2xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-8 mb-5 sm:mb-6">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 flex items-center gap-1.5 mb-1.5">
               <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
               <span>Featured Playable Build</span>
@@ -176,7 +176,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 label="Latest Project Heading"
               />
             </h2>
-            <div className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify">
+            <p className="text-zinc-400 text-sm sm:text-base mt-2 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={
                   designerInfo?.flagshipQuote ||
@@ -186,10 +186,10 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 isOwnerMode={isOwnerMode}
                 multiline={true}
                 label="Latest Project Subtitle"
-                as="p"
-                className="text-justify"
+                as="span"
+                className="text-zinc-400 text-justify [text-justify:inter-word]"
               />
-            </div>
+            </p>
           </div>
 
           {isOwnerMode && onEditFlagshipDetails && (
@@ -352,7 +352,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                     <h3 className="text-lg font-heading font-bold text-white">
                       Upload Recorded Gameplay Video
                     </h3>
-                    <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-justify [text-align-last:center] hyphens-auto">
                       Drag &amp; drop or choose your recorded gameplay build video (MP4, WebM, MOV)
                       to showcase directly here.
                     </p>
@@ -380,7 +380,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                   <h3 className="text-base sm:text-lg font-heading font-bold text-white">
                     Recorded Gameplay Video Coming Soon
                   </h3>
-                  <p className="text-xs sm:text-sm text-zinc-400 max-w-sm leading-relaxed">
+                  <p className="text-xs sm:text-sm text-zinc-400 max-w-sm leading-relaxed text-justify [text-align-last:center] hyphens-auto">
                     In-engine gameplay footage for this build is being prepared and will appear here
                     shortly.
                   </p>
@@ -396,7 +396,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
             transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
             className="lg:col-span-5 flex flex-col"
           >
-            <div className="flex-1 rounded-2xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-2xl">
+            <div className="flex-1 rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 p-6 sm:p-7 flex flex-col justify-between gap-6 shadow-2xl">
               <div className="space-y-5">
                 {/* Title */}
                 <div className="border-b border-zinc-800 pb-4">
@@ -427,7 +427,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                   <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block">
                     About The Game &amp; Build Notes
                   </span>
-                  <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed whitespace-pre-line text-justify">
+                  <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed whitespace-pre-line text-justify [text-justify:inter-word] hyphens-auto">
                     <InlineEdit
                       value={
                         designerInfo?.flagshipGameSpecs ||
@@ -437,10 +437,10 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                       isOwnerMode={isOwnerMode}
                       multiline={true}
                       label="Game Specifications Overview"
-                      as="p"
-                      className="text-justify"
+                      as="span"
+                      className="text-zinc-300 text-justify [text-justify:inter-word]"
                     />
-                  </div>
+                  </p>
                 </div>
 
                 {/* Structured Key-Value Specs List */}
