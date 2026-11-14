@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 21,
-  "updatedAt": "2026-11-14T17:58:39.182Z",
+  "version": 22,
+  "updatedAt": "2026-11-14T17:58:42.180Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T17:58:37.248Z",
+      "updatedAt": "2026-11-14T17:58:41.519Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -701,7 +701,7 @@
             "id": "maya",
             "title": "Maya 3D Models",
             "label": "3D Models",
-            "enabled": true,
+            "enabled": false,
             "order": 4
           },
           {
