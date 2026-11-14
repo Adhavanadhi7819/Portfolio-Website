@@ -432,4 +432,195 @@ test('TOTP 2FA authenticator generates and verifies standard RFC 6238 6-digit co
   assert.ok(uri.includes('digits=6'));
 });
 
+test('data.json exists at repository root and contains complete portfolio schema', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const raw = fs.readFileSync(path.resolve(process.cwd(), 'data.json'), 'utf8');
+  const parsed = JSON.parse(raw);
+
+  assert.equal(parsed.initialized, true);
+  assert.ok(Array.isArray(parsed.portfolios) && parsed.portfolios.length >= 1);
+  const mainState = parsed.portfolios[0].state;
+  assert.ok(mainState.designerInfo);
+  assert.ok(mainState.designerInfo.name);
+  assert.ok(Array.isArray(mainState.designerInfo.skills) && mainState.designerInfo.skills.length > 0);
+  assert.ok(Array.isArray(mainState.projects) && mainState.projects.length > 0);
+  assert.ok(Array.isArray(mainState.videoChapters) && mainState.videoChapters.length > 0);
+});
+
+test('Admin PIN validation, session token signing, and bundle normalization work securely', async () => {
+  const {
+    verifyAdminPinValue,
+    createAdminSessionToken,
+    verifyAdminSessionToken,
+    normalizeIncomingBundle
+  } = await import('../../api/update-portfolio');
+
+  assert.equal(verifyAdminPinValue('906'), true);
+  assert.equal(verifyAdminPinValue('wrong-pin'), false);
+
+  const token = createAdminSessionToken();
+  assert.equal(verifyAdminSessionToken(token), true);
+  assert.equal(verifyAdminSessionToken(`${token}tampered`), false);
+  assert.equal(verifyAdminSessionToken(undefined), false);
+
+  const normalized = normalizeIncomingBundle(
+    {
+      activePortfolioId: 'default_portfolio',
+      portfolios: [{ id: 'default_portfolio', name: 'Test', subtitle: '', createdAt: '', updatedAt: '', state: {} }]
+    },
+    3
+  );
+  assert.ok(normalized);
+  assert.equal(normalized.initialized, true);
+  assert.equal(normalized.version, 4);
+  assert.equal(normalized.portfolios.length, 1);
+});
+
+test('commitGitHubDataJson commits base64 data.json via GitHub Contents API and retries on 409 SHA conflict', async () => {
+  const { commitGitHubDataJson, fetchGitHubDataJson } = await import('../../api/update-portfolio');
+
+  const prevToken = process.env.GITHUB_TOKEN;
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+  const prevBranch = process.env.GITHUB_BRANCH;
+  const prevFetch = globalThis.fetch;
+
+  process.env.GITHUB_TOKEN = 'ghp_test_secret_token';
+  process.env.GITHUB_OWNER = 'adhavan-test';
+  process.env.GITHUB_REPO = 'hey-adhavan-test';
+  process.env.GITHUB_BRANCH = 'main';
+
+  const calls: Array<{ url: string; method: string; auth?: string; body?: string }> = [];
+  let putAttempt = 0;
+
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method || 'GET').toUpperCase();
+    const headers = (init?.headers || {}) as Record<string, string>;
+    calls.push({
+      url,
+      method,
+      auth: headers.Authorization,
+      body: typeof init?.body === 'string' ? init.body : undefined
+    });
+
+    if (method === 'GET') {
+      const sampleBundle = {
+        initialized: true,
+        version: 1,
+        updatedAt: '2026-11-14T00:00:00.000Z',
+        activePortfolioId: 'default_portfolio',
+        portfolios: [{ id: 'default_portfolio', name: 'Test', subtitle: '', createdAt: '', updatedAt: '', state: {} }]
+      };
+      return new Response(
+        JSON.stringify({
+          sha: putAttempt === 0 ? 'sha_stale' : 'sha_fresh',
+          html_url: 'https://github.com/adhavan-test/hey-adhavan-test/blob/main/data.json',
+          content: Buffer.from(JSON.stringify(sampleBundle), 'utf8').toString('base64')
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    putAttempt += 1;
+    if (putAttempt === 1) {
+      return new Response(
+        JSON.stringify({ message: 'data.json does not match sha' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        commit: {
+          sha: 'abc1234deadbeef',
+          html_url: 'https://github.com/adhavan-test/hey-adhavan-test/commit/abc1234deadbeef'
+        },
+        content: { sha: 'sha_new_committed' }
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  try {
+    const fetched = await fetchGitHubDataJson();
+    assert.equal(fetched.exists, true);
+    assert.equal(fetched.sha, 'sha_stale');
+    assert.equal(fetched.data?.version, 1);
+
+    const result = await commitGitHubDataJson({
+      bundle: {
+        initialized: true,
+        version: 2,
+        updatedAt: '2026-11-14T01:00:00.000Z',
+        activePortfolioId: 'default_portfolio',
+        portfolios: [{ id: 'default_portfolio', name: 'Updated', subtitle: '', createdAt: '', updatedAt: '', state: {} }]
+      },
+      commitMessage: 'chore: test commit'
+    });
+
+    assert.equal(result.commitSha, 'abc1234deadbeef');
+    assert.equal(result.branch, 'main');
+    assert.equal(result.repoFullName, 'adhavan-test/hey-adhavan-test');
+    assert.equal(putAttempt, 2);
+
+    const finalPut = calls.filter((c) => c.method === 'PUT')[1];
+    assert.equal(finalPut.auth, 'Bearer ghp_test_secret_token');
+    const parsedPutBody = JSON.parse(finalPut.body || '{}') as { sha?: string; message?: string; branch?: string; content?: string };
+    assert.equal(parsedPutBody.sha, 'sha_fresh');
+    assert.equal(parsedPutBody.message, 'chore: test commit');
+    assert.equal(parsedPutBody.branch, 'main');
+    const decodedJson = JSON.parse(Buffer.from(parsedPutBody.content || '', 'base64').toString('utf8'));
+    assert.equal(decodedJson.version, 2);
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+    if (prevBranch === undefined) delete process.env.GITHUB_BRANCH;
+    else process.env.GITHUB_BRANCH = prevBranch;
+  }
+});
+
+test('getGitHubConfigStatus auto-detects owner, repo, and branch from Vercel System Environment Variables', async () => {
+  const { getGitHubConfigStatus } = await import('../../api/update-portfolio');
+
+  const prev = {
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+    GITHUB_OWNER: process.env.GITHUB_OWNER,
+    GITHUB_REPO: process.env.GITHUB_REPO,
+    GITHUB_BRANCH: process.env.GITHUB_BRANCH,
+    VERCEL_GIT_REPO_OWNER: process.env.VERCEL_GIT_REPO_OWNER,
+    VERCEL_GIT_REPO_SLUG: process.env.VERCEL_GIT_REPO_SLUG,
+    VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF
+  };
+
+  try {
+    process.env.GITHUB_TOKEN = 'ghp_server_only_token';
+    delete process.env.GITHUB_OWNER;
+    delete process.env.GITHUB_REPO;
+    delete process.env.GITHUB_BRANCH;
+    process.env.VERCEL_GIT_REPO_OWNER = 'adhavan7819';
+    process.env.VERCEL_GIT_REPO_SLUG = 'hey-adhavan';
+    process.env.VERCEL_GIT_COMMIT_REF = 'main';
+
+    const status = getGitHubConfigStatus();
+    assert.equal(status.githubConfigured, true);
+    assert.equal(status.hasToken, true);
+    assert.equal(status.hasOwner, true);
+    assert.equal(status.hasRepo, true);
+    assert.equal(status.owner, 'adhavan7819');
+    assert.equal(status.repo, 'hey-adhavan');
+    assert.equal(status.branch, 'main');
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
 

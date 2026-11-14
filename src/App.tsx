@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
-import { Plus, Save, RotateCcw, Lock, X, CheckCircle2 } from 'lucide-react';
+import { Plus, Save, RotateCcw, Lock, X, CheckCircle2, GitBranch } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { InteractiveCursor } from './components/InteractiveCursor';
 import { HeroSection } from './components/HeroSection';
@@ -20,6 +20,7 @@ import { OwnerAdminBar } from './components/OwnerAdminBar';
 import { OwnerAuthModal } from './components/OwnerAuthModal';
 import { OwnerEditModal, EditModalMode } from './components/OwnerEditModal';
 import { OwnerInboxModal } from './components/OwnerInboxModal';
+import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { INITIAL_PORTFOLIO_STATE, DEFAULT_OWNER_PASSCODE, DEFAULT_PORTFOLIO_SECTIONS } from './data/portfolioData';
 import { PUBLISHED_PORTFOLIO_SNAPSHOT } from './data/publishedPortfolio';
 import { 
@@ -57,7 +58,11 @@ import {
   resetServerPortfolio,
   logoutOwnerServer,
   subscribeToPortfolioUpdates,
-  fetchOwnerMessages
+  fetchOwnerMessages,
+  fetchGitHubSyncStatus,
+  pullLatestFromGitHub,
+  commitPortfolioToGitHub,
+  GitHubSyncStatus
 } from './utils/portfolioServerSync';
 
 function getInitialPublishedProfile(): PortfolioProfile | null {
@@ -80,170 +85,55 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
   const [activeTab, setActiveTab] = useState<string>('hero');
 
-  // Persistent Portfolio State
+  // Canonical Portfolio State (rendered from root data.json + live GitHub / server updates, zero localStorage)
   const [portfolioState, setPortfolioState] = useState<PortfolioState>(() => {
-    try {
-      const saved = localStorage.getItem('adhavan_portfolio_state_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.videoChapters)) {
-          if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-            parsed.sections = DEFAULT_PORTFOLIO_SECTIONS;
-          } else {
-            // Strip removed proficiency section and upgrade default portrait photo once
-            const v3Migrated = localStorage.getItem('adhavan_v3_monochrome_cleanup');
-            if (!v3Migrated) {
-              parsed.sections = parsed.sections.filter((s: PortfolioSectionConfig) => s.id !== 'proficiency');
-              if (
-                parsed.designerInfo &&
-                (!parsed.designerInfo.heroPhotoUrl || parsed.designerInfo.heroPhotoUrl === '/showcase/hero-adhavan.jpg')
-              ) {
-                parsed.designerInfo.heroPhotoUrl = '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png';
-              }
-              localStorage.setItem('adhavan_v3_monochrome_cleanup', 'true');
-            }
-
-            // Upgrade to v4 brand identity ("ADHAVAN" / "Game Designer | 3D Artist"), social URLs, and timeline photo
-            const v4Migrated = localStorage.getItem('adhavan_v4_brand_title');
-            if (!v4Migrated && parsed.designerInfo) {
-              const info = parsed.designerInfo;
-              if (!info.name || info.name === 'Adhavan') {
-                info.name = 'ADHAVAN';
-              }
-              if (!info.title || info.title === 'Game Designer & 3D Environment Artist') {
-                info.title = 'Game Designer | 3D Artist';
-              }
-              if (!info.instagramUrl) {
-                info.instagramUrl = 'https://www.instagram.com/';
-              }
-              if (!info.youtubeUrl) {
-                info.youtubeUrl = 'https://www.youtube.com/';
-              }
-              if (!info.artstationUrl) {
-                info.artstationUrl = 'https://www.artstation.com/adhavan7819';
-              }
-              if (Array.isArray(info.careerTimeline)) {
-                info.careerTimeline = info.careerTimeline.map((item: any) =>
-                  item.photoUrl === '/showcase/hero-adhavan.jpg'
-                    ? { ...item, photoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png' }
-                    : item
-                );
-              }
-              localStorage.setItem('adhavan_v4_brand_title', 'true');
-            }
-
-            // Upgrade to v5 contact layout defaults & photo alignment defaults
-            const v5Migrated = localStorage.getItem('adhavan_v5_contact_photo_align');
-            if (!v5Migrated && parsed.designerInfo) {
-              const info = parsed.designerInfo;
-              if (info.contactHeading === 'GET IN TOUCH') {
-                info.contactHeading = "Let's Work Together";
-              }
-              if (info.contactBadge === 'Connect & Collaborate') {
-                info.contactBadge = 'GET IN TOUCH';
-              }
-              if (!info.heroPhotoAlign) {
-                info.heroPhotoAlign = { x: 50, y: 50, zoom: 1, fit: 'cover' };
-              }
-              localStorage.setItem('adhavan_v5_contact_photo_align', 'true');
-            }
-
-            // Upgrade to v6 streamlined Latest Project (recorded gameplay video + playable build button + editable specs)
-            const v6Migrated = localStorage.getItem('adhavan_v6_latest_project_clean');
-            if (!v6Migrated && parsed.designerInfo) {
-              const info = parsed.designerInfo;
-              if (!info.flagshipGameTitle) {
-                info.flagshipGameTitle = 'Game Specifications';
-              }
-              if (!info.flagshipGameSpecs) {
-                info.flagshipGameSpecs =
-                  'Add your game overview, core gameplay mechanics, controls, and build notes here.';
-              }
-              if (!Array.isArray(info.flagshipSpecRows) || info.flagshipSpecRows.length === 0) {
-                info.flagshipSpecRows = [
-                  { label: 'Engine', value: 'Unreal Engine 5' },
-                  { label: 'Genre', value: 'To Be Updated' },
-                  { label: 'Platform', value: 'Windows PC Build' },
-                  { label: 'Status', value: 'Playable Build In Progress' }
-                ];
-              }
-              if (!info.flagshipGameLabel || info.flagshipGameLabel === 'Download & Play Build') {
-                info.flagshipGameLabel = 'Download Playable Build';
-              }
-              if (
-                info.flagshipQuote ===
-                '“Focuses on a fully packed game, which is in progress. These are the screenshots and video of the level from the game.”'
-              ) {
-                info.flagshipQuote =
-                  'Recorded gameplay footage, playable build download, and game specifications.';
-              }
-              localStorage.setItem('adhavan_v6_latest_project_clean', 'true');
-            }
-
-            // Strip blank hero stats that had text cleared
-            const v7Migrated = localStorage.getItem('adhavan_v7_stats_cleanup');
-            if (!v7Migrated && parsed.designerInfo) {
-              const info = parsed.designerInfo;
-              if (Array.isArray(info.heroStats)) {
-                info.heroStats = info.heroStats.filter(
-                  (s: any) => Boolean(s?.number?.trim() || s?.label?.trim())
-                );
-              }
-              localStorage.setItem('adhavan_v7_stats_cleanup', 'true');
-            }
-
-            // Remove legacy 'Soon Final out' outro sentence from cached storage
-            const v8Migrated = localStorage.getItem('adhavan_v8_remove_outro');
-            if (!v8Migrated && parsed.designerInfo) {
-              const info = parsed.designerInfo;
-              if (
-                typeof info.outroText === 'string' &&
-                info.outroText.toLowerCase().includes('soon final out')
-              ) {
-                info.outroText = '';
-                info.outroTitle = '';
-              }
-              localStorage.setItem('adhavan_v8_remove_outro', 'true');
-            }
-          }
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse saved portfolio state', e);
-    }
-    return getInitialPublishedProfile()?.state || INITIAL_PORTFOLIO_STATE;
+    const initial = getInitialPublishedProfile()?.state || INITIAL_PORTFOLIO_STATE;
+    return {
+      ...initial,
+      sections:
+        Array.isArray(initial.sections) && initial.sections.length > 0
+          ? initial.sections
+          : DEFAULT_PORTFOLIO_SECTIONS
+    };
   });
 
-  // Sync portfolio state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('adhavan_portfolio_state_v1', JSON.stringify(portfolioState));
-    } catch (e) {
-      console.error('Failed to save portfolio state', e);
-    }
-  }, [portfolioState]);
-
-  // Persistent Owner Authentication State
-  const [isOwnerMode, setIsOwnerMode] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('adhavan_portfolio_owner_auth') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Owner Authentication State (backed strictly by server httpOnly cookie session)
+  const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false);
 
   // Baseline snapshot taken when opening Owner Mode to detect session edits on close
-  const [ownerSessionSnapshot, setOwnerSessionSnapshot] = useState<string | null>(() =>
-    isOwnerMode ? JSON.stringify(portfolioState) : null
-  );
+  const [ownerSessionSnapshot, setOwnerSessionSnapshot] = useState<string | null>(null);
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
-  const serverVersionRef = useRef<number>(0);
+  // GitHub CMS Sync State
+  const [isGitHubSyncOpen, setIsGitHubSyncOpen] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<GitHubSyncStatus>({
+    githubConfigured: false,
+    hasToken: false,
+    hasOwner: false,
+    hasRepo: false,
+    owner: '',
+    repo: '',
+    branch: 'main',
+    adminPinConfigured: false,
+    isAuthenticated: false
+  });
+  const [commitMessage, setCommitMessage] = useState(
+    'chore(portfolio): update data.json from Owner Mode'
+  );
+  const [autoPushOnSave, setAutoPushOnSave] = useState(true);
+  const [lastCommitInfo, setLastCommitInfo] = useState<{
+    sha: string;
+    url: string;
+    committedAt: string;
+  } | null>(null);
+
+  const serverVersionRef = useRef<number>(
+    PUBLISHED_PORTFOLIO_SNAPSHOT.initialized ? PUBLISHED_PORTFOLIO_SNAPSHOT.version : 0
+  );
   const isServerHydratedRef = useRef<boolean>(false);
   const lastSavedSignatureRef = useRef<string>('');
   const activeSyncPromiseRef = useRef<Promise<boolean> | null>(null);
@@ -263,18 +153,11 @@ export default function App() {
 
   useEffect(() => {
     if (!saveToast) return;
-    const t = window.setTimeout(() => setSaveToast(null), 3200);
+    const t = window.setTimeout(() => setSaveToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [saveToast]);
 
-  // Owner Passcode (defaults to '906', customizable by owner)
-  const [ownerPasscode, setOwnerPasscode] = useState<string>(() => {
-    try {
-      return localStorage.getItem('adhavan_portfolio_passcode') || DEFAULT_OWNER_PASSCODE;
-    } catch {
-      return DEFAULT_OWNER_PASSCODE;
-    }
-  });
+  const [ownerPasscode, setOwnerPasscode] = useState<string>(DEFAULT_OWNER_PASSCODE);
 
   // Modals state
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -313,55 +196,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Multi-Portfolio Management (Owner exclusive)
+  // Multi-Portfolio Management (rendered from root data.json, zero localStorage)
   const [portfolios, setPortfolios] = useState<PortfolioProfile[]>(() => {
-    try {
-      const saved = localStorage.getItem('adhavan_portfolios_vault_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((profile: PortfolioProfile) => {
-            if (!profile.state) return profile;
-            const cleanedSections = Array.isArray(profile.state.sections)
-              ? profile.state.sections.filter((s: PortfolioSectionConfig) => s.id !== 'proficiency')
-              : DEFAULT_PORTFOLIO_SECTIONS;
-            const info = profile.state.designerInfo;
-            const updatedHero =
-              info && (!info.heroPhotoUrl || info.heroPhotoUrl === '/showcase/hero-adhavan.jpg')
-                ? '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png'
-                : info?.heroPhotoUrl;
-            const updatedTimeline = Array.isArray(info?.careerTimeline)
-              ? info.careerTimeline.map((item) =>
-                  item.photoUrl === '/showcase/hero-adhavan.jpg'
-                    ? { ...item, photoUrl: '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png' }
-                    : item
-                )
-              : info?.careerTimeline;
-            return {
-              ...profile,
-              state: {
-                ...profile.state,
-                sections: cleanedSections,
-                designerInfo: info
-                  ? {
-                      ...info,
-                      name: !info.name || info.name === 'Adhavan' ? 'ADHAVAN' : info.name,
-                      title: !info.title || info.title === 'Game Designer & 3D Environment Artist' ? 'Game Designer | 3D Artist' : info.title,
-                      instagramUrl: info.instagramUrl || 'https://www.instagram.com/',
-                      youtubeUrl: info.youtubeUrl || 'https://www.youtube.com/',
-                      artstationUrl: info.artstationUrl || 'https://www.artstation.com/adhavan7819',
-                      heroPhotoUrl: updatedHero,
-                      careerTimeline: updatedTimeline
-                    }
-                  : info
-              }
-            };
-          });
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse portfolios vault', e);
-    }
     if (
       PUBLISHED_PORTFOLIO_SNAPSHOT.initialized &&
       Array.isArray(PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios) &&
@@ -382,33 +218,10 @@ export default function App() {
   });
 
   const [activePortfolioId, setActivePortfolioId] = useState<string>(() => {
-    try {
-      return (
-        localStorage.getItem('adhavan_active_portfolio_id') ||
-        PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId ||
-        'default_portfolio'
-      );
-    } catch {
-      return PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId || 'default_portfolio';
-    }
+    return PUBLISHED_PORTFOLIO_SNAPSHOT.activePortfolioId || 'default_portfolio';
   });
 
   const [isPortfolioManagerOpen, setIsPortfolioManagerOpen] = useState(false);
-
-  // Sync portfolios vault to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('adhavan_portfolios_vault_v1', JSON.stringify(portfolios));
-    } catch (e) {
-      console.error('Failed to save portfolios vault', e);
-    }
-  }, [portfolios]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('adhavan_active_portfolio_id', activePortfolioId);
-    } catch (e) {}
-  }, [activePortfolioId]);
 
   // Keep active portfolio state synchronized into the portfolios vault
   useEffect(() => {
@@ -452,11 +265,18 @@ export default function App() {
     setPortfolioState(normalizedState);
   };
 
-  // Push current state & vault to persistent server
+  const handleRefreshGitHubStatus = async (): Promise<GitHubSyncStatus> => {
+    const nextStatus = await fetchGitHubSyncStatus();
+    setGithubStatus(nextStatus);
+    return nextStatus;
+  };
+
+  // Push current state & vault to Express server / GitHub Contents API
   const pushStateToServer = async (
     nextPortfolios: PortfolioProfile[],
     nextActiveId: string,
-    expectedSig?: string
+    expectedSig?: string,
+    forceGitHubCommit = false
   ): Promise<boolean> => {
     if (activeSyncPromiseRef.current) {
       await activeSyncPromiseRef.current.catch(() => false);
@@ -465,15 +285,23 @@ export default function App() {
     const runSave = async (): Promise<boolean> => {
       setSyncStatus('saving');
       try {
-        const saved = await saveServerPortfolio({
-          activePortfolioId: nextActiveId,
-          portfolios: nextPortfolios
-        });
+        const shouldCommitToGitHub = forceGitHubCommit || autoPushOnSave;
+        const saved = shouldCommitToGitHub
+          ? await saveServerPortfolio({
+              activePortfolioId: nextActiveId,
+              portfolios: nextPortfolios,
+              commitMessage
+            })
+          : await saveServerPortfolio({
+              activePortfolioId: nextActiveId,
+              portfolios: nextPortfolios
+            });
+
         if (saved.initialized && Array.isArray(saved.portfolios) && saved.portfolios.length > 0) {
           const hadDataUrls = JSON.stringify(nextPortfolios).includes('data:');
           const nextVersion = saved.version ?? serverVersionRef.current + 1;
           serverVersionRef.current = nextVersion;
-          if (hadDataUrls) {
+          if (hadDataUrls && !saved.fromGitHub) {
             applyServerPayload(
               saved.portfolios,
               saved.activePortfolioId || nextActiveId,
@@ -485,26 +313,26 @@ export default function App() {
         } else if (expectedSig) {
           lastSavedSignatureRef.current = expectedSig;
         }
+
+        if (saved.githubCommit?.commitSha) {
+          setLastCommitInfo({
+            sha: saved.githubCommit.commitSha,
+            url: saved.githubCommit.commitUrl,
+            committedAt: new Date().toISOString()
+          });
+          setSaveToast(`Committed data.json to GitHub (${saved.githubCommit.commitSha.slice(0, 7)})`);
+        }
+
         setSyncStatus('saved');
         return true;
       } catch (err) {
-        if (err instanceof Error && err.message === 'STATIC_HOST_READONLY') {
-          hasBackendRef.current = false;
-          setIsStaticHost(true);
-          try {
-            localStorage.setItem('adhavan_local_static_dirty_v1', 'true');
-          } catch {}
-          if (expectedSig) {
-            lastSavedSignatureRef.current = expectedSig;
-          }
-          setSyncStatus('saved');
-          return true;
-        }
-        console.error('Failed to sync portfolio to server:', err);
+        console.error('Failed to sync portfolio:', err);
         setSyncStatus('error');
         if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
-          setSaveToast('2FA session expired · Verify Authenticator code to publish edits');
+          setSaveToast('Owner session expired · Enter Admin PIN to publish edits');
           setIsAuthModalOpen(true);
+        } else if (err instanceof Error) {
+          setSaveToast(err.message);
         }
         return false;
       } finally {
@@ -518,7 +346,97 @@ export default function App() {
     return promise;
   };
 
-  // Initial server hydration + auth status verification + live SSE sync across all devices
+  const handleSaveAndCommitToGitHub = async (customMessage?: string) => {
+    const mergedPortfolios = portfolios.map((p) =>
+      p.id === activePortfolioId
+        ? { ...p, state: portfolioState, updatedAt: new Date().toISOString() }
+        : p
+    );
+    setSyncStatus('saving');
+    try {
+      const result = await commitPortfolioToGitHub({
+        activePortfolioId,
+        portfolios: mergedPortfolios,
+        commitMessage: customMessage || commitMessage
+      });
+      await handleRefreshGitHubStatus();
+
+      if (result.ok && result.committed) {
+        if (result.data?.version) {
+          serverVersionRef.current = result.data.version;
+        }
+        if (result.commitSha) {
+          setLastCommitInfo({
+            sha: result.commitSha,
+            url: result.commitUrl || '',
+            committedAt: new Date().toISOString()
+          });
+        }
+        lastSavedSignatureRef.current = JSON.stringify({
+          activePortfolioId,
+          state: portfolioState,
+          portfolioIds: mergedPortfolios.map((p) => ({
+            id: p.id,
+            name: p.name,
+            subtitle: p.subtitle
+          }))
+        });
+        setSyncStatus('saved');
+        setSaveToast(
+          result.commitSha
+            ? `Pushed data.json to GitHub (${result.commitSha.slice(0, 7)})`
+            : 'Pushed data.json to GitHub'
+        );
+        return {
+          ok: true,
+          commitSha: result.commitSha,
+          commitUrl: result.commitUrl
+        };
+      }
+
+      setSyncStatus('error');
+      return {
+        ok: false,
+        error:
+          result.error ||
+          'GitHub commit failed. Ensure GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPO are configured.'
+      };
+    } catch (err) {
+      setSyncStatus('error');
+      if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
+        setIsAuthModalOpen(true);
+      }
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'GitHub commit failed.'
+      };
+    }
+  };
+
+  const handlePullLatestFromGitHub = async () => {
+    const res = await pullLatestFromGitHub();
+    setGithubStatus(res.status);
+    if (res.ok && res.data?.portfolios?.length) {
+      applyServerPayload(
+        res.data.portfolios,
+        res.data.activePortfolioId || 'default_portfolio',
+        res.data.version || serverVersionRef.current + 1
+      );
+      setSyncStatus('saved');
+      setSaveToast(`Pulled latest data.json (v${res.data.version || 1})`);
+      return {
+        ok: true,
+        source: res.source,
+        version: res.data.version
+      };
+    }
+    return {
+      ok: false,
+      error: res.error || 'Could not pull latest data.json from GitHub.'
+    };
+  };
+
+  // Initial server / GitHub hydration + httpOnly cookie auth check + live SSE sync
   useEffect(() => {
     let active = true;
     let unsubscribeSse: (() => void) | null = null;
@@ -547,23 +465,32 @@ export default function App() {
 
     const hydrateFromServer = async () => {
       try {
+        const ghStatus = await fetchGitHubSyncStatus().catch(() => null);
+        if (!active) return;
+
+        if (ghStatus) {
+          setGithubStatus(ghStatus);
+        }
+
         const [authStatus, serverData] = await Promise.all([
           fetchServerAuthStatus().catch(() => null),
           fetchServerPortfolio().catch(() => null)
         ]);
         if (!active) return;
 
-        if (authStatus && authStatus.serverAvailable === false) {
-          hasBackendRef.current = false;
-          setIsStaticHost(true);
-        }
+        const hasExpress = Boolean(authStatus?.serverAvailable);
+        const hasGitHub = Boolean(ghStatus?.githubConfigured);
+        hasBackendRef.current = hasExpress || hasGitHub;
+        setIsStaticHost(!hasExpress && !hasGitHub);
 
-        if (authStatus && authStatus.serverAvailable && !authStatus.isAuthenticated && isOwnerMode) {
+        const cookieAuthenticated = Boolean(
+          authStatus?.isAuthenticated || ghStatus?.isAuthenticated
+        );
+        if (cookieAuthenticated) {
+          setIsOwnerMode(true);
+        } else {
           setIsOwnerMode(false);
           setOwnerSessionSnapshot(null);
-          try {
-            localStorage.setItem('adhavan_portfolio_owner_auth', 'false');
-          } catch {}
         }
 
         if (
@@ -571,33 +498,13 @@ export default function App() {
           Array.isArray(serverData.portfolios) &&
           serverData.portfolios.length > 0
         ) {
-          let shouldApply = true;
-          if (serverData.fromStaticSnapshot) {
-            hasBackendRef.current = false;
-            setIsStaticHost(true);
-            const snapshotSig = `${serverData.version ?? 1}:${serverData.updatedAt ?? ''}`;
-            try {
-              const lastStaticSig = localStorage.getItem('adhavan_static_snapshot_sig_v1');
-              const hasLocalStaticEdits =
-                localStorage.getItem('adhavan_local_static_dirty_v1') === 'true';
-              if (lastStaticSig === snapshotSig && hasLocalStaticEdits) {
-                shouldApply = false;
-              } else {
-                localStorage.setItem('adhavan_static_snapshot_sig_v1', snapshotSig);
-                localStorage.removeItem('adhavan_local_static_dirty_v1');
-              }
-            } catch {}
-          }
+          applyServerPayload(
+            serverData.portfolios,
+            serverData.activePortfolioId || 'default_portfolio',
+            serverData.version || 1
+          );
 
-          if (shouldApply) {
-            applyServerPayload(
-              serverData.portfolios,
-              serverData.activePortfolioId || 'default_portfolio',
-              serverData.version || 1
-            );
-          }
-
-          if (authStatus?.isAuthenticated) {
+          if (cookieAuthenticated) {
             const activeP =
               serverData.portfolios.find(
                 (p) => p.id === (serverData.activePortfolioId || 'default_portfolio')
@@ -605,24 +512,15 @@ export default function App() {
             if (activeP?.state) {
               setOwnerSessionSnapshot(JSON.stringify(activeP.state));
             }
-            fetchOwnerMessages()
-              .then((inbox) => {
-                if (active) setUnreadMessageCount(inbox.unreadCount || 0);
-              })
-              .catch(() => {});
+            if (authStatus?.serverAvailable) {
+              fetchOwnerMessages()
+                .then((inbox) => {
+                  if (active) setUnreadMessageCount(inbox.unreadCount || 0);
+                })
+                .catch(() => {});
+            }
           }
           setSyncStatus('saved');
-        } else if (authStatus?.isAuthenticated) {
-          // Server not initialized yet, seed it immediately with current state (including any local edits/resume)
-          const seededPortfolios = portfolios.map((p) =>
-            p.id === activePortfolioId ? { ...p, state: portfolioState } : p
-          );
-          await pushStateToServer(seededPortfolios, activePortfolioId);
-          fetchOwnerMessages()
-            .then((inbox) => {
-              if (active) setUnreadMessageCount(inbox.unreadCount || 0);
-            })
-            .catch(() => {});
         }
 
         if (active && authStatus?.serverAvailable && hasBackendRef.current) {
@@ -765,24 +663,19 @@ export default function App() {
       } catch {
         setOwnerSessionSnapshot(null);
       }
-      // If server hasn't been initialized yet, immediately publish current state & assets on unlock
-      if (serverVersionRef.current === 0) {
-        const merged = portfolios.map((p) =>
-          p.id === activePortfolioId ? { ...p, state: portfolioState } : p
-        );
-        void pushStateToServer(merged, activePortfolioId);
+      handleRefreshGitHubStatus().then((st) => {
+        setIsStaticHost(!hasBackendRef.current && !st.githubConfigured);
+      });
+      if (hasBackendRef.current) {
+        fetchOwnerMessages()
+          .then((inbox) => setUnreadMessageCount(inbox.unreadCount || 0))
+          .catch(() => {});
       }
-      fetchOwnerMessages()
-        .then((inbox) => setUnreadMessageCount(inbox.unreadCount || 0))
-        .catch(() => {});
     } else {
       setOwnerSessionSnapshot(null);
       setIsExitConfirmOpen(false);
     }
     setIsOwnerMode(val);
-    try {
-      localStorage.setItem('adhavan_portfolio_owner_auth', String(val));
-    } catch {}
   };
 
   const handleRequestCloseOwnerMode = async () => {
@@ -800,27 +693,20 @@ export default function App() {
         ? { ...p, state: portfolioState, updatedAt: new Date().toISOString() }
         : p
     );
-    try {
-      localStorage.setItem('adhavan_portfolio_state_v1', JSON.stringify(portfolioState));
-      localStorage.setItem('adhavan_portfolios_vault_v1', JSON.stringify(mergedPortfolios));
-    } catch (e) {
-      console.error('Failed to persist local portfolio backup', e);
-    }
 
-    const ok = await pushStateToServer(mergedPortfolios, activePortfolioId);
+    const ok = await pushStateToServer(mergedPortfolios, activePortfolioId, undefined, true);
     if (!ok) {
-      setSaveToast('Could not save to server · Please re-verify 2FA and retry');
+      setSaveToast('Could not save changes · Check Owner Auth or GitHub Sync configuration');
       setIsExitConfirmOpen(false);
-      setIsAuthModalOpen(true);
       return;
     }
 
     await logoutOwnerServer();
     handleSetOwnerMode(false);
     setSaveToast(
-      hasBackendRef.current
-        ? 'Changes saved & live across all devices · Owner Mode closed'
-        : 'Changes saved locally in browser · Owner Mode closed'
+      githubStatus.githubConfigured
+        ? 'Changes committed to GitHub & saved · Owner Mode closed'
+        : 'Changes saved to data.json · Owner Mode closed'
     );
   };
 
@@ -834,7 +720,6 @@ export default function App() {
             : p
         );
         setPortfolioState(restored);
-        localStorage.setItem('adhavan_portfolio_state_v1', ownerSessionSnapshot);
         await pushStateToServer(merged, activePortfolioId);
       } catch (e) {
         console.error('Failed to restore pre-session snapshot', e);
@@ -847,9 +732,6 @@ export default function App() {
 
   const handleChangePasscode = (newCode: string) => {
     setOwnerPasscode(newCode);
-    try {
-      localStorage.setItem('adhavan_portfolio_passcode', newCode);
-    } catch {}
   };
 
   const handleOpenEditModal = (mode: EditModalMode, initialData?: any) => {
@@ -1071,11 +953,8 @@ export default function App() {
     if (window.confirm('Reset portfolio to original default showcases and information? Custom changes will be reset across all devices.')) {
       setPortfolioState(INITIAL_PORTFOLIO_STATE);
       try {
-        localStorage.removeItem('adhavan_portfolio_state_v1');
-      } catch {}
-      try {
         await resetServerPortfolio(INITIAL_PORTFOLIO_STATE);
-        setSaveToast('Portfolio reset to defaults across all devices');
+        setSaveToast('Portfolio reset to defaults');
       } catch (err) {
         console.error('Server reset failed:', err);
       }
@@ -1205,6 +1084,9 @@ export default function App() {
           onResetDefaults={handleResetDefaults}
           onLockMode={handleRequestCloseOwnerMode}
           onOpenSecurity={() => setIsAuthModalOpen(true)}
+          onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+          githubConfigured={githubStatus.githubConfigured}
+          lastCommitSha={lastCommitInfo?.sha || null}
           hasUnsavedChanges={hasUnsavedOwnerChanges}
           syncStatus={syncStatus}
           isStaticHost={isStaticHost}
@@ -1524,7 +1406,7 @@ export default function App() {
         onPlayInReel={handlePlayInReel}
       />
 
-      {/* Owner Auth Modal (Passcode login/lock/change) */}
+      {/* Owner Auth Modal (Admin PIN + 2FA login/lock) */}
       <OwnerAuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -1533,6 +1415,23 @@ export default function App() {
         onUpdatePasscode={handleChangePasscode}
         isAlreadyOwner={isOwnerMode}
         onLockOwnerMode={handleRequestCloseOwnerMode}
+        onOpenGitHubSync={() => setIsGitHubSyncOpen(true)}
+      />
+
+      {/* GitHub CMS Sync & Vercel Setup Guide Modal */}
+      <GitHubSyncModal
+        isOpen={isGitHubSyncOpen}
+        onClose={() => setIsGitHubSyncOpen(false)}
+        githubStatus={githubStatus}
+        onRefreshStatus={handleRefreshGitHubStatus}
+        commitMessage={commitMessage}
+        onCommitMessageChange={setCommitMessage}
+        autoPushOnSave={autoPushOnSave}
+        onAutoPushOnSaveChange={setAutoPushOnSave}
+        onSaveAndCommitToGitHub={handleSaveAndCommitToGitHub}
+        onPullLatestFromGitHub={handlePullLatestFromGitHub}
+        lastCommitInfo={lastCommitInfo}
+        activeVersion={serverVersionRef.current}
       />
 
       {/* Universal Owner Edit Modal */}
@@ -1556,6 +1455,43 @@ export default function App() {
         onClose={() => setIsInboxOpen(false)}
         onUnreadCountChange={setUnreadMessageCount}
       />
+
+      {/* Subtle Floating Owner Edit & GitHub Sync Toggle */}
+      <div className="fixed bottom-4 left-4 z-[90] flex items-center gap-2">
+        {isOwnerMode ? (
+          <button
+            type="button"
+            onClick={() => setIsGitHubSyncOpen(true)}
+            className="px-3 py-2 rounded-xl bg-zinc-950/90 hover:bg-zinc-900 border border-amber-500/40 text-zinc-100 text-[11px] font-mono uppercase tracking-wider shadow-xl backdrop-blur-md flex items-center gap-2 transition-colors cursor-pointer"
+            title="Open GitHub Sync Status & Setup Guide"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                githubStatus.githubConfigured ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            />
+            <GitBranch className="w-3.5 h-3.5 text-amber-400" />
+            <span>
+              {syncStatus === 'saving'
+                ? 'Committing...'
+                : githubStatus.githubConfigured
+                ? 'GitHub Sync'
+                : 'GitHub Setup'}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg bg-zinc-950/75 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 text-zinc-400 hover:text-zinc-100 text-[10px] font-mono uppercase tracking-wider shadow-lg backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Unlock Owner Edit Mode (Shift+O)"
+            aria-label="Unlock Owner Edit Mode"
+          >
+            <Lock className="w-3 h-3 text-amber-400/80" />
+            <span>Owner Edit</span>
+          </button>
+        )}
+      </div>
 
       {/* Save Prompt Modal on Closing Owner Mode */}
       <AnimatePresence>

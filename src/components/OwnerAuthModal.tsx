@@ -13,13 +13,17 @@ import {
   Check,
   ArrowLeft,
   RefreshCw,
-  Smartphone
+  Smartphone,
+  Eye,
+  EyeOff,
+  GitBranch
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { getTotpSecondsRemaining } from '../utils/totp';
 import {
   fetchServerAuthStatus,
   verifyOwnerTotpWithServer,
+  verifyAdminPinWithServer,
   requestOwnerRecoveryEmail,
   verifyOwnerRecoveryWithServer,
   fetchRecoveryKeyStatus,
@@ -35,6 +39,7 @@ interface OwnerAuthModalProps {
   onUpdatePasscode?: (newPasscode: string) => void;
   isAlreadyOwner: boolean;
   onLockOwnerMode: () => void;
+  onOpenGitHubSync?: () => void;
 }
 
 export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
@@ -42,8 +47,12 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   onClose,
   onSuccess,
   isAlreadyOwner,
-  onLockOwnerMode
+  onLockOwnerMode,
+  onOpenGitHubSync
 }) => {
+  const [authMethod, setAuthMethod] = useState<'pin' | 'totp'>('pin');
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [showPinValue, setShowPinValue] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -80,6 +89,8 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
     if (!isOpen) return;
     let active = true;
     setError('');
+    setAdminPinInput('');
+    setShowPinValue(false);
     setTotpCode('');
     setShowSetupQr(false);
     setIsRecoveryMode(false);
@@ -146,6 +157,32 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
   }, [isOpen, isPaired, otpauthUri, showSetupQr]);
 
   if (!isOpen) return null;
+
+  const handleVerifyAdminPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = adminPinInput.trim();
+    if (!trimmed) {
+      setError('Enter your Admin PIN.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setError('');
+    try {
+      const result = await verifyAdminPinWithServer(trimmed);
+      if (result.ok) {
+        setAdminPinInput('');
+        onSuccess();
+        onClose();
+      } else {
+        setError(result.error || 'Incorrect Admin PIN. Check ADMIN_PIN and try again.');
+      }
+    } catch {
+      setError('Unable to verify Admin PIN right now. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const handleVerifyTotp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,15 +353,17 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
               </>
             ) : (
               <>
-                Owner <span className="text-amber-500">2FA Access</span>
+                Owner <span className="text-amber-500">Edit Mode</span>
               </>
             )}
           </h2>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
             {isAlreadyOwner
-              ? '2FA Authenticator security is connected. Manage recovery backups or exit Owner Mode below.'
+              ? 'Owner Edit Mode is active. Manage GitHub sync, backups, or lock editing below.'
               : isRecoveryMode
               ? 'Recover access if your Authenticator device was lost or replaced.'
+              : authMethod === 'pin'
+              ? 'Enter your Admin PIN to unlock Owner Edit Mode and commit updates directly to GitHub.'
               : 'Enter the 6-digit verification code from your connected Authenticator app.'}
           </p>
         </div>
@@ -334,9 +373,23 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-amber-400" />
               <span>
-                Authenticated as <strong>Adhavan</strong>. Once linked, your Authenticator code unlocks Owner Mode from any device.
+                Authenticated as <strong>Adhavan</strong>. Edits save straight to <code className="text-amber-200">data.json</code> &amp; GitHub without localStorage.
               </span>
             </div>
+
+            {onOpenGitHubSync && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenGitHubSync();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <GitBranch className="w-4 h-4" />
+                <span>Open GitHub Sync &amp; Vercel Setup</span>
+              </button>
+            )}
 
             {/* Backup Recovery Key Section (Authenticated Owner Only) */}
             <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
@@ -609,123 +662,213 @@ export const OwnerAuthModal: React.FC<OwnerAuthModalProps> = ({
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyTotp} className="space-y-4">
-            {!isPaired && canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
-              <div className="p-3 rounded-xl bg-zinc-900/70 border border-amber-500/30 flex items-center justify-between gap-3">
-                <div className="text-[11px] text-zinc-300 font-mono">
-                  First time on this app? Scan the setup QR once.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowSetupQr(true)}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
-                >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>Pair QR</span>
-                </button>
-              </div>
-            )}
-
-            {!isPaired && canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
-                <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
-                  Connect Authenticator App
-                </div>
-                {recoveryRelinkBanner && (
-                  <p className="text-xs text-emerald-400 leading-relaxed font-medium">
-                    {recoveryRelinkBanner}
-                  </p>
-                )}
-                <p className="text-xs text-zinc-300 leading-relaxed">
-                  Scan this QR code once in <strong>Google Authenticator</strong>,{' '}
-                  <strong>Authy</strong>, or <strong>Microsoft Authenticator</strong>, then enter the
-                  6-digit code below to activate.
-                </p>
-                <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
-                  <img
-                    src={qrDataUrl}
-                    alt="Scan 2FA QR Code"
-                    className="w-44 h-44 block"
-                  />
-                </div>
-                <div className="text-[10px] font-mono text-zinc-500">
-                  Once connected, this QR code stays hidden across all devices.
-                </div>
-                {recoveryRelinkBanner && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSuccess();
-                      onClose();
-                    }}
-                    className="text-xs font-mono text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                  >
-                    Already scanned? Enter Owner Mode now
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="owner-totp-input"
-                  className="block text-xs font-mono text-zinc-300 uppercase tracking-wider"
-                >
-                  6-Digit Authenticator Code *
-                </label>
-                <span className="text-[10px] font-mono text-zinc-500 tabular-nums">
-                  Refreshes in {secondsLeft}s
-                </span>
-              </div>
-
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                id="owner-totp-input"
-                value={totpCode}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
-                  setTotpCode(digits);
-                  setError('');
-                }}
-                placeholder="000000"
-                className="w-full px-4 py-3.5 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-2xl font-mono font-bold tracking-[0.4em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
-                autoFocus
-              />
-
-              {error && (
-                <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                  <span>{error}</span>
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isVerifying || totpCode.length !== 6}
-              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>{isVerifying ? 'Verifying...' : 'Verify & Unlock Owner Mode'}</span>
-            </button>
-
-            <div className="pt-1 text-center">
+          <div className="space-y-4">
+            {/* Switch between Admin PIN (default) and Authenticator 2FA */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-zinc-900 border border-zinc-800">
               <button
                 type="button"
                 onClick={() => {
-                  setIsRecoveryMode(true);
+                  setAuthMethod('pin');
                   setError('');
                 }}
-                className="text-xs font-mono text-zinc-400 hover:text-amber-400 transition-colors underline underline-offset-4 cursor-pointer"
+                className={`py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  authMethod === 'pin'
+                    ? 'bg-amber-500 text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
               >
-                Lost Authenticator access? Recovery Mode
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Admin PIN</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethod('totp');
+                  setError('');
+                }}
+                className={`py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  authMethod === 'totp'
+                    ? 'bg-amber-500 text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>2FA App</span>
               </button>
             </div>
-          </form>
+
+            {authMethod === 'pin' ? (
+              <form onSubmit={handleVerifyAdminPin} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="owner-admin-pin-input"
+                    className="block text-xs font-mono text-zinc-300 uppercase tracking-wider mb-1.5"
+                  >
+                    Admin PIN / Password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPinValue ? 'text' : 'password'}
+                      id="owner-admin-pin-input"
+                      autoComplete="current-password"
+                      value={adminPinInput}
+                      onChange={(e) => {
+                        setAdminPinInput(e.target.value);
+                        setError('');
+                      }}
+                      placeholder="Enter Admin PIN"
+                      className="w-full px-4 py-3.5 pr-11 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-lg font-mono font-bold tracking-[0.25em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPinValue((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-zinc-400 hover:text-white cursor-pointer"
+                      aria-label={showPinValue ? 'Hide PIN' : 'Show PIN'}
+                    >
+                      {showPinValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-1.5">
+                    Validated securely on the server against your Vercel <code className="text-zinc-400">ADMIN_PIN</code> environment variable.
+                  </p>
+                  {error && (
+                    <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>{error}</span>
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isVerifying || !adminPinInput.trim()}
+                  className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>{isVerifying ? 'Verifying PIN...' : 'Unlock Owner Edit Mode'}</span>
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyTotp} className="space-y-4">
+                {!isPaired && canShowFirstTimeSetup && !showSetupQr && otpauthUri && (
+                  <div className="p-3 rounded-xl bg-zinc-900/70 border border-amber-500/30 flex items-center justify-between gap-3">
+                    <div className="text-[11px] text-zinc-300 font-mono">
+                      First time on this app? Scan the setup QR once.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSetupQr(true)}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>Pair QR</span>
+                    </button>
+                  </div>
+                )}
+
+                {!isPaired && canShowFirstTimeSetup && showSetupQr && qrDataUrl && (
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/40 space-y-3 text-center">
+                    <div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                      Connect Authenticator App
+                    </div>
+                    {recoveryRelinkBanner && (
+                      <p className="text-xs text-emerald-400 leading-relaxed font-medium">
+                        {recoveryRelinkBanner}
+                      </p>
+                    )}
+                    <p className="text-xs text-zinc-300 leading-relaxed">
+                      Scan this QR code once in <strong>Google Authenticator</strong>,{' '}
+                      <strong>Authy</strong>, or <strong>Microsoft Authenticator</strong>, then enter the
+                      6-digit code below to activate.
+                    </p>
+                    <div className="inline-block p-2.5 rounded-xl bg-white shadow-lg">
+                      <img
+                        src={qrDataUrl}
+                        alt="Scan 2FA QR Code"
+                        className="w-44 h-44 block"
+                      />
+                    </div>
+                    <div className="text-[10px] font-mono text-zinc-500">
+                      Once connected, this QR code stays hidden across all devices.
+                    </div>
+                    {recoveryRelinkBanner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSuccess();
+                          onClose();
+                        }}
+                        className="text-xs font-mono text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                      >
+                        Already scanned? Enter Owner Mode now
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label
+                      htmlFor="owner-totp-input"
+                      className="block text-xs font-mono text-zinc-300 uppercase tracking-wider"
+                    >
+                      6-Digit Authenticator Code *
+                    </label>
+                    <span className="text-[10px] font-mono text-zinc-500 tabular-nums">
+                      Refreshes in {secondsLeft}s
+                    </span>
+                  </div>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    id="owner-totp-input"
+                    value={totpCode}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setTotpCode(digits);
+                      setError('');
+                    }}
+                    placeholder="000000"
+                    className="w-full px-4 py-3.5 rounded-xl bg-zinc-900 border border-zinc-800 text-center text-2xl font-mono font-bold tracking-[0.4em] text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    autoFocus
+                  />
+
+                  {error && (
+                    <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>{error}</span>
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isVerifying || totpCode.length !== 6}
+                  className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase tracking-wider text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isVerifying ? 'Verifying...' : 'Verify & Unlock Owner Mode'}</span>
+                </button>
+
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecoveryMode(true);
+                      setError('');
+                    }}
+                    className="text-xs font-mono text-zinc-400 hover:text-amber-400 transition-colors underline underline-offset-4 cursor-pointer"
+                  >
+                    Lost Authenticator access? Recovery Mode
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </div>
     </div>

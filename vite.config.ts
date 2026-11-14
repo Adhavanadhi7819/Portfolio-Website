@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import {defineConfig, Plugin} from 'vite';
+import { defineConfig, Plugin } from 'vite';
 
 function syncPortfolioSnapshotOnBuild(): Plugin {
   return {
@@ -11,22 +11,55 @@ function syncPortfolioSnapshotOnBuild(): Plugin {
     buildStart() {
       try {
         const root = process.cwd();
+        const rootDataFile = path.resolve(root, 'data.json');
         const stateFile = path.resolve(root, 'portfolio-data', 'state.json');
-        if (!fs.existsSync(stateFile)) return;
+        const publicDir = path.resolve(root, 'public');
+        const showcaseDir = path.join(publicDir, 'showcase');
+        const staticAssetsDir = path.join(publicDir, 'uploaded-assets');
+        const dataAssetsDir = path.resolve(root, 'portfolio-data', 'assets');
 
-        const raw = fs.readFileSync(stateFile, 'utf8');
-        const parsed = JSON.parse(raw) as {
+        let chosenRaw: string | null = null;
+
+        const parseMeta = (filePath: string) => {
+          if (!fs.existsSync(filePath)) return null;
+          try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            const parsed = JSON.parse(raw) as {
+              initialized?: boolean;
+              version?: number;
+              updatedAt?: string;
+              activePortfolioId?: string;
+              portfolios?: unknown[];
+            };
+            if (!Array.isArray(parsed.portfolios) || parsed.portfolios.length === 0) return null;
+            return { raw, parsed };
+          } catch {
+            return null;
+          }
+        };
+
+        const rootMeta = parseMeta(rootDataFile);
+        const stateMeta = parseMeta(stateFile);
+
+        if (stateMeta && rootMeta) {
+          const stateTime = Date.parse(stateMeta.parsed.updatedAt || '') || 0;
+          const rootTime = Date.parse(rootMeta.parsed.updatedAt || '') || 0;
+          chosenRaw = stateTime > rootTime ? stateMeta.raw : rootMeta.raw;
+        } else if (stateMeta) {
+          chosenRaw = stateMeta.raw;
+        } else if (rootMeta) {
+          chosenRaw = rootMeta.raw;
+        }
+
+        if (!chosenRaw) return;
+
+        const parsed = JSON.parse(chosenRaw) as {
           version?: number;
           updatedAt?: string;
           activePortfolioId?: string;
           portfolios?: unknown[];
         };
         if (!Array.isArray(parsed.portfolios) || parsed.portfolios.length === 0) return;
-
-        const publicDir = path.resolve(root, 'public');
-        const showcaseDir = path.join(publicDir, 'showcase');
-        const staticAssetsDir = path.join(publicDir, 'uploaded-assets');
-        const dataAssetsDir = path.resolve(root, 'portfolio-data', 'assets');
 
         const showcaseIndex = new Map<string, string>();
         if (fs.existsSync(showcaseDir)) {
@@ -86,30 +119,11 @@ function syncPortfolioSnapshotOnBuild(): Plugin {
           portfolios: staticPortfolios
         };
 
-        fs.writeFileSync(
-          path.join(publicDir, 'portfolio-snapshot.json'),
-          JSON.stringify(payload, null, 2)
-        );
-
-        const tsContent = [
-          `import type { PortfolioProfile } from '../types/portfolio';`,
-          ``,
-          `export interface PublishedPortfolioBundle {`,
-          `  initialized: boolean;`,
-          `  version: number;`,
-          `  updatedAt: string;`,
-          `  activePortfolioId: string;`,
-          `  portfolios: PortfolioProfile[];`,
-          `}`,
-          ``,
-          `export const PUBLISHED_PORTFOLIO_SNAPSHOT: PublishedPortfolioBundle = ${JSON.stringify(
-            payload,
-            null,
-            2
-          )};`,
-          ``
-        ].join('\n');
-        fs.writeFileSync(path.resolve(root, 'src', 'data', 'publishedPortfolio.ts'), tsContent);
+        const jsonText = JSON.stringify(payload, null, 2) + '\n';
+        fs.writeFileSync(path.join(publicDir, 'portfolio-snapshot.json'), jsonText);
+        if (stateMeta && !rootMeta) {
+          fs.writeFileSync(rootDataFile, jsonText);
+        }
       } catch (err) {
         console.warn('Skipped buildStart portfolio snapshot sync:', err);
       }

@@ -2,7 +2,8 @@ import { PortfolioProfile, PortfolioState } from '../types/portfolio';
 import { PUBLISHED_PORTFOLIO_SNAPSHOT } from '../data/publishedPortfolio';
 import { OWNER_TOTP_SECRET, verifyTotpCode } from './totp';
 
-const OWNER_TOKEN_KEY = 'adhavan_owner_token_v1';
+let memoryOwnerToken: string | null = null;
+let knownExpressAvailable: boolean | null = null;
 
 export interface ServerAuthStatus {
   isAuthenticated: boolean;
@@ -11,7 +12,21 @@ export interface ServerAuthStatus {
   hasRecoveryKey?: boolean;
   ownerEmailMasked?: string;
   otpauthUri?: string;
+  githubConfigured?: boolean;
   serverAvailable?: boolean;
+}
+
+export interface GitHubSyncStatus {
+  githubConfigured: boolean;
+  hasToken: boolean;
+  hasOwner: boolean;
+  hasRepo: boolean;
+  owner: string;
+  repo: string;
+  branch: string;
+  adminPinConfigured: boolean;
+  isAuthenticated: boolean;
+  runtime?: 'express' | 'vercel' | 'node';
 }
 
 export interface ServerPortfolioResponse {
@@ -21,6 +36,36 @@ export interface ServerPortfolioResponse {
   activePortfolioId?: string;
   portfolios?: PortfolioProfile[];
   fromStaticSnapshot?: boolean;
+  fromGitHub?: boolean;
+  githubCommit?: {
+    commitSha: string;
+    commitUrl: string;
+    branch: string;
+  };
+}
+
+export interface GitHubCommitResponse {
+  ok: boolean;
+  committed?: boolean;
+  savedLocally?: boolean;
+  githubConfigured?: boolean;
+  hasToken?: boolean;
+  hasOwner?: boolean;
+  hasRepo?: boolean;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+  commitSha?: string;
+  commitUrl?: string;
+  contentSha?: string;
+  data?: {
+    initialized: boolean;
+    version: number;
+    updatedAt: string;
+    activePortfolioId: string;
+    portfolios: PortfolioProfile[];
+  };
+  error?: string;
 }
 
 export interface UploadedAssetResponse {
@@ -32,21 +77,11 @@ export interface UploadedAssetResponse {
 }
 
 export function getStoredOwnerToken(): string | null {
-  try {
-    return localStorage.getItem(OWNER_TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  return memoryOwnerToken;
 }
 
 export function setStoredOwnerToken(token: string | null): void {
-  try {
-    if (token) {
-      localStorage.setItem(OWNER_TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(OWNER_TOKEN_KEY);
-    }
-  } catch {}
+  memoryOwnerToken = token || null;
 }
 
 function buildAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -57,36 +92,274 @@ function buildAuthHeaders(extra: Record<string, string> = {}): Record<string, st
   };
 }
 
-export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
+export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
   try {
-    const res = await fetch('/api/auth/status', {
+    const res = await fetch('/api/update-portfolio?action=status', {
       method: 'GET',
       cache: 'no-store',
       credentials: 'include',
       headers: buildAuthHeaders()
     });
     const contentType = res.headers.get('content-type') || '';
-    if (!res.ok || !contentType.includes('application/json')) {
+    if (res.ok && contentType.includes('application/json')) {
+      const json = (await res.json()) as Partial<GitHubSyncStatus>;
+      if (json.runtime === 'express') {
+        knownExpressAvailable = true;
+      } else if (json.runtime === 'vercel') {
+        knownExpressAvailable = false;
+      }
       return {
-        isAuthenticated: false,
-        isPaired: true,
-        canShowInitialSetupQr: false,
-        serverAvailable: false
+        githubConfigured: Boolean(json.githubConfigured),
+        hasToken: Boolean(json.hasToken),
+        hasOwner: Boolean(json.hasOwner),
+        hasRepo: Boolean(json.hasRepo),
+        owner: json.owner || '',
+        repo: json.repo || '',
+        branch: json.branch || 'main',
+        adminPinConfigured: Boolean(json.adminPinConfigured),
+        isAuthenticated: Boolean(json.isAuthenticated),
+        runtime: json.runtime
       };
     }
-    const json = (await res.json()) as ServerAuthStatus;
+  } catch {}
+
+  return {
+    githubConfigured: false,
+    hasToken: false,
+    hasOwner: false,
+    hasRepo: false,
+    owner: '',
+    repo: '',
+    branch: 'main',
+    adminPinConfigured: false,
+    isAuthenticated: false
+  };
+}
+
+export async function verifyAdminPinWithServer(pin: string): Promise<{
+  ok: boolean;
+  error?: string;
+  status?: GitHubSyncStatus;
+}> {
+  try {
+    const res = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify-pin', pin })
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return {
+        ok: false,
+        error: 'Server verification endpoint (/api/update-portfolio) returned a non-JSON response.'
+      };
+    }
+    const data = (await res.json().catch(() => ({}))) as Partial<GitHubSyncStatus> & {
+      ok?: boolean;
+      token?: string;
+      error?: string;
+    };
+    if (res.ok && data.ok) {
+      if (data.token) {
+        setStoredOwnerToken(data.token);
+      }
+      return {
+        ok: true,
+        status: {
+          githubConfigured: Boolean(data.githubConfigured),
+          hasToken: Boolean(data.hasToken),
+          hasOwner: Boolean(data.hasOwner),
+          hasRepo: Boolean(data.hasRepo),
+          owner: data.owner || '',
+          repo: data.repo || '',
+          branch: data.branch || 'main',
+          adminPinConfigured: Boolean(data.adminPinConfigured),
+          isAuthenticated: true
+        }
+      };
+    }
     return {
-      ...json,
-      serverAvailable: true
+      ok: false,
+      error: data.error || 'Incorrect Admin PIN. Please try again.'
     };
   } catch {
     return {
-      isAuthenticated: false,
-      isPaired: true,
-      canShowInitialSetupQr: false,
-      serverAvailable: false
+      ok: false,
+      error: 'Unable to reach /api/update-portfolio to verify Admin PIN.'
     };
   }
+}
+
+export async function pullLatestFromGitHub(): Promise<{
+  ok: boolean;
+  source?: string;
+  sha?: string;
+  htmlUrl?: string;
+  warning?: string;
+  status: GitHubSyncStatus;
+  data?: ServerPortfolioResponse;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/update-portfolio', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'include',
+      headers: buildAuthHeaders()
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return {
+        ok: false,
+        status: await fetchGitHubSyncStatus(),
+        error: 'GitHub sync API endpoint is unavailable.'
+      };
+    }
+    const json = (await res.json().catch(() => ({}))) as Partial<GitHubSyncStatus> & {
+      ok?: boolean;
+      source?: string;
+      sha?: string;
+      htmlUrl?: string;
+      warning?: string;
+      error?: string;
+      data?: {
+        initialized: boolean;
+        version: number;
+        updatedAt: string;
+        activePortfolioId: string;
+        portfolios: PortfolioProfile[];
+      } | null;
+    };
+
+    const status: GitHubSyncStatus = {
+      githubConfigured: Boolean(json.githubConfigured),
+      hasToken: Boolean(json.hasToken),
+      hasOwner: Boolean(json.hasOwner),
+      hasRepo: Boolean(json.hasRepo),
+      owner: json.owner || '',
+      repo: json.repo || '',
+      branch: json.branch || 'main',
+      adminPinConfigured: Boolean(json.adminPinConfigured),
+      isAuthenticated: Boolean(json.isAuthenticated)
+    };
+
+    if (!res.ok || !json.ok) {
+      return {
+        ok: false,
+        status,
+        error: json.error || `Failed to pull latest data.json from GitHub (${res.status}).`
+      };
+    }
+
+    if (json.data && Array.isArray(json.data.portfolios) && json.data.portfolios.length > 0) {
+      return {
+        ok: true,
+        source: json.source,
+        sha: json.sha,
+        htmlUrl: json.htmlUrl,
+        warning: json.warning,
+        status,
+        data: {
+          initialized: true,
+          version: json.data.version,
+          updatedAt: json.data.updatedAt,
+          activePortfolioId: json.data.activePortfolioId || 'default_portfolio',
+          portfolios: json.data.portfolios,
+          fromGitHub: json.source === 'github'
+        }
+      };
+    }
+
+    return {
+      ok: false,
+      status,
+      warning: json.warning,
+      error: json.warning || 'No data.json portfolio payload returned from server.'
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: await fetchGitHubSyncStatus(),
+      error: err instanceof Error ? err.message : 'Network error pulling from GitHub.'
+    };
+  }
+}
+
+export async function commitPortfolioToGitHub(payload: {
+  activePortfolioId: string;
+  portfolios: PortfolioProfile[];
+  commitMessage?: string;
+}): Promise<GitHubCommitResponse> {
+  const res = await fetch('/api/update-portfolio', {
+    method: 'POST',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      commitMessage: payload.commitMessage,
+      data: {
+        initialized: true,
+        updatedAt: new Date().toISOString(),
+        activePortfolioId: payload.activePortfolioId,
+        portfolios: payload.portfolios
+      }
+    })
+  });
+
+  if (res.status === 413) {
+    throw new Error(
+      'Update payload exceeds Vercel serverless 4.5 MB limit. Use smaller compressed media or an external PDF/video URL.'
+    );
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Serverless API /api/update-portfolio returned non-JSON response.');
+  }
+
+  const json = (await res.json().catch(() => ({}))) as GitHubCommitResponse;
+  if (res.status === 401) {
+    throw new Error('OWNER_AUTH_REQUIRED');
+  }
+  return {
+    ...json,
+    ok: Boolean(res.ok && json.ok)
+  };
+}
+
+export async function fetchServerAuthStatus(): Promise<ServerAuthStatus> {
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/auth/status', {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+        headers: buildAuthHeaders()
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        knownExpressAvailable = true;
+        const json = (await res.json()) as ServerAuthStatus;
+        return {
+          ...json,
+          serverAvailable: true
+        };
+      }
+      if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch {}
+  }
+
+  // Vercel serverless deployment path: inspect Admin PIN session via /api/update-portfolio
+  const ghStatus = await fetchGitHubSyncStatus();
+  return {
+    isAuthenticated: ghStatus.isAuthenticated,
+    isPaired: true,
+    canShowInitialSetupQr: false,
+    githubConfigured: ghStatus.githubConfigured,
+    serverAvailable: false
+  };
 }
 
 export async function verifyOwnerTotpWithServer(
@@ -129,10 +402,9 @@ export async function verifyOwnerTotpWithServer(
       }
     }
   } catch {
-    // Fall through to local WebCrypto TOTP verification if backend /api/auth/verify is unreachable or static
+    // Fall through to local WebCrypto TOTP verification if /api/auth/verify is unavailable
   }
 
-  // Fallback for static/offline deployments where /api/* returns non-JSON 404 or is unreachable
   const matchedLocally = await verifyTotpCode(OWNER_TOTP_SECRET, code);
   if (matchedLocally) {
     return { ok: true, localOnly: true };
@@ -271,37 +543,58 @@ export async function relinkAuthenticatorDevice(
 
 export async function logoutOwnerServer(): Promise<void> {
   setStoredOwnerToken(null);
-  try {
-    await fetch('/api/auth/logout', {
+  const requests: Promise<unknown>[] = [
+    fetch('/api/update-portfolio', {
       method: 'POST',
-      credentials: 'include'
-    });
-  } catch {}
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' })
+    })
+  ];
+  if (knownExpressAvailable !== false) {
+    requests.push(
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      })
+    );
+  }
+  await Promise.allSettled(requests);
 }
 
 export async function fetchServerPortfolio(): Promise<ServerPortfolioResponse> {
-  let apiRespondedJson = false;
-  let apiStatus = 0;
-
+  // 1. Check live /api/update-portfolio (reads live data.json straight from GitHub on Vercel when configured)
   try {
-    const res = await fetch('/api/portfolio', {
-      method: 'GET',
-      cache: 'no-store',
-      credentials: 'include'
-    });
-    apiStatus = res.status;
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      apiRespondedJson = true;
-      const data = (await res.json()) as ServerPortfolioResponse;
-      if (data?.initialized && Array.isArray(data.portfolios) && data.portfolios.length > 0) {
-        return data;
-      }
+    const ghRes = await pullLatestFromGitHub();
+    if (ghRes.ok && ghRes.source === 'github' && ghRes.data?.portfolios?.length) {
+      return ghRes.data;
     }
-  } catch {
-    // Fall back to static snapshot when /api/portfolio is unavailable (e.g. Vercel static CDN)
+  } catch {}
+
+  // 2. Check Express /api/portfolio (Preview server with uploaded asset storage)
+  let apiRespondedJson = false;
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/portfolio', {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include'
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        knownExpressAvailable = true;
+        apiRespondedJson = true;
+        const data = (await res.json()) as ServerPortfolioResponse;
+        if (data?.initialized && Array.isArray(data.portfolios) && data.portfolios.length > 0) {
+          return data;
+        }
+      } else if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch {}
   }
 
+  // 3. Fallback to bundled root data.json snapshot
   if (
     PUBLISHED_PORTFOLIO_SNAPSHOT.initialized &&
     Array.isArray(PUBLISHED_PORTFOLIO_SNAPSHOT.portfolios) &&
@@ -317,68 +610,78 @@ export async function fetchServerPortfolio(): Promise<ServerPortfolioResponse> {
     };
   }
 
-  try {
-    const snapRes = await fetch('/portfolio-snapshot.json', {
-      method: 'GET',
-      cache: 'no-store'
-    });
-    const snapType = snapRes.headers.get('content-type') || '';
-    if (snapRes.ok && snapType.includes('application/json')) {
-      const snap = (await snapRes.json()) as Partial<ServerPortfolioResponse>;
-      if (Array.isArray(snap.portfolios) && snap.portfolios.length > 0) {
-        return {
-          initialized: true,
-          version: typeof snap.version === 'number' ? snap.version : 1,
-          updatedAt: snap.updatedAt,
-          activePortfolioId: snap.activePortfolioId || 'default_portfolio',
-          portfolios: snap.portfolios,
-          fromStaticSnapshot: true
-        };
-      }
-    }
-  } catch {}
-
   if (apiRespondedJson) {
     return { initialized: false };
   }
 
-  throw new Error(`Failed to fetch portfolio (${apiStatus || 'network'})`);
+  throw new Error('Failed to load portfolio from server or data.json');
 }
 
 export async function saveServerPortfolio(payload: {
   activePortfolioId: string;
   portfolios: PortfolioProfile[];
+  commitMessage?: string;
 }): Promise<ServerPortfolioResponse> {
-  let res: Response;
-  try {
-    res = await fetch('/api/portfolio', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload)
-    });
-  } catch {
-    throw new Error('STATIC_HOST_READONLY');
+  // 1. Try Express /api/portfolio first only when Express runtime is active
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/portfolio', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = (await res.json().catch(() => ({}))) as ServerPortfolioResponse & {
+          error?: string;
+        };
+        if (res.ok) {
+          knownExpressAvailable = true;
+          return data;
+        }
+        if (res.status === 401) {
+          throw new Error('OWNER_AUTH_REQUIRED');
+        }
+        if (res.status !== 404 && res.status !== 405) {
+          throw new Error(data.error || `Failed to save portfolio (${res.status})`);
+        }
+      }
+      if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED') {
+        throw err;
+      }
+    }
   }
 
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    throw new Error('STATIC_HOST_READONLY');
+  // 2. Deployed Serverless path (Vercel): automatically commit data.json directly to GitHub
+  const commitRes = await commitPortfolioToGitHub(payload);
+  if (commitRes.ok && commitRes.data) {
+    return {
+      initialized: true,
+      version: commitRes.data.version,
+      updatedAt: commitRes.data.updatedAt,
+      activePortfolioId: commitRes.data.activePortfolioId,
+      portfolios: commitRes.data.portfolios,
+      fromGitHub: true,
+      ...(commitRes.commitSha
+        ? {
+            githubCommit: {
+              commitSha: commitRes.commitSha,
+              commitUrl: commitRes.commitUrl || '',
+              branch: commitRes.branch || 'main'
+            }
+          }
+        : {})
+    };
   }
 
-  const data = (await res.json().catch(() => ({}))) as ServerPortfolioResponse & {
-    error?: string;
-  };
-  if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error('OWNER_AUTH_REQUIRED');
-    }
-    if (res.status === 404 || res.status === 405) {
-      throw new Error('STATIC_HOST_READONLY');
-    }
-    throw new Error(data.error || `Failed to save portfolio (${res.status})`);
-  }
-  return data;
+  throw new Error(
+    commitRes.error || 'Could not commit data.json to GitHub. Check Vercel environment variables.'
+  );
 }
 
 export async function resetServerPortfolio(defaultState: PortfolioState): Promise<void> {
@@ -415,42 +718,48 @@ export async function uploadAssetToServer(
 ): Promise<UploadedAssetResponse> {
   const resolvedMime = mimeType || fileOrBlob.type || 'application/octet-stream';
 
-  try {
-    const res = await fetch('/api/assets', {
-      method: 'POST',
-      credentials: 'include',
-      headers: buildAuthHeaders({
-        'Content-Type': resolvedMime,
-        'X-Filename': encodeURIComponent(filename)
-      }),
-      body: fileOrBlob
-    });
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/assets', {
+        method: 'POST',
+        credentials: 'include',
+        headers: buildAuthHeaders({
+          'Content-Type': resolvedMime,
+          'X-Filename': encodeURIComponent(filename)
+        }),
+        body: fileOrBlob
+      });
 
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
-        error?: string;
-      };
-      if (res.ok && data.url) {
-        return data as UploadedAssetResponse;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+          error?: string;
+        };
+        if (res.ok && data.url) {
+          knownExpressAvailable = true;
+          return data as UploadedAssetResponse;
+        }
+        if (res.status === 401) {
+          throw new Error('OWNER_AUTH_REQUIRED');
+        }
+        if (res.status !== 404 && res.status !== 405) {
+          throw new Error(data.error || `Asset upload failed (${res.status})`);
+        }
       }
-      if (res.status === 401) {
-        throw new Error('OWNER_AUTH_REQUIRED');
+      if (res.status === 404) {
+        knownExpressAvailable = false;
       }
-      if (res.status !== 404 && res.status !== 405) {
-        throw new Error(data.error || `Asset upload failed (${res.status})`);
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message === 'OWNER_AUTH_REQUIRED' || err.message.startsWith('Asset upload failed'))
+      ) {
+        throw err;
       }
-    }
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      (err.message === 'OWNER_AUTH_REQUIRED' || err.message.startsWith('Asset upload failed'))
-    ) {
-      throw err;
     }
   }
 
-  // Fallback for static deployments (e.g. Vercel without Express backend): embed locally as Data URL
+  // Embed uploaded file directly inside data.json when serverless mode has no stateful /api/assets disk
   const dataUrl = await blobToDataUrl(fileOrBlob);
   return {
     ok: true,
@@ -489,54 +798,57 @@ export async function submitContactMessage(payload: {
 }> {
   const recipientEmail = (payload.recipientEmail || 'prabuprabu906@gmail.com').trim();
 
-  // 1. Primary path: Express backend (persists to Owner Inbox + dispatches email server-side)
-  try {
-    const res = await fetch('/api/contact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, recipientEmail })
-    });
+  if (knownExpressAvailable !== false) {
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, recipientEmail })
+      });
 
-    const contentType = res.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-    const data = isJson
-      ? ((await res.json().catch(() => null)) as {
-          ok?: boolean;
-          id?: string;
-          recipientEmail?: string;
-          deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
-          deliveryNote?: string;
-          error?: string;
-        } | null)
-      : null;
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const data = isJson
+        ? ((await res.json().catch(() => null)) as {
+            ok?: boolean;
+            id?: string;
+            recipientEmail?: string;
+            deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+            deliveryNote?: string;
+            error?: string;
+          } | null)
+        : null;
 
-    if (res.ok && data?.ok) {
-      return {
-        ok: true,
-        id: data.id || '',
-        recipientEmail: data.recipientEmail || recipientEmail,
-        deliveryStatus: data.deliveryStatus || 'stored_only',
-        deliveryNote: data.deliveryNote || ''
-      };
-    }
+      if (res.ok && data?.ok) {
+        knownExpressAvailable = true;
+        return {
+          ok: true,
+          id: data.id || '',
+          recipientEmail: data.recipientEmail || recipientEmail,
+          deliveryStatus: data.deliveryStatus || 'stored_only',
+          deliveryNote: data.deliveryNote || ''
+        };
+      }
 
-    // Surface explicit validation / rate-limit errors directly from server
-    if (isJson && data?.error && (res.status === 400 || res.status === 429)) {
-      throw new Error(data.error);
-    }
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      !err.message.includes('Failed to fetch') &&
-      !err.message.includes('NetworkError') &&
-      !err.message.includes('Load failed') &&
-      err.name !== 'TypeError'
-    ) {
-      throw err;
+      if (isJson && data?.error && (res.status === 400 || res.status === 429)) {
+        throw new Error(data.error);
+      }
+      if (res.status === 404) {
+        knownExpressAvailable = false;
+      }
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        !err.message.includes('Failed to fetch') &&
+        !err.message.includes('NetworkError') &&
+        !err.message.includes('Load failed') &&
+        err.name !== 'TypeError'
+      ) {
+        throw err;
+      }
     }
   }
 
-  // 2. Fallback path: Direct HTTPS FormSubmit relay from browser if /api/contact returned HTML/404 or network error
   const relayRes = await fetch(
     `https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`,
     {
@@ -724,7 +1036,6 @@ export function subscribeToPortfolioUpdates(
         source.close();
         source = null;
       }
-      // On static deployments (e.g. Vercel without SSE backend), stop retrying after 2 failures
       if (!hasConnected && consecutiveFailures >= 2) {
         return;
       }

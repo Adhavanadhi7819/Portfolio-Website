@@ -1,10 +1,17 @@
 /// <reference types="node" />
+import 'dotenv/config';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {
+  handleUpdatePortfolioRequest,
+  verifyAdminSessionToken,
+  getGitHubConfigStatus,
+  commitGitHubDataJson
+} from './api/update-portfolio';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -65,7 +72,7 @@ const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
 const STATIC_SNAPSHOT_FILE = path.join(PUBLIC_DIR, 'portfolio-snapshot.json');
 const STATIC_ASSETS_DIR = path.join(PUBLIC_DIR, 'uploaded-assets');
 const SHOWCASE_DIR = path.join(PUBLIC_DIR, 'showcase');
-const COMPILED_SNAPSHOT_FILE = path.resolve(process.cwd(), 'src', 'data', 'publishedPortfolio.ts');
+const ROOT_DATA_JSON_FILE = path.resolve(process.cwd(), 'data.json');
 
 const DEFAULT_TOTP_SECRET =
   process.env.OWNER_TOTP_SECRET || 'NBSWY3DPFQQHO33SNRSCC43FMNZGK5A4';
@@ -334,15 +341,25 @@ function extractToken(req: Request): string | undefined {
   return cookies[SESSION_COOKIE_NAME];
 }
 
+function extractAdminPinToken(req: Request): string | undefined {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer) return bearer;
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies['adhavan_admin_session'];
+}
+
 function isOwnerAuthenticated(req: Request): boolean {
-  return verifySessionToken(extractToken(req));
+  return verifySessionToken(extractToken(req)) || verifyAdminSessionToken(extractAdminPinToken(req));
 }
 
 function requireOwnerAuth(req: Request, res: Response, next: NextFunction): void {
   if (!isOwnerAuthenticated(req)) {
     res.status(401).json({
       ok: false,
-      error: 'Owner authentication required. Unlock Owner Mode with your 2FA code.'
+      error: 'Owner authentication required. Unlock Owner Mode with your Admin PIN or 2FA code.'
     });
     return;
   }
@@ -545,118 +562,98 @@ function rewriteAssetsForStaticDeploy(
   return value;
 }
 
-function formatCompiledSnapshotModule(payload: Record<string, unknown>): string {
-  return [
-    `import type { PortfolioProfile } from '../types/portfolio';`,
-    ``,
-    `export interface PublishedPortfolioBundle {`,
-    `  initialized: boolean;`,
-    `  version: number;`,
-    `  updatedAt: string;`,
-    `  activePortfolioId: string;`,
-    `  portfolios: PortfolioProfile[];`,
-    `}`,
-    ``,
-    `export const PUBLISHED_PORTFOLIO_SNAPSHOT: PublishedPortfolioBundle = ${JSON.stringify(
-      payload,
-      null,
-      2
-    )};`,
-    ``
-  ].join('\n');
+function buildStaticBundleForDeploy(record: StoredPortfolioFile): {
+  initialized: boolean;
+  version: number;
+  updatedAt: string;
+  activePortfolioId: string;
+  portfolios: unknown[];
+} {
+  const showcaseIndex = buildShowcaseHashIndex();
+  const referencedFiles = new Set<string>();
+  const staticPortfolios = rewriteAssetsForStaticDeploy(
+    record.portfolios,
+    referencedFiles,
+    showcaseIndex
+  ) as unknown[];
+
+  fs.mkdirSync(STATIC_ASSETS_DIR, { recursive: true });
+
+  for (const fileId of referencedFiles) {
+    const srcPath = resolveExistingAssetPath(fileId);
+    if (!srcPath) continue;
+    const destPath = path.join(STATIC_ASSETS_DIR, fileId);
+    let needsCopy = !fs.existsSync(destPath);
+    if (!needsCopy) {
+      try {
+        needsCopy = fs.statSync(srcPath).size !== fs.statSync(destPath).size;
+      } catch {
+        needsCopy = true;
+      }
+    }
+    if (needsCopy) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+
+  try {
+    for (const entry of fs.readdirSync(STATIC_ASSETS_DIR)) {
+      if (!referencedFiles.has(entry)) {
+        const stalePath = path.join(STATIC_ASSETS_DIR, entry);
+        if (fs.statSync(stalePath).isFile()) {
+          fs.unlinkSync(stalePath);
+        }
+      }
+    }
+  } catch {}
+
+  return {
+    initialized: true,
+    version: record.version,
+    updatedAt: record.updatedAt,
+    activePortfolioId: record.activePortfolioId,
+    portfolios: staticPortfolios
+  };
 }
 
-function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): void {
+function exportStaticSnapshotForDeploy(record: StoredPortfolioFile | null): ReturnType<typeof buildStaticBundleForDeploy> | null {
   try {
-    // Only write static deployment snapshot when project workspace public/ is writable
     fs.accessSync(process.cwd(), fs.constants.W_OK);
 
+    // Never wipe existing root data.json when local state file has not been initialized yet
     if (!record) {
-      if (fs.existsSync(STATIC_SNAPSHOT_FILE)) {
-        fs.unlinkSync(STATIC_SNAPSHOT_FILE);
-      }
-      const emptyPayload = {
-        initialized: false,
-        version: 0,
-        updatedAt: '',
-        activePortfolioId: 'default_portfolio',
-        portfolios: []
-      };
-      writeAtomic(COMPILED_SNAPSHOT_FILE, formatCompiledSnapshotModule(emptyPayload));
-      return;
+      return null;
     }
 
-    const showcaseIndex = buildShowcaseHashIndex();
-    const referencedFiles = new Set<string>();
-    const staticPortfolios = rewriteAssetsForStaticDeploy(
-      record.portfolios,
-      referencedFiles,
-      showcaseIndex
-    ) as unknown[];
-
-    fs.mkdirSync(STATIC_ASSETS_DIR, { recursive: true });
-
-    for (const fileId of referencedFiles) {
-      const srcPath = resolveExistingAssetPath(fileId);
-      if (!srcPath) continue;
-      const destPath = path.join(STATIC_ASSETS_DIR, fileId);
-      let needsCopy = !fs.existsSync(destPath);
-      if (!needsCopy) {
-        try {
-          needsCopy = fs.statSync(srcPath).size !== fs.statSync(destPath).size;
-        } catch {
-          needsCopy = true;
-        }
-      }
-      if (needsCopy) {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    }
-
-    // Remove stale uploaded-assets no longer referenced by the exported snapshot
-    try {
-      for (const entry of fs.readdirSync(STATIC_ASSETS_DIR)) {
-        if (!referencedFiles.has(entry)) {
-          const stalePath = path.join(STATIC_ASSETS_DIR, entry);
-          if (fs.statSync(stalePath).isFile()) {
-            fs.unlinkSync(stalePath);
-          }
-        }
-      }
-    } catch {}
-
-    const staticPayload = {
-      initialized: true,
-      version: record.version,
-      updatedAt: record.updatedAt,
-      activePortfolioId: record.activePortfolioId,
-      portfolios: staticPortfolios
-    };
-
-    const jsonText = JSON.stringify(staticPayload, null, 2);
+    const staticPayload = buildStaticBundleForDeploy(record);
+    const jsonText = JSON.stringify(staticPayload, null, 2) + '\n';
     writeAtomic(STATIC_SNAPSHOT_FILE, jsonText);
-    writeAtomic(COMPILED_SNAPSHOT_FILE, formatCompiledSnapshotModule(staticPayload));
+    writeAtomic(ROOT_DATA_JSON_FILE, jsonText);
+    return staticPayload;
   } catch (err) {
     console.warn('Skipped exporting static deploy snapshot:', err);
+    return null;
   }
 }
 
 // --- Portfolio State Store & Live SSE Broadcast ---
 function loadPortfolioState(): StoredPortfolioFile | null {
-  try {
-    if (!fs.existsSync(STATE_FILE)) return null;
-    const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<StoredPortfolioFile>;
-    if (parsed && Array.isArray(parsed.portfolios) && parsed.portfolios.length > 0) {
-      return {
-        version: typeof parsed.version === 'number' ? parsed.version : 1,
-        updatedAt: parsed.updatedAt || new Date().toISOString(),
-        activePortfolioId: parsed.activePortfolioId || 'default_portfolio',
-        portfolios: parsed.portfolios
-      };
+  for (const candidateFile of [STATE_FILE, ROOT_DATA_JSON_FILE]) {
+    try {
+      if (!fs.existsSync(candidateFile)) continue;
+      const raw = fs.readFileSync(candidateFile, 'utf8');
+      const parsed = JSON.parse(raw) as Partial<StoredPortfolioFile>;
+      if (parsed && Array.isArray(parsed.portfolios) && parsed.portfolios.length > 0) {
+        return {
+          version: typeof parsed.version === 'number' ? parsed.version : 1,
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+          activePortfolioId: parsed.activePortfolioId || 'default_portfolio',
+          portfolios: parsed.portfolios
+        };
+      }
+    } catch (err) {
+      console.error(`Failed to read portfolio state file (${candidateFile}):`, err);
     }
-  } catch (err) {
-    console.error('Failed to read portfolio state file:', err);
   }
   return null;
 }
@@ -872,8 +869,35 @@ async function startServer(): Promise<void> {
 
   // Health endpoint
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ ok: true });
+    res.json({ ok: true, ...getGitHubConfigStatus() });
   });
+
+  // --- Shared Vercel-compatible GitHub Sync & Admin PIN API Route ---
+  app.all(
+    '/api/update-portfolio',
+    express.json({ limit: '50mb' }),
+    async (req: Request, res: Response) => {
+      await handleUpdatePortfolioRequest(req, res, {
+        runtime: 'express',
+        isTrustedOwner: isOwnerAuthenticated(req),
+        onLocalCommitted: (bundle) => {
+          const dehydrated = dehydrateDataUrls(bundle.portfolios) as unknown[];
+          const record: StoredPortfolioFile = {
+            version: bundle.version,
+            updatedAt: bundle.updatedAt,
+            activePortfolioId: bundle.activePortfolioId,
+            portfolios: dehydrated
+          };
+          writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+          try {
+            fs.accessSync(PUBLIC_DIR, fs.constants.W_OK);
+            writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(bundle, null, 2) + '\n');
+          } catch {}
+          broadcastPortfolioUpdate(bundle.version, bundle.updatedAt);
+        }
+      });
+    }
+  );
 
   let pendingRecoveryOtp: { hash: string; expiresAt: number; attempts: number } | null = null;
   const recoveryRequestBuckets = new Map<string, number[]>();
@@ -921,6 +945,7 @@ async function startServer(): Promise<void> {
     const authenticated = isOwnerAuthenticated(req);
     const preview = isPreviewRequest(req);
     const showInitialSetupQr = !authStore.paired && preview;
+    const ghStatus = getGitHubConfigStatus();
 
     res.setHeader('Cache-Control', 'no-store');
     res.json({
@@ -929,6 +954,7 @@ async function startServer(): Promise<void> {
       canShowInitialSetupQr: showInitialSetupQr,
       hasRecoveryKey: Boolean(authStore.recoveryKeyHash || process.env.OWNER_RECOVERY_KEY),
       ownerEmailMasked: maskEmailAddress(OWNER_TOTP_ACCOUNT),
+      githubConfigured: ghStatus.githubConfigured,
       ...(showInitialSetupQr
         ? { otpauthUri: buildOtpAuthUri(authStore.secret) }
         : {})
@@ -1160,6 +1186,7 @@ async function startServer(): Promise<void> {
 
   app.post('/api/auth/logout', (_req: Request, res: Response) => {
     res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+    res.clearCookie('adhavan_admin_session', { path: '/' });
     res.json({ ok: true });
   });
 
@@ -1285,11 +1312,12 @@ async function startServer(): Promise<void> {
     '/api/portfolio',
     requireOwnerAuth,
     express.json({ limit: '50mb' }),
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const body = req.body as {
         activePortfolioId?: unknown;
         portfolios?: unknown;
         portfolioState?: unknown;
+        commitMessage?: unknown;
       };
 
       let nextPortfolios: unknown[] | null = null;
@@ -1331,8 +1359,29 @@ async function startServer(): Promise<void> {
       };
 
       writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
-      exportStaticSnapshotForDeploy(record);
+      const exportedBundle = exportStaticSnapshotForDeploy(record);
       broadcastPortfolioUpdate(nextVersion, updatedAt);
+
+      let githubCommit: { commitSha: string; commitUrl: string; branch: string } | undefined;
+      if (getGitHubConfigStatus().githubConfigured && exportedBundle) {
+        try {
+          const customMsg =
+            typeof body?.commitMessage === 'string' && body.commitMessage.trim()
+              ? body.commitMessage.trim()
+              : undefined;
+          const result = await commitGitHubDataJson({
+            bundle: exportedBundle,
+            commitMessage: customMsg
+          });
+          githubCommit = {
+            commitSha: result.commitSha,
+            commitUrl: result.commitUrl,
+            branch: result.branch
+          };
+        } catch (err) {
+          console.warn('Auto GitHub sync after /api/portfolio save failed:', err);
+        }
+      }
 
       res.json({
         ok: true,
@@ -1340,7 +1389,8 @@ async function startServer(): Promise<void> {
         version: nextVersion,
         updatedAt,
         activePortfolioId: nextActiveId,
-        portfolios: nextPortfolios
+        portfolios: nextPortfolios,
+        ...(githubCommit ? { githubCommit } : {})
       });
     }
   );

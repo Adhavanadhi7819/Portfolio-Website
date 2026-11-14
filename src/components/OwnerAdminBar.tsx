@@ -13,7 +13,8 @@ import {
   FileCode,
   Briefcase,
   ShieldCheck,
-  Inbox
+  Inbox,
+  GitBranch
 } from 'lucide-react';
 
 import { EditModalMode } from './OwnerEditModal';
@@ -31,6 +32,9 @@ interface OwnerAdminBarProps {
   onResetDefaults: () => void;
   onLockMode: () => void;
   onOpenSecurity?: () => void;
+  onOpenGitHubSync?: () => void;
+  githubConfigured?: boolean;
+  lastCommitSha?: string | null;
   hasUnsavedChanges?: boolean;
   syncStatus?: 'idle' | 'saving' | 'saved' | 'error';
   isStaticHost?: boolean;
@@ -51,6 +55,9 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   onResetDefaults,
   onLockMode,
   onOpenSecurity,
+  onOpenGitHubSync,
+  githubConfigured = false,
+  lastCommitSha = null,
   hasUnsavedChanges = false,
   syncStatus = 'idle',
   isStaticHost = false,
@@ -58,70 +65,76 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
   unreadMessageCount = 0
 }) => {
   return (
-    <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
-      <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+    <div className="bg-gradient-to-r from-amber-950/95 via-zinc-950/95 to-amber-950/95 border-b border-amber-500/40 text-white px-3 sm:px-4 fixed top-0 left-0 right-0 z-[100] h-[44px] flex items-center shadow-2xl backdrop-blur-md">
+      <div className="max-w-7xl w-full mx-auto flex flex-nowrap items-center justify-between gap-2 text-xs overflow-x-auto scrollbar-none">
         
         {/* Left: Status badge */}
-        <div className="flex items-center gap-2.5">
-          <span className="inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-          <div>
-            <span className="font-heading font-black tracking-wider uppercase text-amber-400 text-xs sm:text-sm">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="inline-flex rounded-full h-2 w-2 bg-amber-500 shrink-0"></span>
+          <div className="flex items-center whitespace-nowrap">
+            <span className="font-heading font-black tracking-wider uppercase text-amber-400 text-[11px] sm:text-xs">
               OWNER EDIT MODE
             </span>
-            <span className="text-zinc-400 font-mono text-[10px] ml-2 hidden md:inline">
+            <span className="text-zinc-400 font-mono text-[10px] ml-2 hidden 2xl:inline">
               {syncStatus === 'saving'
-                ? 'Syncing changes to live server...'
+                ? githubConfigured
+                  ? 'Committing...'
+                  : 'Saving...'
                 : syncStatus === 'error'
-                ? 'Sync paused · Click 2FA to re-verify'
+                ? 'Sync paused'
+                : githubConfigured
+                ? lastCommitSha
+                  ? `GitHub (${lastCommitSha.slice(0, 7)})`
+                  : 'GitHub Auto-Push'
                 : isStaticHost
-                ? 'Browser-saved · Edit in Preview & deploy to update globally'
+                ? 'Setup GITHUB_TOKEN'
                 : syncStatus === 'saved'
-                ? 'Live · Synced across all devices'
+                ? 'Saved to data.json'
                 : hasUnsavedChanges
-                ? 'Edits detected · Prompt to save on close'
-                : 'Live edits sync globally'}
+                ? 'Edits detected'
+                : 'Live CMS'}
             </span>
           </div>
         </div>
 
         {/* Center / Right: Action buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
           
           <button
             onClick={onAddProject}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-[11px] shadow-sm transition-transform hover:scale-105 cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wider text-[10px] shadow-sm transition-colors whitespace-nowrap cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
             <span>New Project</span>
           </button>
 
           <button
             onClick={onAddChapter}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
           >
-            <Film className="w-3.5 h-3.5" />
-            <span>New Chapter</span>
+            <Film className="w-3 h-3" />
+            <span>Chapter</span>
           </button>
 
           {onOpenSectionManager && (
             <button
               onClick={onOpenSectionManager}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm"
               title="Add, remove, reorder, or hide sections on the website"
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Sections (Add/Remove)</span>
+              <Layers className="w-3 h-3" />
+              <span>Sections</span>
             </button>
           )}
 
           {onOpenPortfolioManager && (
             <button
               onClick={onOpenPortfolioManager}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer shadow-sm"
-              title="Create new portfolios or switch between different portfolios"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/50 uppercase tracking-wider text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-sm max-w-[170px]"
+              title={`Portfolios (${activePortfolioName || 'Main'})`}
             >
-              <Briefcase className="w-3.5 h-3.5" />
-              <span>Portfolios ({activePortfolioName || 'Main'})</span>
+              <Briefcase className="w-3 h-3 shrink-0" />
+              <span className="truncate">Portfolios</span>
             </button>
           )}
 
@@ -135,42 +148,40 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
               }}
               defaultValue=""
               aria-label="Select section to edit"
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-900 text-amber-300 border border-amber-500/40 text-[11px] font-mono uppercase tracking-wider focus:outline-none cursor-pointer hidden md:block"
+              className="px-2 py-1 rounded-lg bg-zinc-900 text-amber-300 border border-amber-500/40 text-[10px] font-mono uppercase tracking-wider focus:outline-none cursor-pointer hidden xl:block"
             >
               <option value="" disabled>Edit Section...</option>
-              <option value="hero">👤 Hero, Title & Stats</option>
-              <option value="video_reel">🎞️ Video Reel & Source</option>
-              <option value="flagship">🏴‍☠️ Latest Project & Media</option>
-              <option value="about">📖 About & Timeline</option>
-              <option value="resume">📄 Resume / CV</option>
-              <option value="contact">✉️ Contact & Slide Photo</option>
+              <option value="hero">Hero, Title &amp; Stats</option>
+              <option value="video_reel">Video Reel &amp; Source</option>
+              <option value="flagship">Latest Project &amp; Media</option>
+              <option value="about">About &amp; Timeline</option>
+              <option value="resume">Resume / CV</option>
+              <option value="contact">Contact &amp; Slide Photo</option>
             </select>
           )}
 
           <button
             onClick={onEditBio}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
           >
-            <Settings className="w-3.5 h-3.5 text-amber-400" />
-            <span>Studio Settings</span>
+            <Settings className="w-3 h-3 text-amber-400" />
+            <span className="hidden lg:inline">Settings</span>
           </button>
 
           <button
             onClick={onExportJson}
-            title="Download JSON backup file"
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[11px]"
+            title="Download or Restore JSON backup file"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[10px]"
           >
-            <Download className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Backup</span>
+            <Download className="w-3 h-3 text-zinc-400" />
           </button>
 
           <button
             onClick={onImportJson}
             title="Restore or import portfolio JSON"
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[11px]"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors cursor-pointer hidden sm:flex items-center gap-1 text-[10px]"
           >
-            <Upload className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Restore</span>
+            <Upload className="w-3 h-3 text-zinc-400" />
           </button>
 
           <button
@@ -178,19 +189,35 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
             title="Reset to original showcase data"
             className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer hidden lg:block"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3 h-3" />
           </button>
+
+          {onOpenGitHubSync && (
+            <button
+              onClick={onOpenGitHubSync}
+              title="GitHub Sync Status, Commit Controls & Vercel Setup Guide"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-amber-500/40 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  githubConfigured ? 'bg-emerald-400' : 'bg-amber-400'
+                }`}
+              />
+              <GitBranch className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">GitHub</span>
+            </button>
+          )}
 
           {onOpenInbox && (
             <button
               onClick={onOpenInbox}
               title="View received Direct Messages & test email forwarding"
-              className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+              className="relative flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
             >
-              <Inbox className="w-3.5 h-3.5 text-amber-400" />
+              <Inbox className="w-3 h-3 text-amber-400" />
               <span className="hidden sm:inline">Inbox</span>
               {unreadMessageCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[10px] font-mono font-bold leading-tight">
+                <span className="px-1 rounded bg-amber-500 text-black text-[9px] font-mono font-bold leading-tight">
                   {unreadMessageCount}
                 </span>
               )}
@@ -200,17 +227,17 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
           {onOpenSecurity && (
             <button
               onClick={onOpenSecurity}
-              title="2FA Authenticator Security"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[11px] font-semibold transition-colors cursor-pointer"
+              title="Owner Security & Auth Settings"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 uppercase tracking-wider text-[10px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">2FA</span>
+              <ShieldCheck className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Auth</span>
             </button>
           )}
 
           <button
             onClick={onLockMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wider text-[11px] font-bold transition-colors cursor-pointer ml-1"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wider text-[10px] font-bold transition-colors whitespace-nowrap cursor-pointer"
           >
             <Lock className="w-3 h-3 text-red-400" />
             <span>Lock</span>
