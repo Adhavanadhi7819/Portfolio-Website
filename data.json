@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 37,
-  "updatedAt": "2026-11-14T20:01:33.961Z",
+  "version": 38,
+  "updatedAt": "2026-11-14T20:01:36.024Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T20:01:33.613Z",
+      "updatedAt": "2026-11-14T20:01:35.846Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
