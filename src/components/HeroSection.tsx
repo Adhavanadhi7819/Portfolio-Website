@@ -28,6 +28,7 @@ interface HeroSectionProps {
   onChangeTab?: (tab: SectionTargetTab) => void;
   showDragHandle?: boolean;
   onDragStartPointer?: (e: React.PointerEvent) => void;
+  isSoloSection?: boolean;
 }
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -49,7 +50,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   currentTab,
   onChangeTab,
   showDragHandle,
-  onDragStartPointer
+  onDragStartPointer,
+  isSoloSection = false
 }) => {
   const defaultStats = [
     { number: '6+', label: 'Unreal Environments & Levels' },
@@ -115,7 +117,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   return (
     <section
       id="hero"
-      className="relative py-5 sm:py-7 overflow-hidden bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]"
+      className={`relative overflow-hidden bg-transparent scroll-mt-[68px] ${
+        isSoloSection
+          ? 'flex-1 flex flex-col justify-center py-6 sm:py-8'
+          : 'py-5 sm:py-7 border-b border-zinc-800/60'
+      }`}
     >
       {/* Subtle atmospheric glow */}
       <motion.div

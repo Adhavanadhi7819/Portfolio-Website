@@ -1538,6 +1538,7 @@ export default function App() {
                       onMoveDown={onMoveDown}
                       onHide={onHide}
                       onAddSectionBelow={onAddSectionBelow}
+                      isSoloSection={currentTabSections.length === 1}
                     />
                   );
                 } else if (sec.id === 'reel') {
