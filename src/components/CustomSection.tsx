@@ -22,6 +22,8 @@ import {
 } from '../types/portfolio';
 import { SectionControls } from './SectionControls';
 import { InlineEdit } from './InlineEdit';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
 
 interface CustomSectionProps {
@@ -197,7 +199,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   return (
     <section
       id={section.id}
-      className="py-8 sm:py-10 relative bg-transparent border-t border-zinc-800/60 scroll-mt-[68px]"
+      className="py-5 sm:py-7 relative bg-transparent border-t border-zinc-800/60 scroll-mt-[68px]"
     >
       {/* Floating Section Controls for Owner */}
       {isOwnerMode && (
@@ -222,7 +224,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4 md:gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-3 md:gap-6">
           <div className="flex-1 min-w-0 space-y-2">
             <div>
               <InlineEdit
@@ -338,7 +340,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
         {urlPromptType && (
           <form
             onSubmit={handleAddMediaByUrl}
-            className="mb-8 p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/40 flex flex-wrap items-end gap-3"
+            className="mb-5 p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/40 flex flex-wrap items-end gap-3"
           >
             <div className="space-y-1">
               <label className="block text-[10px] font-mono uppercase text-zinc-400">Type</label>
@@ -395,30 +397,50 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
         {/* Spotlight Legacy Single Video / Image if provided */}
         {data.videoUrl && (
-          <div className="mb-8 rounded-2xl overflow-hidden border border-zinc-800 relative aspect-video max-h-[520px] bg-black shadow-2xl">
+          <div className="mb-5 rounded-2xl overflow-hidden border border-zinc-800 relative aspect-video max-h-[520px] bg-black shadow-2xl">
             {renderVideoElement(data.videoUrl, data.heading)}
           </div>
         )}
 
-        {data.imageUrl && (
-          <div className="mb-8 rounded-2xl overflow-hidden border border-zinc-800 relative aspect-video max-h-[480px] bg-zinc-950 group">
-            <img
-              src={data.imageUrl}
-              alt={data.heading || 'Section Media'}
-              className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.02]"
-            />
-          </div>
-        )}
+        {data.imageUrl && (() => {
+          const { fitClass, style } = getPhotoAlignImgProps(data.imageAlign);
+          return (
+            <div className="mb-5 rounded-2xl overflow-hidden border border-zinc-800 relative aspect-video max-h-[480px] bg-zinc-950 group">
+              <div className="w-full h-full transition-transform duration-500 group-hover:scale-[1.02]">
+                <img
+                  src={data.imageUrl}
+                  alt={data.heading || 'Section Media'}
+                  style={style}
+                  className={`w-full h-full ${fitClass}`}
+                />
+              </div>
+              <PhotoAdjustOverlay
+                align={data.imageAlign}
+                isOwnerMode={isOwnerMode}
+                onChange={(next) => handleUpdateField('imageAlign', next)}
+                positionClass="top-3 left-3"
+              />
+              <MediaUploadOverlay
+                currentUrl={data.imageUrl}
+                mediaType="image"
+                isOwnerMode={isOwnerMode}
+                onMediaUploaded={(url) => handleUpdateField('imageUrl', url)}
+                label="Replace Photo"
+                position="top-right"
+              />
+            </div>
+          );
+        })()}
 
         {/* Mixed Drag-Reorderable Photos & Videos Gallery */}
         {mediaItems.length > 0 && (
-          <div className="mb-10">
+          <div className="mb-5">
             {isOwnerMode ? (
               <Reorder.Group
                 axis="y"
                 values={mediaItems.map((m) => m.id)}
                 onReorder={handleReorderMedia}
-                className="grid grid-cols-1 md:grid-cols-2 gap-5"
+                className="grid grid-cols-1 md:grid-cols-2 gap-4"
               >
                 {mediaItems.map((item) => (
                   <Reorder.Item
@@ -445,22 +467,57 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="aspect-video bg-black overflow-hidden">
+                    <div className="relative aspect-video bg-black overflow-hidden">
                       {item.type === 'video' ? (
                         renderVideoElement(item.url, item.title)
-                      ) : (
-                        <img
-                          src={item.url}
-                          alt={item.title || 'Section photo'}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
+                      ) : (() => {
+                        const { fitClass, style } = getPhotoAlignImgProps(item.align);
+                        return (
+                          <>
+                            <img
+                              src={item.url}
+                              alt={item.title || 'Section photo'}
+                              style={style}
+                              className={`w-full h-full ${fitClass}`}
+                            />
+                            <PhotoAdjustOverlay
+                              align={item.align}
+                              isOwnerMode={isOwnerMode}
+                              onChange={(next) =>
+                                handleUpdateField(
+                                  'mediaItems',
+                                  mediaItems.map((m) =>
+                                    m.id === item.id ? { ...m, align: next } : m
+                                  )
+                                )
+                              }
+                              positionClass="top-2 left-2"
+                              compact
+                            />
+                            <MediaUploadOverlay
+                              currentUrl={item.url}
+                              mediaType="image"
+                              isOwnerMode={isOwnerMode}
+                              onMediaUploaded={(url) =>
+                                handleUpdateField(
+                                  'mediaItems',
+                                  mediaItems.map((m) =>
+                                    m.id === item.id ? { ...m, url } : m
+                                  )
+                                )
+                              }
+                              label="Photo"
+                              position="top-right"
+                            />
+                          </>
+                        );
+                      })()}
                     </div>
                   </Reorder.Item>
                 ))}
               </Reorder.Group>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {mediaItems.map((item) => (
                   <motion.div
                     key={item.id}
@@ -470,13 +527,19 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                     <div className="aspect-video bg-black overflow-hidden">
                       {item.type === 'video' ? (
                         renderVideoElement(item.url, item.title)
-                      ) : (
-                        <img
-                          src={item.url}
-                          alt={item.title || 'Section photo'}
-                          className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-500"
-                        />
-                      )}
+                      ) : (() => {
+                        const { fitClass, style } = getPhotoAlignImgProps(item.align);
+                        return (
+                          <div className="w-full h-full hover:scale-[1.02] transition-transform duration-500">
+                            <img
+                              src={item.url}
+                              alt={item.title || 'Section photo'}
+                              style={style}
+                              className={`w-full h-full ${fitClass}`}
+                            />
+                          </div>
+                        );
+                      })()}
                     </div>
                     {(item.title || item.caption) && (
                       <div className="px-4 py-3 border-t border-zinc-800/80">
@@ -497,7 +560,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
         {/* Narrative / Body Text */}
         {data.bodyText && (
-          <div className="mb-6 p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 w-full">
+          <div className="mb-5 p-5 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 w-full">
             <p className="text-zinc-300 text-base leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
               <InlineEdit
                 value={data.bodyText}
@@ -514,14 +577,14 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
 
         {/* Feature Cards Grid */}
         {data.cards && data.cards.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4 items-stretch">
             {data.cards.map((card) => (
               <div
                 key={card.id}
-                className="p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group flex flex-col justify-between space-y-4 relative"
+                className="p-5 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group flex flex-col justify-between space-y-3 relative"
               >
                 {isOwnerMode && (
-                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity z-10">
+                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity z-20">
                     {onEditCard && (
                       <button
                         type="button"
@@ -550,15 +613,46 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
                     {renderVideoElement(card.videoUrl, card.title)}
                   </div>
                 ) : (
-                  card.imageUrl && (
-                    <div className="aspect-video rounded-xl overflow-hidden bg-black/60 border border-zinc-800">
-                      <img
-                        src={card.imageUrl}
-                        alt={card.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                    </div>
-                  )
+                  card.imageUrl && (() => {
+                    const { fitClass, style } = getPhotoAlignImgProps(card.imageAlign);
+                    return (
+                      <div className="relative aspect-video rounded-xl overflow-hidden bg-black/60 border border-zinc-800">
+                        <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
+                          <img
+                            src={card.imageUrl}
+                            alt={card.title}
+                            style={style}
+                            className={`w-full h-full ${fitClass}`}
+                          />
+                        </div>
+                        <PhotoAdjustOverlay
+                          align={card.imageAlign}
+                          isOwnerMode={isOwnerMode}
+                          onChange={(next) => {
+                            const updated = data.cards?.map((c) =>
+                              c.id === card.id ? { ...c, imageAlign: next } : c
+                            );
+                            handleUpdateField('cards', updated);
+                          }}
+                          positionClass="top-2 left-2"
+                          compact
+                        />
+                        <MediaUploadOverlay
+                          currentUrl={card.imageUrl}
+                          mediaType="image"
+                          isOwnerMode={isOwnerMode}
+                          onMediaUploaded={(url) => {
+                            const updated = data.cards?.map((c) =>
+                              c.id === card.id ? { ...c, imageUrl: url } : c
+                            );
+                            handleUpdateField('cards', updated);
+                          }}
+                          label="Photo"
+                          position="bottom-right"
+                        />
+                      </div>
+                    );
+                  })()
                 )}
 
                 <div className="space-y-2">

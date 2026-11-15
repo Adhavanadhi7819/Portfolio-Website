@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 33,
-  "updatedAt": "2026-11-14T19:00:19.451Z",
+  "version": 40,
+  "updatedAt": "2026-11-15T19:13:14.802Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T19:00:19.209Z",
+      "updatedAt": "2026-11-15T19:13:12.604Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -277,7 +277,7 @@
                 "Modular Interior Assets",
                 "UV Mapping"
               ],
-              "photoUrl": "/showcase/maya-models.jpg",
+              "photoUrl": "/uploaded-assets/2e512e97586acff45164b6ec5993bf0b.jpg",
               "photoCaption": "Hard-surface prop modeling & studio turntable renders in Autodesk Maya"
             },
             {
@@ -407,7 +407,26 @@
           "mayaHeading": "3D Modeling & Assets",
           "mayaSubheading": "“Created these models using Autodesk Maya.” Hard-surface props and interior environments built with clean edge loops, optimized topology, and game-ready UV mapping.",
           "outroTitle": "",
-          "outroText": ""
+          "outroText": "",
+          "backgroundConfig": {
+            "enabled": true,
+            "voidInnerHex": "#080c18",
+            "voidOuterHex": "#03050a",
+            "paletteHexes": [
+              "#00f0ff",
+              "#2563eb",
+              "#c026d3",
+              "#10b981",
+              "#f43f5e",
+              "#f59e0b"
+            ],
+            "colorCycleEnabled": true,
+            "cycleSpeed": 1,
+            "nodeDensity": 1,
+            "facetOpacity": 0.13,
+            "cursorRadius": 180,
+            "cursorMode": "attract"
+          }
         },
         "videoPath": "/assets/aistudio/Portfolio_46956db1.mp4",
         "videoChapters": [

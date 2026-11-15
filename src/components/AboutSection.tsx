@@ -78,7 +78,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         ];
 
   return (
-    <section id="about" className="py-8 sm:py-10 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
+    <section id="about" className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
       {/* Section Controls for Owner */}
       {isOwnerMode && (
         <SectionControls
@@ -98,7 +98,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         />
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-5">
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-8">
           <div className="flex-1 min-w-0">
@@ -144,10 +144,10 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         </div>
 
         {/* Balanced 12-Column Identity + Philosophy Split (Zero Wasted Vertical Space) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           {/* Left Column (4 cols): Portrait & Quick Studio Summary Card */}
           <div className="lg:col-span-4 bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 rounded-2xl overflow-hidden flex flex-col justify-between shadow-xl">
-            <div className="relative aspect-[4/3.8] w-full overflow-hidden bg-zinc-950">
+            <div className="relative aspect-[4/3.6] w-full overflow-hidden bg-zinc-950">
               <img
                 src={info.heroPhotoUrl || '/assets/aistudio/Gemini_Generated_Image_o735hbo735hbo735_ac6b7e92.png'}
                 alt={`${info.name} - ${info.title}`}
@@ -178,7 +178,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
               />
             </div>
 
-            <div className="p-5 border-t border-zinc-800 space-y-4 bg-zinc-950/50">
+            <div className="p-4 border-t border-zinc-800 space-y-3 bg-zinc-950/50">
               <div className="text-xs text-zinc-300 leading-relaxed">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-amber-400 font-bold block mb-1">
                   Studio Availability
@@ -222,9 +222,9 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
           </div>
 
           {/* Right Column (8 cols): Introduction & Philosophy + 3 Core Design Pillars */}
-          <div className="lg:col-span-8 flex flex-col justify-between gap-5">
+          <div className="lg:col-span-8 flex flex-col gap-4">
             {/* Introduction & Philosophy Box */}
-            <div className="flex-1 p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 flex flex-col justify-center space-y-3">
+            <div className="p-5 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
                   Introduction &amp; Design Philosophy
@@ -256,7 +256,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
             </div>
 
             {/* 3 Core Design Pillars */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
               {philosophyCards.map((pillar, idx) => {
                 const icons = [Gamepad2, Compass, Sparkles];
                 const Icon = icons[idx % icons.length];
@@ -265,7 +265,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                     key={idx}
                     whileHover={{ y: -3, borderColor: 'rgba(192, 169, 223, 0.45)' }}
                     transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                    className="p-5 rounded-2xl bg-zinc-950/60 backdrop-blur-md border border-zinc-800/80 space-y-2.5 flex flex-col justify-start"
+                    className="p-4 sm:p-5 rounded-2xl bg-zinc-950/60 backdrop-blur-md border border-zinc-800/80 space-y-2 flex flex-col justify-start"
                   >
                     <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                       <Icon className="w-4 h-4" />

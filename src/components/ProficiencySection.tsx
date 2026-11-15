@@ -78,7 +78,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
   ];
 
   return (
-    <section id="proficiency" className="py-10 relative bg-transparent border-b border-zinc-800/60">
+    <section id="proficiency" className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -102,7 +102,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 sm:mb-6 gap-4 md:gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-3 md:gap-6">
           <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 flex items-center gap-1.5 mb-1">
               <Sliders className="w-3.5 h-3.5 text-amber-400" />
@@ -144,10 +144,10 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
         </div>
 
         {/* Top Grid: Core Skill Meters + Software Toolbelt */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch mb-5">
           
           {/* Left Column: Skill Percentage Gauges */}
-          <div className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+          <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3.5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-amber-400" />
@@ -184,9 +184,9 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
           </div>
 
           {/* Right Column: Software Toolbelt & Engine Stack */}
-          <div className="lg:col-span-5 space-y-6">
+          <div className="lg:col-span-5 flex flex-col gap-4">
             
-            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 space-y-5">
+            <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 space-y-3.5">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-amber-400" />
@@ -223,7 +223,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
             </div>
 
             {/* Quick Studio Callout */}
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 via-amber-600/5 to-transparent border border-amber-500/30 flex flex-col justify-between gap-4 relative">
+            <div className="flex-1 p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-amber-600/5 to-transparent border border-amber-500/30 flex flex-col justify-between gap-3 relative">
               {isOwnerMode && (
                 <div className="absolute top-4 right-4">
                   <button
@@ -278,7 +278,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
         </div>
 
         {/* 4 Specialized Discipline Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {(info.proficiencyCompetencyCards && info.proficiencyCompetencyCards.length > 0
             ? info.proficiencyCompetencyCards
             : [
@@ -309,7 +309,7 @@ export const ProficiencySection: React.FC<ProficiencySectionProps> = ({
             return (
               <div 
                 key={idx}
-                className="p-6 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group space-y-4"
+                className="p-4 sm:p-5 rounded-2xl bg-zinc-950/65 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/40 transition-all group space-y-3 flex flex-col justify-between"
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-black transition-colors">
                   <Icon className="w-5 h-5" />

@@ -23,7 +23,8 @@ import {
   ExternalLink,
   Edit3
 } from 'lucide-react';
-import { uploadDocumentAsset } from '../utils/fileHelpers';
+import { uploadDocumentAsset, uploadImageAsset } from '../utils/fileHelpers';
+import { PhotoAlignInlineControl } from './PhotoAdjustOverlay';
 import { 
   ProjectItem, 
   ProjectCategory, 
@@ -228,9 +229,11 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
       keyFeatures: Array.isArray(projectForm.keyFeatures) ? projectForm.keyFeatures : [],
       techStack: Array.isArray(projectForm.techStack) ? projectForm.techStack : [],
       thumbnail: projectForm.thumbnail || '/showcase/hero-adhavan.jpg',
+      thumbnailAlign: projectForm.thumbnailAlign,
       galleryImages: Array.isArray(projectForm.galleryImages) && projectForm.galleryImages.length > 0
         ? projectForm.galleryImages
         : [projectForm.thumbnail || '/showcase/hero-adhavan.jpg'],
+      galleryAligns: projectForm.galleryAligns,
       videoTimestamp: Number(projectForm.videoTimestamp) || 0,
       isFlagship: Boolean(projectForm.isFlagship),
       conceptNotes: projectForm.conceptNotes
@@ -255,6 +258,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
       startTime: Number(chapterForm.startTime) || 0,
       endTime: Number(chapterForm.endTime) || ((Number(chapterForm.startTime) || 0) + 15),
       thumbnail: chapterForm.thumbnail || '/showcase/hero-adhavan.jpg',
+      thumbnailAlign: chapterForm.thumbnailAlign,
       category: (chapterForm.category as ProjectCategory) || 'all',
       description: chapterForm.description || ''
     };
@@ -276,11 +280,12 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
       title: modelForm.title.trim(),
       description: modelForm.description || '',
       thumbnail: modelForm.thumbnail || '/showcase/maya-models.jpg',
+      thumbnailAlign: modelForm.thumbnailAlign,
       software: modelForm.software || 'Autodesk Maya',
       details: Array.isArray(modelForm.details) ? modelForm.details : [],
       specs: {
         topology: modelForm.specs?.topology || 'Clean quad-dominant mesh',
-        textures: modelForm.specs?.textures || 'PBR Materials',
+        textures: modelForm.specs?.textures || 'PBR Shading',
         category: modelForm.specs?.category || '3D Prop'
       }
     };
@@ -1196,9 +1201,29 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
               {/* Photos & Media */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Primary Thumbnail Photo URL / Path *
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300">
+                      Primary Thumbnail Photo URL / Path *
+                    </label>
+                    <label className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 cursor-pointer">
+                      <Upload className="w-3 h-3" />
+                      <span>Upload</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
+                          try {
+                            const url = await uploadImageAsset(file);
+                            setProjectForm((prev) => ({ ...prev, thumbnail: url }));
+                          } catch {}
+                        }}
+                      />
+                    </label>
+                  </div>
                   <input
                     type="text"
                     value={projectForm.thumbnail || ''}
@@ -1221,6 +1246,16 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   />
                 </div>
               </div>
+
+              {projectForm.thumbnail && (
+                <PhotoAlignInlineControl
+                  imageUrl={projectForm.thumbnail}
+                  align={projectForm.thumbnailAlign}
+                  onChange={(next) => setProjectForm({ ...projectForm, thumbnailAlign: next })}
+                  label="Thumbnail Framing & Alignment"
+                  aspectClass="aspect-[16/10]"
+                />
+              )}
 
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
@@ -1360,10 +1395,30 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Thumbnail Image Path or URL
-                </label>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300">
+                    Thumbnail Image Path or URL
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 cursor-pointer">
+                    <Upload className="w-3 h-3" />
+                    <span>Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        try {
+                          const url = await uploadImageAsset(file);
+                          setChapterForm((prev) => ({ ...prev, thumbnail: url }));
+                        } catch {}
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={chapterForm.thumbnail || ''}
@@ -1371,6 +1426,15 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   placeholder="/showcase/temple-upside.jpg"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                 />
+                {chapterForm.thumbnail && (
+                  <PhotoAlignInlineControl
+                    imageUrl={chapterForm.thumbnail}
+                    align={chapterForm.thumbnailAlign}
+                    onChange={(next) => setChapterForm({ ...chapterForm, thumbnailAlign: next })}
+                    label="Chapter Thumbnail Alignment"
+                    aspectClass="aspect-video"
+                  />
+                )}
               </div>
 
               <div>
@@ -1420,10 +1484,30 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 {errors.title && <p className="text-xs text-red-400 mt-1">{errors.title}</p>}
               </div>
 
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Model Photo / Render Image URL or Path
-                </label>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300">
+                    Model Photo / Render Image URL or Path
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 cursor-pointer">
+                    <Upload className="w-3 h-3" />
+                    <span>Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        try {
+                          const url = await uploadImageAsset(file);
+                          setModelForm((prev) => ({ ...prev, thumbnail: url }));
+                        } catch {}
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={modelForm.thumbnail || ''}
@@ -1431,6 +1515,15 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   placeholder="/showcase/maya-models.jpg"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-500"
                 />
+                {modelForm.thumbnail && (
+                  <PhotoAlignInlineControl
+                    imageUrl={modelForm.thumbnail}
+                    align={modelForm.thumbnailAlign}
+                    onChange={(next) => setModelForm({ ...modelForm, thumbnailAlign: next })}
+                    label="3D Render Photo Alignment"
+                    aspectClass="aspect-square"
+                  />
+                )}
               </div>
 
               <div>
@@ -1843,7 +1936,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                       </span>
                       <input
                         type="file"
-                        accept=".pdf,.docx,.doc,application/pdf"
+                        accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
                         className="hidden"
                         disabled={isUploadingResume}
                         onChange={async (e) => {
@@ -1903,6 +1996,19 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                     )}
                   </div>
                 </div>
+
+                {bioForm.resumePdfUrl &&
+                  (bioForm.resumePdfUrl.startsWith('data:image/') ||
+                    /\.(png|jpe?g|webp)$/i.test(bioForm.resumePdfUrl) ||
+                    /\.(png|jpe?g|webp)$/i.test(bioForm.resumeFileName || '')) && (
+                    <PhotoAlignInlineControl
+                      imageUrl={bioForm.resumePdfUrl}
+                      align={bioForm.resumeImageAlign || { x: 50, y: 50, zoom: 1, fit: 'contain' }}
+                      onChange={(next) => setBioForm({ ...bioForm, resumeImageAlign: next })}
+                      label="Resume Image Alignment & Framing"
+                      aspectClass="aspect-[3/4]"
+                    />
+                  )}
 
                 {resumeUploadError && (
                   <div className="px-3.5 py-2.5 rounded-lg bg-red-950/60 border border-red-700/60 text-red-300 text-xs font-mono flex items-center gap-2">

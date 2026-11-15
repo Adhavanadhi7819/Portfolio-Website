@@ -115,7 +115,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   return (
     <section
       id="hero"
-      className="relative py-6 sm:py-8 flex-1 flex flex-col justify-center overflow-hidden bg-transparent scroll-mt-[68px]"
+      className="relative py-5 sm:py-7 overflow-hidden bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]"
     >
       {/* Subtle atmospheric glow */}
       <motion.div
@@ -143,14 +143,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         />
       )}
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 py-1 sm:py-2">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-center">
           {/* Left Column: Kicker, Headline, Lead Copy, Actions */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: EASE_OUT_EXPO }}
-            className="lg:col-span-7 space-y-5"
+            className="lg:col-span-7 space-y-4"
           >
             {/* Clean Unboxed Kicker Line */}
             <motion.div
@@ -426,7 +426,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.34, ease: EASE_OUT_EXPO }}
-            className="mt-5 sm:mt-6 pt-5 border-t border-zinc-800/80 relative"
+            className="mt-4 sm:mt-5 pt-4 border-t border-zinc-800/80 relative"
           >
             {isOwnerMode && (
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">

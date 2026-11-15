@@ -3,15 +3,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Play, CheckCircle2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 
 interface ProjectModalProps {
   project: ProjectItem | null;
+  isOwnerMode?: boolean;
+  onSaveProject?: (project: ProjectItem) => void;
   onClose: () => void;
   onPlayInReel: (timestamp: number) => void;
 }
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({
   project,
+  isOwnerMode = false,
+  onSaveProject,
   onClose,
   onPlayInReel
 }) => {
@@ -32,6 +37,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const activeAlignConfig = project
+    ? project.galleryAligns?.[activeImage] || project.thumbnailAlign
+    : undefined;
+  const activeImgProps = getPhotoAlignImgProps(activeAlignConfig);
+
   return (
     <AnimatePresence>
       {project && (
@@ -51,11 +61,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 14 }}
             transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-            className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-8"
+            className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-6"
             onClick={(e) => e.stopPropagation()}
           >
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-semibold uppercase">
               {project.categoryLabel}
@@ -73,23 +83,42 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+        <div className="p-5 sm:p-6 space-y-5 max-h-[82vh] overflow-y-auto">
           
           {/* Main Visual Display */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-black border border-zinc-800">
               <img
                 src={activeImage || project.thumbnail}
                 alt={project.title}
-                className="w-full h-full object-cover"
+                className={`w-full h-full ${activeImgProps.fitClass} transition-all duration-300`}
+                style={activeImgProps.style}
               />
+              {isOwnerMode && onSaveProject && (
+                <PhotoAdjustOverlay
+                  align={activeAlignConfig}
+                  isOwnerMode={isOwnerMode}
+                  onChange={(nextAlign) => {
+                    const currentKey = activeImage || project.thumbnail;
+                    const updated: ProjectItem = {
+                      ...project,
+                      galleryAligns: {
+                        ...(project.galleryAligns || {}),
+                        [currentKey]: nextAlign
+                      },
+                      ...(currentKey === project.thumbnail ? { thumbnailAlign: nextAlign } : {})
+                    };
+                    onSaveProject(updated);
+                  }}
+                />
+              )}
               {project.videoTimestamp !== undefined && (
                 <button
                   onClick={() => {
                     onPlayInReel(project.videoTimestamp!);
                     onClose();
                   }}
-                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                  className="absolute bottom-3.5 right-3.5 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-black" />
                   <span>Play at {formatVideoTime(project.videoTimestamp)}</span>
@@ -100,19 +129,29 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             {/* Gallery Selector thumbnails if multiple images */}
             {project.galleryImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {project.galleryImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setActiveImage(img)}
-                    className={`relative w-24 aspect-video rounded-lg overflow-hidden border transition-all cursor-pointer ${
-                      activeImage === img
-                        ? 'border-amber-500 ring-2 ring-amber-500/40'
-                        : 'border-zinc-800 opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={img} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
+                {project.galleryImages.map((img, idx) => {
+                  const thumbProps = getPhotoAlignImgProps(
+                    project.galleryAligns?.[img] || project.thumbnailAlign
+                  );
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveImage(img)}
+                      className={`relative w-24 aspect-video rounded-lg overflow-hidden border transition-all cursor-pointer shrink-0 ${
+                        activeImage === img
+                          ? 'border-amber-500 ring-2 ring-amber-500/40'
+                          : 'border-zinc-800 opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <img
+                        src={img}
+                        alt={`Gallery ${idx + 1}`}
+                        className={`w-full h-full ${thumbProps.fitClass}`}
+                        style={thumbProps.style}
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

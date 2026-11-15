@@ -18,8 +18,9 @@ import {
   Image as ImageIcon,
   Upload
 } from 'lucide-react';
-import { PortfolioSectionConfig, SectionTargetTab } from '../types/portfolio';
+import { PortfolioSectionConfig, SectionTargetTab, PhotoAlignConfig } from '../types/portfolio';
 import { getSectionTargetTab } from '../utils/portfolioLogic';
+import { PhotoAlignInlineControl, DEFAULT_PHOTO_ALIGN } from './PhotoAdjustOverlay';
 import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
 
 interface SectionManagerModalProps {
@@ -267,6 +268,7 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
   const [newTargetTab, setNewTargetTab] = useState<SectionTargetTab>('projects');
   const [newPreset, setNewPreset] = useState<'gallery' | 'grid' | 'media' | 'text'>('gallery');
   const [initialPhotoUrl, setInitialPhotoUrl] = useState('');
+  const [initialPhotoAlign, setInitialPhotoAlign] = useState<PhotoAlignConfig>(DEFAULT_PHOTO_ALIGN);
   const [initialVideoUrl, setInitialVideoUrl] = useState('');
   const [isUploadingInitial, setIsUploadingInitial] = useState(false);
 
@@ -327,7 +329,8 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
         type: 'image',
         url: initialPhotoUrl.trim(),
         title: `${title} Visual`,
-        caption: 'High-resolution viewport still'
+        caption: 'High-resolution viewport still',
+        align: initialPhotoAlign
       });
     }
 
@@ -392,6 +395,7 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
         bodyText:
           'Documenting the iterative journey from grey-box geometry to lit cinematic atmosphere in Unreal Engine 5.',
         imageUrl: initialPhotoUrl.trim() || '/showcase/shot-market-03.jpg',
+        imageAlign: initialPhotoUrl.trim() ? initialPhotoAlign : undefined,
         videoUrl: initialVideoUrl.trim() || undefined,
         mediaItems,
         cards: []
@@ -791,6 +795,15 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
                     />
                   </div>
                 </div>
+                {initialPhotoUrl.trim() && (
+                  <PhotoAlignInlineControl
+                    imageUrl={initialPhotoUrl.trim()}
+                    align={initialPhotoAlign}
+                    onChange={setInitialPhotoAlign}
+                    label="Starter Photo Alignment & Framing"
+                    aspectClass="aspect-video"
+                  />
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">

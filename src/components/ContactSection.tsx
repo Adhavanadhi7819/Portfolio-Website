@@ -328,7 +328,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   return (
     <section
       id="contact"
-      className="py-8 sm:py-10 relative bg-transparent flex-1 flex flex-col justify-center scroll-mt-[68px]"
+      className="py-5 sm:py-7 relative bg-transparent scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -352,7 +352,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       {/* Subtle Ambient Monochromatic Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[560px] h-[340px] bg-amber-500/8 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
+      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-4 sm:space-y-5">
         {/* 1. Centered Hero Title Block + Compact Live IST Pill */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -446,13 +446,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.08, ease: EASE_OUT_EXPO }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-5"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           {/* Left Card: Email */}
           <motion.div
             whileHover={{ y: -2 }}
             transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-6 flex flex-col justify-between gap-6 transition-colors shadow-xl"
+            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-5 flex flex-col justify-between gap-4 transition-colors shadow-xl"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -512,7 +512,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           <motion.div
             whileHover={{ y: -2 }}
             transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-6 flex flex-col justify-between gap-6 transition-colors shadow-xl"
+            className="rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-amber-500/45 p-5 flex flex-col justify-between gap-4 transition-colors shadow-xl"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -579,9 +579,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.14, ease: EASE_OUT_EXPO }}
-          className="w-full rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 p-6 sm:p-8 shadow-2xl"
+          className="w-full rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 p-5 sm:p-6 shadow-2xl"
         >
-          <div className="flex items-center gap-2.5 mb-6">
+          <div className="flex items-center gap-2.5 mb-4">
             <MessageSquare className="w-4 h-4 text-amber-400" />
             <h2 className="text-base sm:text-lg font-heading font-bold text-white">
               Send Direct Message
@@ -843,7 +843,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2, ease: EASE_OUT_EXPO }}
-          className="pt-2 text-center space-y-4"
+          className="pt-1 text-center space-y-3"
         >
           <span className="block text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-500">
             Connect On Social

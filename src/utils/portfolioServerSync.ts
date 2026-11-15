@@ -96,7 +96,7 @@ function buildAuthHeaders(extra: Record<string, string> = {}): Record<string, st
 
 export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
   try {
-    const res = await fetch(`/api/update-portfolio?action=status&_t=${Date.now()}`, {
+    const res = await fetch(`/api/update-portfolio?action=status&skipRemotePairing=1&_t=${Date.now()}`, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'include',

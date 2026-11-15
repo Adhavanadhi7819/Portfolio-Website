@@ -74,7 +74,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   });
 
   return (
-    <section id="projects" className="py-8 sm:py-10 border-b border-zinc-800/60 relative bg-transparent scroll-mt-[68px]">
+    <section id="projects" className="py-5 sm:py-7 border-b border-zinc-800/60 relative bg-transparent scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -98,7 +98,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-5 gap-4 md:gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-3 md:gap-6">
           <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 flex items-center gap-1.5 mb-1.5">
               <Layers className="w-3.5 h-3.5 text-amber-400" />
@@ -149,8 +149,8 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
           </div>
         </div>
 
-        {/* Segmented Filter Tabs Bar matching demo layout */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-6 p-1.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none" role="tablist">
+        {/* Segmented Filter Tabs Bar */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-4 p-1.5 bg-zinc-900/60 border border-zinc-800 rounded-2xl w-fit max-w-full overflow-x-auto scrollbar-none" role="tablist">
           {categories.map((cat) => {
             const count = filterProjects(projects, cat.value).length;
             const isSelected = activeCategory === cat.value;
@@ -192,7 +192,7 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
         {filteredProjects.length > 0 ? (
           <motion.div 
             layout
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5 items-stretch"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4 items-stretch"
           >
             <AnimatePresence mode="popLayout">
               {filteredProjects.map((project) => (

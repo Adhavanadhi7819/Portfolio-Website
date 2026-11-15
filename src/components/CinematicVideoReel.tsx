@@ -20,6 +20,7 @@ import { VideoChapter, DesignerInfo, SectionTargetTab } from '../types/portfolio
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 import { uploadVideoAsset } from '../utils/fileHelpers';
 
 export interface VideoReelRef {
@@ -37,6 +38,7 @@ interface CinematicVideoReelProps {
   onChapterSelect?: (chapter: VideoChapter) => void;
   onAddChapter?: () => void;
   onEditChapter?: (chapter: VideoChapter) => void;
+  onSaveChapter?: (chapter: VideoChapter) => void;
   onDeleteChapter?: (chapterId: string) => void;
   onEditReelSettings?: () => void;
   onUploadVideo?: (newVideoPath: string) => void;
@@ -61,6 +63,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   onChapterSelect,
   onAddChapter,
   onEditChapter,
+  onSaveChapter,
   onDeleteChapter,
   onEditReelSettings,
   onUploadVideo,
@@ -355,7 +358,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <section id="reel" ref={containerRef} className="py-8 sm:py-10 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
+    <section id="reel" ref={containerRef} className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
       
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -379,7 +382,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-5 gap-4 lg:gap-8">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-4 gap-4 lg:gap-6">
           <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-500 block mb-1.5">
               Original Work Showcase Reel
@@ -480,22 +483,41 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             </video>
 
             {/* Interactive Scene Viewport (Active when native video stream is not playing) */}
-            {!isNativePlaying && (
-              <div 
-                className="relative w-full h-full cursor-pointer overflow-hidden group/screen select-none"
-                onClick={togglePlay}
-              >
-                <img
-                  src={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
-                  alt={activeChapter.title}
-                  className={`w-full h-full object-cover transition-transform duration-1000 ease-out ${
-                    isPlaying ? 'scale-105 filter brightness-105' : 'scale-100 filter brightness-100'
-                  }`}
-                />
-                {/* Cinematic gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40 pointer-events-none" />
-              </div>
-            )}
+            {!isNativePlaying && (() => {
+              const { fitClass, style } = getPhotoAlignImgProps(activeChapter.thumbnailAlign);
+              return (
+                <div 
+                  className="relative w-full h-full cursor-pointer overflow-hidden group/screen select-none"
+                  onClick={togglePlay}
+                >
+                  <div
+                    className={`w-full h-full transition-transform duration-1000 ease-out ${
+                      isPlaying ? 'scale-105 filter brightness-105' : 'scale-100 filter brightness-100'
+                    }`}
+                  >
+                    <img
+                      src={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
+                      alt={activeChapter.title}
+                      style={style}
+                      className={`w-full h-full ${fitClass}`}
+                    />
+                  </div>
+                  {/* Cinematic gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40 pointer-events-none" />
+                  <PhotoAdjustOverlay
+                    align={activeChapter.thumbnailAlign}
+                    isOwnerMode={isOwnerMode}
+                    onChange={(next) => {
+                      const updated = { ...activeChapter, thumbnailAlign: next };
+                      setActiveChapter(updated);
+                      onSaveChapter?.(updated);
+                    }}
+                    positionClass="top-14 left-3"
+                    compact
+                  />
+                </div>
+              );
+            })()}
 
             {/* In-Place Live Video Upload for Owner */}
             <MediaUploadOverlay
@@ -677,7 +699,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Active Scene Inspection Details Card */}
-        <div className="mt-4 p-4 sm:p-5 rounded-xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+        <div className="mt-3 p-4 rounded-xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
               <Sparkles className="w-4 h-4" />
@@ -725,7 +747,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Interactive Chapter Strip */}
-        <div className="mt-4 sm:mt-5">
+        <div className="mt-3 sm:mt-4">
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-400">
               <Layers className="w-4 h-4 text-amber-500" />
@@ -787,16 +809,26 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                     </div>
                   )}
 
-                  <button
-                    onClick={() => handleSelectChapter(chapter)}
-                    className="w-full text-left cursor-pointer"
-                  >
-                    <div className="relative aspect-video rounded-lg overflow-hidden mb-2 bg-zinc-950">
-                      <img
-                        src={chapter.thumbnail}
-                        alt={chapter.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
+                  <div className="relative aspect-video rounded-lg overflow-hidden mb-2 bg-zinc-950">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectChapter(chapter)}
+                      className="w-full h-full block cursor-pointer"
+                      aria-label={`Jump to chapter ${chapter.title}`}
+                    >
+                      {(() => {
+                        const { fitClass, style } = getPhotoAlignImgProps(chapter.thumbnailAlign);
+                        return (
+                          <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
+                            <img
+                              src={chapter.thumbnail}
+                              alt={chapter.title}
+                              style={style}
+                              className={`w-full h-full ${fitClass}`}
+                            />
+                          </div>
+                        );
+                      })()}
                       <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 font-mono text-[10px] text-zinc-300">
                         {formatVideoTime(chapter.startTime)}
                       </span>
@@ -807,7 +839,24 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                           </span>
                         </div>
                       )}
-                    </div>
+                    </button>
+                    <PhotoAdjustOverlay
+                      align={chapter.thumbnailAlign}
+                      isOwnerMode={isOwnerMode}
+                      onChange={(next) => {
+                        const updated = { ...chapter, thumbnailAlign: next };
+                        if (activeChapter.id === chapter.id) setActiveChapter(updated);
+                        onSaveChapter?.(updated);
+                      }}
+                      positionClass="top-1.5 left-1.5"
+                      compact
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectChapter(chapter)}
+                    className="w-full text-left cursor-pointer"
+                  >
                     <h4 className={`text-xs font-bold truncate ${isActive ? 'text-amber-400' : 'text-zinc-200 group-hover:text-white'}`}>
                       {chapter.title}
                     </h4>

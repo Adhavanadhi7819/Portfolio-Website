@@ -4,6 +4,7 @@ import { Play, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 
 interface ProjectCardProps {
   project: ProjectItem;
@@ -25,33 +26,50 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onSaveProject
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { fitClass, style: alignStyle } = getPhotoAlignImgProps(project.thumbnailAlign);
 
   return (
     <motion.div
-      whileHover={{ y: -5 }}
+      whileHover={{ y: -4 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
       className="h-full group rounded-2xl bg-zinc-950/65 hover:bg-zinc-900/80 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
     >
-      
       {/* Top Image & Overlays */}
       <div>
         <div className="relative aspect-[16/10] overflow-hidden bg-black">
-          <img
-            src={project.thumbnail}
-            alt={project.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/30"></div>
+          <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
+            <img
+              src={project.thumbnail}
+              alt={project.title}
+              className={`w-full h-full ${fitClass} transition-all duration-300`}
+              style={alignStyle}
+            />
+          </div>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/30"></div>
 
           {/* Top badges */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-20">
-            <span className="px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md text-[11px] font-mono text-amber-400 border border-amber-500/30 uppercase font-semibold">
+          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 z-20">
+            <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] font-mono text-amber-400 border border-amber-500/30 uppercase font-semibold truncate max-w-[42%]">
               {project.categoryLabel}
             </span>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 flex-wrap justify-end">
               {isOwnerMode && (
                 <>
+                  <PhotoAdjustOverlay
+                    align={project.thumbnailAlign}
+                    isOwnerMode={isOwnerMode}
+                    compact
+                    staticPosition
+                    onChange={(nextAlign) => {
+                      const updated = { ...project, thumbnailAlign: nextAlign };
+                      if (onSaveProject) {
+                        onSaveProject(updated);
+                      } else if (onEdit) {
+                        onEdit(updated);
+                      }
+                    }}
+                  />
                   <MediaUploadOverlay
                     currentUrl={project.thumbnail}
                     mediaType="image"
@@ -90,7 +108,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                       className="px-2 py-1 rounded-md bg-red-600 text-white font-mono text-[10px] font-bold uppercase transition-all shadow-lg cursor-pointer"
                       title="Click to permanently confirm delete"
                     >
-                      Confirm Delete?
+                      Confirm?
                     </button>
                   ) : (
                     <button
@@ -115,10 +133,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                     e.stopPropagation();
                     onPlayInReel?.(project.videoTimestamp!);
                   }}
-                  className="px-2.5 py-1 rounded-md bg-black/75 hover:bg-amber-500 hover:text-black backdrop-blur-md text-[11px] font-mono text-zinc-300 border border-zinc-700/80 hover:border-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="px-2 py-0.5 rounded-md bg-black/75 hover:bg-amber-500 hover:text-black backdrop-blur-md text-[10px] font-mono text-zinc-300 border border-zinc-700/80 hover:border-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
                   title="Jump to this project in the showreel"
                 >
-                  <Play className="w-3 h-3 fill-current" />
+                  <Play className="w-2.5 h-2.5 fill-current" />
                   <span>{formatVideoTime(project.videoTimestamp)}</span>
                 </button>
               )}
@@ -126,14 +144,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </div>
 
           {project.isFlagship && (
-            <div className="absolute bottom-3 left-3 px-2.5 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow">
+            <div className="absolute bottom-2.5 left-2.5 px-2.5 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow">
               FLAGSHIP GAME
             </div>
           )}
         </div>
 
         {/* Content Body */}
-        <div className="p-5 space-y-3">
+        <div className="p-4 space-y-2.5">
           <h3 className="text-lg font-heading font-bold text-white group-hover:text-amber-400 transition-colors">
             {project.title}
           </h3>
@@ -142,8 +160,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             {project.summary}
           </p>
 
-          {/* Tech stack pill tags */}
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          {/* Tech stack tags */}
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
             {project.techStack.slice(0, 3).map((tech, idx) => (
               <span
                 key={idx}
@@ -162,10 +180,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       </div>
 
       {/* Card Footer Actions */}
-      <div className="px-5 py-3.5 border-t border-zinc-800/60 flex items-center justify-between gap-3">
+      <div className="px-4 py-2.5 border-t border-zinc-800/60 flex items-center justify-between gap-3">
         <button
           onClick={() => onOpenModal(project)}
-          className="text-xs font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 group/btn transition-colors py-2 cursor-pointer"
+          className="text-xs font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 group/btn transition-colors py-1.5 cursor-pointer"
         >
           <span>Deep Dive Breakdown</span>
           <ArrowUpRight className="w-3.5 h-3.5 text-amber-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
@@ -174,14 +192,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         {project.videoTimestamp !== undefined && (
           <button
             onClick={() => onPlayInReel?.(project.videoTimestamp!)}
-            className="p-2 rounded-lg bg-zinc-800/70 hover:bg-amber-500 hover:text-black text-amber-400 border border-zinc-700/60 transition-all cursor-pointer"
+            className="p-1.5 rounded-lg bg-zinc-800/70 hover:bg-amber-500 hover:text-black text-amber-400 border border-zinc-700/60 transition-all cursor-pointer"
             aria-label={`Play ${project.title} in video showreel`}
           >
             <Play className="w-3.5 h-3.5 fill-current" />
           </button>
         )}
       </div>
-
     </motion.div>
   );
 };

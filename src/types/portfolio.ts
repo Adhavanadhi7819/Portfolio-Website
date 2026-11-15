@@ -8,6 +8,13 @@ export type ProjectCategory =
   | 'maya-3d' 
   | 'flagship-game';
 
+export interface PhotoAlignConfig {
+  x: number;
+  y: number;
+  zoom: number;
+  fit: 'cover' | 'contain';
+}
+
 export interface VideoChapter {
   id: string;
   title: string;
@@ -15,6 +22,7 @@ export interface VideoChapter {
   startTime: number; // in seconds
   endTime: number;
   thumbnail: string;
+  thumbnailAlign?: PhotoAlignConfig;
   category: ProjectCategory;
   description: string;
 }
@@ -29,7 +37,9 @@ export interface ProjectItem {
   keyFeatures: string[];
   techStack: string[];
   thumbnail: string;
+  thumbnailAlign?: PhotoAlignConfig;
   galleryImages: string[];
+  galleryAligns?: Record<string, PhotoAlignConfig>;
   videoTimestamp?: number; // seconds into video reel
   isFlagship?: boolean;
   conceptNotes?: {
@@ -45,6 +55,7 @@ export interface MayaModelItem {
   title: string;
   description: string;
   thumbnail: string;
+  thumbnailAlign?: PhotoAlignConfig;
   software: string;
   details: string[];
   specs: {
@@ -119,6 +130,7 @@ export interface TimelineMilestone {
   status: 'completed' | 'current' | 'target';
   highlights?: string[];
   photoUrl?: string;
+  photoAlign?: PhotoAlignConfig;
   photoCaption?: string;
 }
 
@@ -149,16 +161,12 @@ export interface DesignerInfo {
   resumeFileName?: string;
   resumeUploadDate?: string;
   resumeFileSize?: string;
+  resumeImageAlign?: PhotoAlignConfig;
   // Career Objective Timeline Chart
   careerTimeline?: TimelineMilestone[];
   // Hero customizations
   heroPhotoUrl?: string;
-  heroPhotoAlign?: {
-    x: number;
-    y: number;
-    zoom: number;
-    fit: 'cover' | 'contain';
-  };
+  heroPhotoAlign?: PhotoAlignConfig;
   heroEngineTags?: {
     engine: string;
     maya: string;
@@ -229,6 +237,7 @@ export interface CustomMediaBlock {
   id: string;
   type: 'image' | 'video';
   url: string;
+  align?: PhotoAlignConfig;
   title?: string;
   caption?: string;
 }
@@ -239,6 +248,7 @@ export interface CustomSectionCard {
   description: string;
   tag?: string;
   imageUrl?: string;
+  imageAlign?: PhotoAlignConfig;
   videoUrl?: string;
   link?: string;
   linkLabel?: string;
@@ -250,6 +260,7 @@ export interface CustomSectionData {
   subheading?: string;
   bodyText?: string;
   imageUrl?: string;
+  imageAlign?: PhotoAlignConfig;
   videoUrl?: string;
   mediaItems?: CustomMediaBlock[];
   cards?: CustomSectionCard[];

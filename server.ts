@@ -14,7 +14,9 @@ import {
   commitGitHubDataJson,
   fetchGitHubDataJson,
   isRemoteNewerThanLocal,
-  ensureGitHubAssetsSynced
+  ensureGitHubAssetsSynced,
+  resolveCanonicalPairingStatus,
+  syncAuthenticatorPairedState
 } from './api/update-portfolio';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -97,6 +99,7 @@ interface StoredPortfolioFile {
   version: number;
   updatedAt: string;
   activePortfolioId: string;
+  authenticatorPaired?: boolean;
   portfolios: unknown[];
 }
 
@@ -571,6 +574,7 @@ function buildStaticBundleForDeploy(record: StoredPortfolioFile): {
   version: number;
   updatedAt: string;
   activePortfolioId: string;
+  authenticatorPaired?: boolean;
   portfolios: unknown[];
 } {
   const showcaseIndex = buildShowcaseHashIndex();
@@ -616,6 +620,9 @@ function buildStaticBundleForDeploy(record: StoredPortfolioFile): {
     version: record.version,
     updatedAt: record.updatedAt,
     activePortfolioId: record.activePortfolioId,
+    ...(typeof record.authenticatorPaired === 'boolean'
+      ? { authenticatorPaired: record.authenticatorPaired }
+      : {}),
     portfolios: staticPortfolios
   };
 }
@@ -652,6 +659,9 @@ function loadPortfolioState(): StoredPortfolioFile | null {
           version: typeof parsed.version === 'number' ? parsed.version : 1,
           updatedAt: parsed.updatedAt || new Date().toISOString(),
           activePortfolioId: parsed.activePortfolioId || 'default_portfolio',
+          ...(typeof parsed.authenticatorPaired === 'boolean'
+            ? { authenticatorPaired: parsed.authenticatorPaired }
+            : {}),
           portfolios: parsed.portfolios
         };
       }
@@ -876,6 +886,9 @@ async function syncGitHubOnStartup(): Promise<void> {
           version: localState.version,
           updatedAt: localState.updatedAt,
           activePortfolioId: localState.activePortfolioId,
+          ...(typeof localState.authenticatorPaired === 'boolean'
+            ? { authenticatorPaired: localState.authenticatorPaired }
+            : {}),
           portfolios: localState.portfolios
         }
       : null;
@@ -885,20 +898,42 @@ async function syncGitHubOnStartup(): Promise<void> {
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
     ]);
 
-    if (remote && remote.exists && remote.data && isRemoteNewerThanLocal(remote.data, localBundle)) {
-      const dehydrated = dehydrateDataUrls(remote.data.portfolios) as unknown[];
-      const record: StoredPortfolioFile = {
-        version: remote.data.version,
-        updatedAt: remote.data.updatedAt,
-        activePortfolioId: remote.data.activePortfolioId,
-        portfolios: dehydrated
-      };
-      writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
-      writeAtomic(ROOT_DATA_JSON_FILE, JSON.stringify(remote.data, null, 2) + '\n');
-      try {
-        fs.accessSync(PUBLIC_DIR, fs.constants.W_OK);
-        writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(remote.data, null, 2) + '\n');
-      } catch {}
+    if (remote && remote.exists && remote.data) {
+      if (
+        typeof remote.data.authenticatorPaired === 'boolean' &&
+        authStore.paired !== remote.data.authenticatorPaired
+      ) {
+        saveAuthStore({ ...authStore, paired: remote.data.authenticatorPaired });
+      }
+
+      if (isRemoteNewerThanLocal(remote.data, localBundle)) {
+        const dehydrated = dehydrateDataUrls(remote.data.portfolios) as unknown[];
+        const record: StoredPortfolioFile = {
+          version: remote.data.version,
+          updatedAt: remote.data.updatedAt,
+          activePortfolioId: remote.data.activePortfolioId,
+          ...(typeof remote.data.authenticatorPaired === 'boolean'
+            ? { authenticatorPaired: remote.data.authenticatorPaired }
+            : {}),
+          portfolios: dehydrated
+        };
+        writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+        writeAtomic(ROOT_DATA_JSON_FILE, JSON.stringify(remote.data, null, 2) + '\n');
+        try {
+          fs.accessSync(PUBLIC_DIR, fs.constants.W_OK);
+          writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(remote.data, null, 2) + '\n');
+        } catch {}
+      } else if (
+        localState &&
+        typeof remote.data.authenticatorPaired === 'boolean' &&
+        localState.authenticatorPaired !== remote.data.authenticatorPaired
+      ) {
+        const syncedLocal: StoredPortfolioFile = {
+          ...localState,
+          authenticatorPaired: remote.data.authenticatorPaired
+        };
+        writeAtomic(STATE_FILE, JSON.stringify(syncedLocal, null, 2));
+      }
     }
   } catch (err) {
     console.warn('Startup GitHub sync skipped:', err instanceof Error ? err.message : err);
@@ -937,12 +972,20 @@ async function startServer(): Promise<void> {
             saveAuthStore({ ...authStore, paired: false });
           }
         },
+        onRemotePairingSynced: (paired) => {
+          if (authStore.paired !== paired) {
+            saveAuthStore({ ...authStore, paired });
+          }
+        },
         onLocalCommitted: (bundle) => {
           const dehydrated = dehydrateDataUrls(bundle.portfolios) as unknown[];
           const record: StoredPortfolioFile = {
             version: bundle.version,
             updatedAt: bundle.updatedAt,
             activePortfolioId: bundle.activePortfolioId,
+            ...(typeof bundle.authenticatorPaired === 'boolean'
+              ? { authenticatorPaired: bundle.authenticatorPaired }
+              : {}),
             portfolios: dehydrated
           };
           writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
@@ -972,10 +1015,39 @@ async function startServer(): Promise<void> {
     return false;
   }
 
-  function issueOwnerSession(req: Request, res: Response, extra: Record<string, unknown> = {}): void {
+  const syncBundleIntoLocalFiles = (bundle: {
+    version: number;
+    updatedAt: string;
+    activePortfolioId: string;
+    authenticatorPaired?: boolean;
+    portfolios: unknown[];
+  }) => {
+    const dehydrated = dehydrateDataUrls(bundle.portfolios) as unknown[];
+    const record: StoredPortfolioFile = {
+      version: bundle.version,
+      updatedAt: bundle.updatedAt,
+      activePortfolioId: bundle.activePortfolioId,
+      ...(typeof bundle.authenticatorPaired === 'boolean'
+        ? { authenticatorPaired: bundle.authenticatorPaired }
+        : {}),
+      portfolios: dehydrated
+    };
+    writeAtomic(STATE_FILE, JSON.stringify(record, null, 2));
+    try {
+      fs.accessSync(PUBLIC_DIR, fs.constants.W_OK);
+      writeAtomic(STATIC_SNAPSHOT_FILE, JSON.stringify(bundle, null, 2) + '\n');
+    } catch {}
+  };
+
+  async function issueOwnerSession(
+    req: Request,
+    res: Response,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
     if (!authStore.paired) {
       saveAuthStore({ ...authStore, paired: true });
     }
+    await syncAuthenticatorPairedState(true, syncBundleIntoLocalFiles);
 
     const token = createSessionToken();
     const isSecure =
@@ -998,15 +1070,31 @@ async function startServer(): Promise<void> {
   }
 
   // --- Auth Endpoints ---
-  app.get('/api/auth/status', (req: Request, res: Response) => {
+  app.get('/api/auth/status', async (req: Request, res: Response) => {
     const authenticated = isOwnerAuthenticated(req);
-    const showInitialSetupQr = !authStore.paired;
     const ghStatus = getGitHubConfigStatus();
+    const resolved = await resolveCanonicalPairingStatus({
+      cookieHeader: req.headers.cookie,
+      localPaired: authStore.paired,
+      onRemotePairingSynced: (paired) => {
+        if (authStore.paired !== paired) {
+          saveAuthStore({ ...authStore, paired });
+        }
+      }
+    });
+    const effectivePaired =
+      resolved.source === 'remote' || resolved.source === 'local-data'
+        ? resolved.isPaired
+        : authStore.paired;
+    if (resolved.source === 'local-data' && authStore.paired !== effectivePaired) {
+      saveAuthStore({ ...authStore, paired: effectivePaired });
+    }
+    const showInitialSetupQr = !effectivePaired;
 
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       isAuthenticated: authenticated,
-      isPaired: authStore.paired,
+      isPaired: effectivePaired,
       canShowInitialSetupQr: showInitialSetupQr,
       hasRecoveryKey: Boolean(authStore.recoveryKeyHash || process.env.OWNER_RECOVERY_KEY),
       ownerEmailMasked: maskEmailAddress(OWNER_TOTP_ACCOUNT),
@@ -1017,7 +1105,7 @@ async function startServer(): Promise<void> {
     });
   });
 
-  app.post('/api/auth/verify', express.json({ limit: '64kb' }), (req: Request, res: Response) => {
+  app.post('/api/auth/verify', express.json({ limit: '64kb' }), async (req: Request, res: Response) => {
     const pin = typeof req.body?.pin === 'string' ? req.body.pin : '';
     const code = typeof req.body?.code === 'string' ? req.body.code : '';
     if (!verifyAdminPinValue(pin)) {
@@ -1035,7 +1123,7 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    issueOwnerSession(req, res);
+    await issueOwnerSession(req, res);
   });
 
   app.post('/api/auth/recovery/request', async (req: Request, res: Response) => {
@@ -1078,7 +1166,7 @@ async function startServer(): Promise<void> {
   app.post(
     '/api/auth/recovery/verify',
     express.json({ limit: '64kb' }),
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const emailCode =
         typeof req.body?.emailCode === 'string' ? req.body.emailCode.replace(/\s+/g, '').trim() : '';
       const recoveryKey =
@@ -1121,6 +1209,7 @@ async function startServer(): Promise<void> {
         pendingRecoveryOtp = null;
         if (relinkDevice) {
           saveAuthStore({ ...authStore, paired: false });
+          await syncAuthenticatorPairedState(false, syncBundleIntoLocalFiles);
           const token = createSessionToken();
           const isSecure =
             req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
@@ -1140,7 +1229,7 @@ async function startServer(): Promise<void> {
           });
           return;
         }
-        issueOwnerSession(req, res, { recoveredVia: 'email' });
+        await issueOwnerSession(req, res, { recoveredVia: 'email' });
         return;
       }
 
@@ -1173,6 +1262,7 @@ async function startServer(): Promise<void> {
         }
         if (relinkDevice) {
           saveAuthStore({ ...authStore, paired: false });
+          await syncAuthenticatorPairedState(false, syncBundleIntoLocalFiles);
           const token = createSessionToken();
           const isSecure =
             req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
@@ -1192,7 +1282,7 @@ async function startServer(): Promise<void> {
           });
           return;
         }
-        issueOwnerSession(req, res, { recoveredVia: 'recovery_key' });
+        await issueOwnerSession(req, res, { recoveredVia: 'recovery_key' });
         return;
       }
 
@@ -1232,7 +1322,7 @@ async function startServer(): Promise<void> {
     '/api/auth/relink',
     requireOwnerAuth,
     express.json({ limit: '16kb' }),
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const rotateSecret = Boolean(req.body?.rotateSecret);
       const nextSecret = rotateSecret ? generateRandomBase32Secret(20) : authStore.secret;
       saveAuthStore({
@@ -1240,6 +1330,7 @@ async function startServer(): Promise<void> {
         secret: nextSecret,
         paired: true
       });
+      await syncAuthenticatorPairedState(true, syncBundleIntoLocalFiles);
       res.json({
         ok: true,
         rotated: rotateSecret,
@@ -1248,11 +1339,12 @@ async function startServer(): Promise<void> {
     }
   );
 
-  app.post('/api/auth/unpair', requireOwnerAuth, (_req: Request, res: Response) => {
+  app.post('/api/auth/unpair', requireOwnerAuth, async (_req: Request, res: Response) => {
     saveAuthStore({
       ...authStore,
       paired: false
     });
+    await syncAuthenticatorPairedState(false, syncBundleIntoLocalFiles);
     res.clearCookie('adhavan_totp_paired', { path: '/' });
     res.json({
       ok: true,
@@ -1453,10 +1545,16 @@ async function startServer(): Promise<void> {
       const nextVersion = (prev?.version ?? 0) + 1;
       const updatedAt = new Date().toISOString();
 
+      const effectivePaired =
+        typeof prev?.authenticatorPaired === 'boolean'
+          ? prev.authenticatorPaired
+          : authStore.paired;
+
       const record: StoredPortfolioFile = {
         version: nextVersion,
         updatedAt,
         activePortfolioId: nextActiveId,
+        authenticatorPaired: effectivePaired,
         portfolios: nextPortfolios
       };
 
@@ -1465,6 +1563,7 @@ async function startServer(): Promise<void> {
         version: nextVersion,
         updatedAt,
         activePortfolioId: nextActiveId,
+        authenticatorPaired: effectivePaired,
         portfolios: nextPortfolios
       };
 

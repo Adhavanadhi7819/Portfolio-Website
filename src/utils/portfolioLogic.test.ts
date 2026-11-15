@@ -983,87 +983,178 @@ test('upload-asset commits binary to GitHub and action=asset + relink-qr work in
   }
 });
 
-test('status auto-detects unpaired 2FA and emits otpauthUri until 2FA verification sets paired cookie', async () => {
+test('status auto-detects unpaired 2FA and emits otpauthUri until 2FA verification or canonical data.json syncs paired state across environments', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
   const {
     handleUpdatePortfolioRequest,
     generateServerTotpCode,
     OWNER_TOTP_DEFAULT_SECRET
   } = await import('../../api/update-portfolio');
 
-  const invoke = async (
-    method: string,
-    url: string,
-    body?: Record<string, unknown>,
-    cookieHeader = ''
-  ) => {
-    let statusCode = 200;
-    let rawChunk = '';
-    const headers: Record<string, unknown> = {};
-    const fakeReq = {
-      method,
-      url,
-      headers: cookieHeader ? { cookie: cookieHeader } : {},
-      body
-    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[0];
-    const fakeRes = {
-      setHeader(k: string, v: unknown) {
-        headers[k.toLowerCase()] = v;
-      },
-      getHeader(k: string) {
-        return headers[k.toLowerCase()];
-      },
-      end(chunk?: Buffer | string) {
-        rawChunk = String(chunk || '');
-      }
-    } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[1];
-    Object.defineProperty(fakeRes, 'statusCode', {
-      get: () => statusCode,
-      set: (v: number) => {
-        statusCode = v;
-      }
-    });
-    await handleUpdatePortfolioRequest(fakeReq, fakeRes, { runtime: 'vercel' });
-    return { statusCode, headers, data: JSON.parse(rawChunk || '{}') as Record<string, unknown> };
-  };
+  const prevCwd = process.cwd();
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+  const prevToken = process.env.GITHUB_TOKEN;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adhavan-auth-test-'));
 
-  // 1. Fresh/unpaired state: automatically emits otpauthUri for QR rendering
-  const unpairedStatus = await invoke('GET', '/api/update-portfolio?action=status');
-  assert.equal(unpairedStatus.statusCode, 200);
-  assert.equal(unpairedStatus.data.isPaired, false);
-  assert.equal(unpairedStatus.data.canShowInitialSetupQr, true);
-  assert.ok(String(unpairedStatus.data.otpauthUri || '').startsWith('otpauth://totp/'));
-
-  // 2. Verify Admin PIN + TOTP -> issues session + paired cookies
-  const validCode = generateServerTotpCode(OWNER_TOTP_DEFAULT_SECRET);
-  const verifyRes = await invoke('POST', '/api/update-portfolio', {
-    action: 'verify-owner-2fa',
-    pin: '906',
-    code: validCode
-  });
-  assert.equal(verifyRes.statusCode, 200);
-  const setCookies = Array.isArray(verifyRes.headers['set-cookie'])
-    ? verifyRes.headers['set-cookie']
-    : [String(verifyRes.headers['set-cookie'] || '')];
-  const cookieHeader = setCookies.map((c) => String(c).split(';')[0]).join('; ');
-  assert.ok(cookieHeader.includes('adhavan_totp_paired='));
-
-  // 3. Subsequent status check with paired cookie -> hides QR automatically
-  const pairedStatus = await invoke('GET', '/api/update-portfolio?action=status', undefined, cookieHeader);
-  assert.equal(pairedStatus.statusCode, 200);
-  assert.equal(pairedStatus.data.isPaired, true);
-  assert.equal(pairedStatus.data.canShowInitialSetupQr, false);
-  assert.equal(pairedStatus.data.otpauthUri, undefined);
-
-  // 4. unpair-2fa clears paired cookie and returns fresh otpauthUri
-  const unpairRes = await invoke(
-    'POST',
-    '/api/update-portfolio',
-    { action: 'unpair-2fa' },
-    cookieHeader
+  fs.mkdirSync(path.join(tmpDir, 'portfolio-data'), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmpDir, 'portfolio-data', 'auth.json'),
+    JSON.stringify({ secret: OWNER_TOTP_DEFAULT_SECRET, paired: false, signingKey: 'test-key' }),
+    'utf8'
   );
-  assert.equal(unpairRes.statusCode, 200);
-  assert.equal(unpairRes.data.isPaired, false);
-  assert.ok(String(unpairRes.data.otpauthUri || '').startsWith('otpauth://totp/'));
+  fs.writeFileSync(
+    path.join(tmpDir, 'data.json'),
+    JSON.stringify({
+      initialized: true,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      activePortfolioId: 'default_portfolio',
+      portfolios: [{ id: 'default_portfolio', name: 'Test', state: {} }]
+    }),
+    'utf8'
+  );
+
+  delete process.env.GITHUB_OWNER;
+  delete process.env.GITHUB_REPO;
+  delete process.env.GITHUB_TOKEN;
+  process.chdir(tmpDir);
+
+  const prevFetch = globalThis.fetch;
+  let remoteAuthenticatorPaired: boolean | undefined = undefined;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes('api.github.com') && url.includes('/contents/data.json')) {
+      const payloadBundle = {
+        initialized: true,
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        activePortfolioId: 'default_portfolio',
+        ...(typeof remoteAuthenticatorPaired === 'boolean'
+          ? { authenticatorPaired: remoteAuthenticatorPaired }
+          : {}),
+        portfolios: [{ id: 'default_portfolio', name: 'Test', state: {} }]
+      };
+      const encoded = Buffer.from(JSON.stringify(payloadBundle), 'utf8').toString('base64');
+      return new Response(JSON.stringify({ sha: 'mock-sha', content: encoded }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'Not mocked' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }) as typeof fetch;
+
+  try {
+    const invoke = async (
+      method: string,
+      url: string,
+      body?: Record<string, unknown>,
+      cookieHeader = ''
+    ) => {
+      let statusCode = 200;
+      let rawChunk = '';
+      const headers: Record<string, unknown> = {};
+      const fakeReq = {
+        method,
+        url,
+        headers: cookieHeader ? { cookie: cookieHeader } : {},
+        body
+      } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[0];
+      const fakeRes = {
+        setHeader(k: string, v: unknown) {
+          headers[k.toLowerCase()] = v;
+        },
+        getHeader(k: string) {
+          return headers[k.toLowerCase()];
+        },
+        end(chunk?: Buffer | string) {
+          rawChunk = String(chunk || '');
+        }
+      } as unknown as Parameters<typeof handleUpdatePortfolioRequest>[1];
+      Object.defineProperty(fakeRes, 'statusCode', {
+        get: () => statusCode,
+        set: (v: number) => {
+          statusCode = v;
+        }
+      });
+      await handleUpdatePortfolioRequest(fakeReq, fakeRes, { runtime: 'vercel' });
+      return { statusCode, headers, data: JSON.parse(rawChunk || '{}') as Record<string, unknown> };
+    };
+
+    // 1. Fresh/unpaired state: automatically emits otpauthUri for QR rendering
+    const unpairedStatus = await invoke('GET', '/api/update-portfolio?action=status');
+    assert.equal(unpairedStatus.statusCode, 200);
+    assert.equal(unpairedStatus.data.isPaired, false);
+    assert.equal(unpairedStatus.data.canShowInitialSetupQr, true);
+    assert.ok(String(unpairedStatus.data.otpauthUri || '').startsWith('otpauth://totp/'));
+
+    // 2. Verify Admin PIN + TOTP -> issues session + paired cookies and updates canonical data.json
+    const validCode = generateServerTotpCode(OWNER_TOTP_DEFAULT_SECRET);
+    const verifyRes = await invoke('POST', '/api/update-portfolio', {
+      action: 'verify-owner-2fa',
+      pin: '906',
+      code: validCode
+    });
+    assert.equal(verifyRes.statusCode, 200);
+    const setCookies = Array.isArray(verifyRes.headers['set-cookie'])
+      ? verifyRes.headers['set-cookie']
+      : [String(verifyRes.headers['set-cookie'] || '')];
+    const cookieHeader = setCookies.map((c) => String(c).split(';')[0]).join('; ');
+    assert.ok(cookieHeader.includes('adhavan_totp_paired='));
+
+    // 3. Subsequent status check from ANY device/origin WITHOUT cookies -> hides QR via canonical data.json
+    const cookieLessPairedStatus = await invoke('GET', '/api/update-portfolio?action=status');
+    assert.equal(cookieLessPairedStatus.statusCode, 200);
+    assert.equal(cookieLessPairedStatus.data.isPaired, true);
+    assert.equal(cookieLessPairedStatus.data.canShowInitialSetupQr, false);
+    assert.equal(cookieLessPairedStatus.data.otpauthUri, undefined);
+
+    // 4. Simulate Preview with local unpaired auth/data files reading remote paired state from GitHub data.json
+    fs.writeFileSync(
+      path.join(tmpDir, 'data.json'),
+      JSON.stringify({
+        initialized: true,
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        activePortfolioId: 'default_portfolio',
+        portfolios: [{ id: 'default_portfolio', name: 'Test', state: {} }]
+      }),
+      'utf8'
+    );
+    remoteAuthenticatorPaired = true;
+    const syncedFromRemoteStatus = await invoke('GET', '/api/update-portfolio?action=status');
+    assert.equal(syncedFromRemoteStatus.statusCode, 200);
+    assert.equal(syncedFromRemoteStatus.data.isPaired, true);
+    assert.equal(syncedFromRemoteStatus.data.canShowInitialSetupQr, false);
+    assert.equal(syncedFromRemoteStatus.data.otpauthUri, undefined);
+
+    // 5. unpair-2fa clears pairing globally and returns fresh otpauthUri
+    remoteAuthenticatorPaired = false;
+    const unpairRes = await invoke(
+      'POST',
+      '/api/update-portfolio',
+      { action: 'unpair-2fa' },
+      cookieHeader
+    );
+    assert.equal(unpairRes.statusCode, 200);
+    assert.equal(unpairRes.data.isPaired, false);
+    assert.ok(String(unpairRes.data.otpauthUri || '').startsWith('otpauth://totp/'));
+  } finally {
+    globalThis.fetch = prevFetch;
+    process.chdir(prevCwd);
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('plexusColors handles HEX/RGB conversions, cycling interpolation, and config clamping', async () => {

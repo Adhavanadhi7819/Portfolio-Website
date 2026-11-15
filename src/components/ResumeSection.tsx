@@ -6,6 +6,7 @@ import { DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { DESIGNER_INFO } from '../data/portfolioData';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 import { uploadDocumentAsset } from '../utils/fileHelpers';
 
 interface ResumeSectionProps {
@@ -379,7 +380,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   return (
     <section
       id="resume"
-      className="py-8 sm:py-10 relative bg-transparent flex-1 flex flex-col justify-center scroll-mt-[68px]"
+      className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]"
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (
@@ -403,7 +404,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
       {/* Subtle monochromatic backdrop glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] h-[360px] bg-amber-500/6 blur-[160px] rounded-full pointer-events-none" />
 
-      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-5">
+      <div className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-4">
         {/* Clean Section Header */}
         <div>
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 flex items-center gap-1.5 mb-1.5">
@@ -452,7 +453,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
             className="rounded-2xl bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 shadow-2xl overflow-hidden"
           >
             {/* File Metadata & Single Primary Download Action Bar */}
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-amber-500/10 via-zinc-900/90 to-zinc-950 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-zinc-900/90 to-zinc-950 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
                 <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
                   <FileText className="w-6 h-6" />
@@ -548,11 +549,26 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
                 fileName={info.resumeFileName}
               />
             ) : isImageDocument ? (
-              <div className="bg-black p-4 flex justify-center">
-                <img
-                  src={info.resumePdfUrl}
-                  alt={info.resumeFileName || 'Resume Preview'}
-                  className="max-w-full max-h-[680px] rounded-xl border border-zinc-800 object-contain"
+              <div className="relative bg-black p-4 flex justify-center overflow-hidden">
+                {(() => {
+                  const alignCfg = info.resumeImageAlign || { x: 50, y: 50, zoom: 1, fit: 'contain' as const };
+                  const { fitClass, style } = getPhotoAlignImgProps(alignCfg);
+                  return (
+                    <div className="relative w-full max-w-3xl max-h-[680px] rounded-xl border border-zinc-800 overflow-hidden bg-black flex items-center justify-center">
+                      <img
+                        src={info.resumePdfUrl}
+                        alt={info.resumeFileName || 'Resume Preview'}
+                        style={style}
+                        className={`w-full max-h-[680px] ${fitClass}`}
+                      />
+                    </div>
+                  );
+                })()}
+                <PhotoAdjustOverlay
+                  align={info.resumeImageAlign || { x: 50, y: 50, zoom: 1, fit: 'contain' }}
+                  isOwnerMode={isOwnerMode}
+                  onChange={(next) => onUpdateDesignerInfo?.({ resumeImageAlign: next })}
+                  positionClass="top-6 left-6"
                 />
               </div>
             ) : (
@@ -572,7 +588,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
               const file = e.dataTransfer.files?.[0];
               if (file) handleResumeFile(file);
             }}
-            className="p-8 sm:p-10 rounded-2xl bg-zinc-950 border-2 border-dashed border-amber-500/40 hover:border-amber-400 transition-colors text-center space-y-4 shadow-xl"
+            className="p-6 sm:p-8 rounded-2xl bg-zinc-950 border-2 border-dashed border-amber-500/40 hover:border-amber-400 transition-colors text-center space-y-4 shadow-xl"
           >
             <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
               <Upload className="w-6 h-6" />
@@ -607,7 +623,7 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
             </label>
           </div>
         ) : (
-          <div className="p-8 sm:p-12 rounded-2xl bg-zinc-950 border border-zinc-800 text-center space-y-4 shadow-xl">
+          <div className="p-6 sm:p-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-center space-y-4 shadow-xl">
             <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 mx-auto">
               <FileText className="w-6 h-6" />
             </div>

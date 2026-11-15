@@ -1550,6 +1550,7 @@ export default function App() {
                       isOwnerMode={isOwnerMode}
                       onAddChapter={() => handleOpenEditModal('chapter')}
                       onEditChapter={(ch) => handleOpenEditModal('chapter', ch)}
+                      onSaveChapter={handleSaveChapter}
                       onDeleteChapter={handleDeleteChapter}
                       onEditReelSettings={() => handleOpenEditModal('video_reel')}
                       onUploadVideo={handleSaveVideoPath}
@@ -1825,6 +1826,8 @@ export default function App() {
       {/* Deep Dive Project Modal */}
       <ProjectModal
         project={selectedProject}
+        isOwnerMode={isOwnerMode}
+        onSaveProject={handleSaveProject}
         onClose={() => setSelectedProject(null)}
         onPlayInReel={handlePlayInReel}
       />

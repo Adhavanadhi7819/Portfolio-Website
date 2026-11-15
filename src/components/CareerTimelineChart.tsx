@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { TimelineMilestone } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
+import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 import { uploadImageAsset } from '../utils/fileHelpers';
 
 interface CareerTimelineChartProps {
@@ -188,12 +189,12 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
     lightboxIndex !== null ? currentTimeline[lightboxIndex] : null;
 
   return (
-    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 p-5 sm:p-6 shadow-2xl relative overflow-hidden space-y-5">
+    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 p-4 sm:p-5 shadow-2xl relative overflow-hidden space-y-4">
       {/* Ambient amber backdrop glow */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
             <Briefcase className="w-4 h-4" />
@@ -253,7 +254,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
 
       {/* Pictorial Journey Quick-View & Owner Photo Upload Gallery */}
       {(currentTimeline.some((m) => m.photoUrl) || isOwnerMode) && (
-        <div className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/80 space-y-3">
+        <div className="p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800/80 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-1.5">
               <Images className="w-3.5 h-3.5" />
@@ -287,11 +288,19 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                     className="w-full h-full text-left cursor-pointer block"
                     title="View timeline photo"
                   >
-                    <img
-                      src={milestone.photoUrl}
-                      alt={milestone.photoCaption || milestone.title}
-                      className="w-full h-full object-cover object-top group-hover/strip:scale-105 transition-transform duration-500"
-                    />
+                    {(() => {
+                      const { fitClass, style } = getPhotoAlignImgProps(milestone.photoAlign);
+                      return (
+                        <div className="w-full h-full group-hover/strip:scale-105 transition-transform duration-500">
+                          <img
+                            src={milestone.photoUrl}
+                            alt={milestone.photoCaption || milestone.title}
+                            style={style}
+                            className={`w-full h-full ${fitClass}`}
+                          />
+                        </div>
+                      );
+                    })()}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                     <div className="absolute bottom-1.5 left-2 right-2">
                       <span className="text-[9px] font-mono text-amber-400 uppercase block truncate">
@@ -304,27 +313,38 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                   </button>
 
                   {isOwnerMode && (
-                    <label
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-black/80 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors shadow"
-                      title={`Upload photo for ${milestone.phase}`}
-                    >
-                      <Upload className="w-2.5 h-2.5" />
-                      <span>{isUploadingThis ? '...' : 'Upload'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={isUploadingThis}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            handleUploadMilestonePhoto(milestone.id, file);
-                            e.target.value = '';
-                          }
-                        }}
+                    <>
+                      <PhotoAdjustOverlay
+                        align={milestone.photoAlign}
+                        isOwnerMode={isOwnerMode}
+                        onChange={(next) =>
+                          handleUpdateMilestone(milestone.id, { photoAlign: next })
+                        }
+                        positionClass="top-1.5 left-1.5"
+                        compact
                       />
-                    </label>
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-1.5 right-1.5 px-2 py-1 rounded-md bg-black/80 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors shadow z-20"
+                        title={`Upload photo for ${milestone.phase}`}
+                      >
+                        <Upload className="w-2.5 h-2.5" />
+                        <span>{isUploadingThis ? '...' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={isUploadingThis}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleUploadMilestonePhoto(milestone.id, file);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </>
                   )}
                 </div>
               ) : isOwnerMode ? (
@@ -358,7 +378,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
       )}
 
       {/* Interactive Visual Timeline Track */}
-      <div className="relative pl-6 sm:pl-8 space-y-5 before:absolute before:left-[11px] sm:before:left-[15px] before:top-3 before:bottom-3 before:w-[2px] before:bg-gradient-to-b before:from-amber-500 before:via-amber-400/60 before:to-zinc-800">
+      <div className="relative pl-6 sm:pl-8 space-y-4 before:absolute before:left-[11px] sm:before:left-[15px] before:top-3 before:bottom-3 before:w-[2px] before:bg-gradient-to-b before:from-amber-500 before:via-amber-400/60 before:to-zinc-800">
         {currentTimeline.map((milestone, idx) => {
           const isCompleted = milestone.status === 'completed';
           const isCurrent = milestone.status === 'current';
@@ -394,7 +414,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
 
               {/* Milestone Card with Interactive Objective Photo Split */}
               <div
-                className={`p-5 rounded-2xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   isCurrent
                     ? 'bg-gradient-to-br from-amber-500/10 via-zinc-900/90 to-zinc-950 border-amber-500/60 shadow-xl shadow-amber-500/5'
                     : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700'
@@ -509,7 +529,7 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                 </div>
 
                 {/* Inner 12-Col Grid: Objective Text (7 cols) + Interactive Photo (5 cols) */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
                   {/* Left: Milestone Title, Description & Highlights */}
                   <div className="lg:col-span-7 space-y-2.5">
                     <h4 className="text-base sm:text-lg font-heading font-bold text-white tracking-wide">
@@ -561,12 +581,31 @@ export const CareerTimelineChart: React.FC<CareerTimelineChartProps> = ({
                           className="relative aspect-[16/10] rounded-xl overflow-hidden border border-zinc-800 bg-black group/photo cursor-zoom-in shadow-lg"
                           title="Click to inspect milestone objective photo"
                         >
-                          <img
-                            src={milestone.photoUrl}
-                            alt={milestone.photoCaption || milestone.title}
-                            className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-500"
+                          {(() => {
+                            const { fitClass, style } = getPhotoAlignImgProps(milestone.photoAlign);
+                            return (
+                              <div className="w-full h-full group-hover/photo:scale-105 transition-transform duration-500">
+                                <img
+                                  src={milestone.photoUrl}
+                                  alt={milestone.photoCaption || milestone.title}
+                                  style={style}
+                                  className={`w-full h-full ${fitClass}`}
+                                />
+                              </div>
+                            );
+                          })()}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-70 group-hover/photo:opacity-45 transition-opacity pointer-events-none" />
+
+                          {/* Owner Photo Alignment Control */}
+                          <PhotoAdjustOverlay
+                            align={milestone.photoAlign}
+                            isOwnerMode={isOwnerMode}
+                            onChange={(next) =>
+                              handleUpdateMilestone(milestone.id, { photoAlign: next })
+                            }
+                            positionClass="top-2.5 left-2.5"
+                            compact
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-70 group-hover/photo:opacity-45 transition-opacity" />
 
                           {/* Expand Icon Badge */}
                           <div className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-black/75 border border-zinc-700 text-amber-400 opacity-90 group-hover/photo:scale-110 transition-transform">
