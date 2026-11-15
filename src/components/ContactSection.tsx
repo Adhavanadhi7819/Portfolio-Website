@@ -38,6 +38,7 @@ interface ContactSectionProps {
   onChangeTab?: (tab: SectionTargetTab) => void;
   showDragHandle?: boolean;
   onDragStartPointer?: (e: React.PointerEvent) => void;
+  isSoloSection?: boolean;
 }
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -124,7 +125,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   currentTab,
   onChangeTab,
   showDragHandle,
-  onDragStartPointer
+  onDragStartPointer,
+  isSoloSection = false
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const inquiryOptions =
@@ -328,7 +330,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   return (
     <section
       id="contact"
-      className="py-5 sm:py-7 relative bg-transparent scroll-mt-[68px]"
+      className={`py-5 sm:py-7 relative bg-transparent scroll-mt-[68px] ${
+        isSoloSection ? 'flex-1 flex flex-col justify-center' : ''
+      }`}
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (

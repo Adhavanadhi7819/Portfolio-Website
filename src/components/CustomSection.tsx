@@ -45,6 +45,7 @@ interface CustomSectionProps {
   onAddCard?: () => void;
   onEditCard?: (card: CustomSectionCard) => void;
   onDeleteCard?: (cardId: string) => void;
+  isSoloSection?: boolean;
 }
 
 function getEmbedVideoUrl(rawUrl: string): string | null {
@@ -89,7 +90,8 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   onUpdateSectionData,
   onAddCard,
   onEditCard,
-  onDeleteCard
+  onDeleteCard,
+  isSoloSection = false
 }) => {
   const data = section.customData || {
     heading: section.title || 'Custom Section',
@@ -199,7 +201,11 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   return (
     <section
       id={section.id}
-      className="py-5 sm:py-7 relative bg-transparent border-t border-zinc-800/60 scroll-mt-[68px]"
+      className={`py-5 sm:py-7 relative bg-transparent scroll-mt-[68px] ${
+        isSoloSection
+          ? 'flex-1 flex flex-col justify-center'
+          : 'border-t border-zinc-800/60'
+      }`}
     >
       {/* Floating Section Controls for Owner */}
       {isOwnerMode && (

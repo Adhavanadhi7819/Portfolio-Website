@@ -26,6 +26,7 @@ interface ResumeSectionProps {
   onChangeTab?: (tab: SectionTargetTab) => void;
   showDragHandle?: boolean;
   onDragStartPointer?: (e: React.PointerEvent) => void;
+  isSoloSection?: boolean;
 }
 
 function dataUrlToUint8Array(dataUrl: string): Uint8Array | null {
@@ -297,7 +298,8 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   currentTab,
   onChangeTab,
   showDragHandle,
-  onDragStartPointer
+  onDragStartPointer,
+  isSoloSection = false
 }) => {
   const info = designerInfo || DESIGNER_INFO;
   const [confirmRemovePdf, setConfirmRemovePdf] = useState(false);
@@ -380,7 +382,11 @@ export const ResumeSection: React.FC<ResumeSectionProps> = ({
   return (
     <section
       id="resume"
-      className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]"
+      className={`py-5 sm:py-7 relative bg-transparent scroll-mt-[68px] ${
+        isSoloSection
+          ? 'flex-1 flex flex-col justify-center'
+          : 'border-b border-zinc-800/60'
+      }`}
     >
       {/* Section Controls for Owner */}
       {isOwnerMode && (

@@ -1680,6 +1680,7 @@ export default function App() {
                       onMoveDown={onMoveDown}
                       onHide={onHide}
                       onAddSectionBelow={onAddSectionBelow}
+                      isSoloSection={currentTabSections.length === 1}
                     />
                   );
                 } else if (sec.id === 'contact') {
@@ -1699,6 +1700,7 @@ export default function App() {
                       onMoveDown={onMoveDown}
                       onHide={onHide}
                       onAddSectionBelow={onAddSectionBelow}
+                      isSoloSection={currentTabSections.length === 1}
                     />
                   );
                 } else {
@@ -1726,6 +1728,7 @@ export default function App() {
                       }
                       onAddCard={() => handleAddCustomCard(sec.id)}
                       onDeleteCard={(cardId) => handleDeleteCustomCard(sec.id, cardId)}
+                      isSoloSection={currentTabSections.length === 1}
                     />
                   );
                 }
