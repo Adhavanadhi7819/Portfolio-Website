@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 38,
-  "updatedAt": "2026-11-14T20:01:36.024Z",
+  "version": 39,
+  "updatedAt": "2026-11-15T19:10:06.318Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-14T20:01:35.846Z",
+      "updatedAt": "2026-11-15T19:10:04.673Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -278,7 +278,7 @@
                 "Modular Interior Assets",
                 "UV Mapping"
               ],
-              "photoUrl": "/showcase/maya-models.jpg",
+              "photoUrl": "/api/assets/2e512e97586acff45164b6ec5993bf0b.jpg",
               "photoCaption": "Hard-surface prop modeling & studio turntable renders in Autodesk Maya"
             },
             {
