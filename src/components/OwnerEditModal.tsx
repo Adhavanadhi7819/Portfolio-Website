@@ -22,7 +22,8 @@ import {
   Box,
   ExternalLink,
   Edit3,
-  Video
+  Video,
+  RefreshCw
 } from 'lucide-react';
 import { uploadDocumentAsset, uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 import { PhotoAlignInlineControl } from './PhotoAdjustOverlay';
@@ -70,7 +71,15 @@ interface OwnerEditModalProps {
   onSaveChapter: (chapter: VideoChapter) => void;
   onSaveModel: (model: MayaModelItem) => void;
   onSaveDesignerInfo: (info: Partial<DesignerInfo>) => void;
-  onSaveVideoPath?: (path: string, options?: { clearChapterVideoUrls?: boolean }) => void;
+  onSaveVideoPath?: (
+    path: string,
+    options?: { clearChapterVideoUrls?: boolean; syncChaptersOnLoad?: boolean }
+  ) => void;
+  onSyncChaptersToDuration?: (
+    durationSeconds: number,
+    sourceVideoPath?: string,
+    force?: boolean
+  ) => void;
   onClearAllChapters?: () => void;
   currentPortfolioState: PortfolioState;
   onImportState: (state: PortfolioState) => void;
@@ -86,6 +95,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   onSaveModel,
   onSaveDesignerInfo,
   onSaveVideoPath,
+  onSyncChaptersToDuration,
   onClearAllChapters,
   currentPortfolioState,
   onImportState
@@ -113,6 +123,9 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
   const [videoPreviewError, setVideoPreviewError] = useState<string | null>(null);
+  const [reelPreviewDuration, setReelPreviewDuration] = useState(0);
+  const [isUploadingReelPoster, setIsUploadingReelPoster] = useState(false);
+  const [reelPosterUploadError, setReelPosterUploadError] = useState<string | null>(null);
   const wasOpenRef = useRef(false);
 
   // Validation errors
@@ -133,6 +146,8 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     setResumeUploadError(null);
     setVideoUploadError(null);
     setVideoPreviewError(null);
+    setReelPreviewDuration(0);
+    setReelPosterUploadError(null);
 
     const initialMode = mode === 'bio' ? 'hero' : mode;
     setActiveTab(initialMode);
@@ -361,7 +376,8 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     if (onSaveVideoPath && (activeTab === 'video_reel' || trimmedVideoPath !== existingVideoPath)) {
       const videoChanged = trimmedVideoPath !== existingVideoPath;
       onSaveVideoPath(trimmedVideoPath, {
-        clearChapterVideoUrls: activeTab === 'video_reel' && videoChanged && Boolean(trimmedVideoPath)
+        clearChapterVideoUrls: activeTab === 'video_reel' && videoChanged && Boolean(trimmedVideoPath),
+        syncChaptersOnLoad: videoChanged && Boolean(trimmedVideoPath)
       });
     }
     triggerSuccess(successMsg);
@@ -864,9 +880,17 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                           const file = e.target.files?.[0];
                           e.target.value = '';
                           await handleModalVideoUpload(file, (url) => {
+                            const sameUrl = url === videoPathForm;
                             setVideoPathForm(url);
-                            onSaveVideoPath?.(url, { clearChapterVideoUrls: true });
-                            triggerSuccess('Uploaded showreel video & updated scene!');
+                            setReelPreviewDuration(0);
+                            onSaveVideoPath?.(url, {
+                              clearChapterVideoUrls: true,
+                              syncChaptersOnLoad: true
+                            });
+                            if (sameUrl && reelPreviewDuration > 0) {
+                              onSyncChaptersToDuration?.(reelPreviewDuration, url);
+                            }
+                            triggerSuccess('Uploaded showreel video & synced chapters!');
                           });
                         }}
                       />
@@ -876,6 +900,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                         type="button"
                         onClick={() => {
                           setVideoPathForm('');
+                          setReelPreviewDuration(0);
                           onSaveVideoPath?.('');
                         }}
                         className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
@@ -896,7 +921,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
                 )}
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Upload an MP4/H.264/WebM/MOV/MKV video or a ZIP archive up to 200 MB, or paste any hosted MP4 URL.
+                  Upload an MP4/H.264/WebM/MOV/MKV video or a ZIP archive up to 200 MB, or paste any hosted MP4 URL. Chapters auto-sync to your uploaded video length.
                 </p>
                 {videoPathForm && (
                   <div className="mt-2.5 space-y-1.5">
@@ -904,9 +929,17 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                       <video
                         key={videoPathForm}
                         src={videoPathForm}
+                        poster={bioForm.reelPosterUrl?.trim() || undefined}
                         controls
                         playsInline
                         preload="auto"
+                        onLoadedMetadata={(e) => {
+                          const dur = e.currentTarget.duration;
+                          if (dur && Number.isFinite(dur) && dur > 0) {
+                            setReelPreviewDuration(dur);
+                            onSyncChaptersToDuration?.(dur, videoPathForm);
+                          }
+                        }}
                         onLoadedData={() => setVideoPreviewError(null)}
                         onError={() =>
                           setVideoPreviewError(
@@ -920,6 +953,90 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                       <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
                     )}
                   </div>
+                )}
+              </div>
+
+              {/* Cinematic Video Thumbnail Image (Shown in Scene Before Playing) */}
+              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                      Cinematic Video Thumbnail Image
+                    </label>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Displayed inside the showreel frame in scene before playback starts.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                      <Image className="w-3 h-3" />
+                      <span>{isUploadingReelPoster ? 'Uploading...' : 'Upload Thumbnail'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingReelPoster}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
+                          setIsUploadingReelPoster(true);
+                          setReelPosterUploadError(null);
+                          try {
+                            const url = await uploadImageAsset(file, 1600, 900, 0.85);
+                            setBioForm((prev) => ({ ...prev, reelPosterUrl: url }));
+                            onSaveDesignerInfo({ reelPosterUrl: url });
+                            triggerSuccess('Showreel thumbnail image updated!');
+                          } catch (err) {
+                            setReelPosterUploadError(
+                              err instanceof Error && err.message
+                                ? err.message
+                                : 'Could not upload thumbnail image.'
+                            );
+                          } finally {
+                            setIsUploadingReelPoster(false);
+                          }
+                        }}
+                      />
+                    </label>
+                    {bioForm.reelPosterUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBioForm((prev) => ({ ...prev, reelPosterUrl: '' }));
+                          onSaveDesignerInfo({ reelPosterUrl: '' });
+                          triggerSuccess('Removed showreel thumbnail image.');
+                        }}
+                        className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  value={bioForm.reelPosterUrl || ''}
+                  onChange={(e) => setBioForm({ ...bioForm, reelPosterUrl: e.target.value })}
+                  placeholder="/showcase/hero-adhavan.jpg or /api/assets/..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                {reelPosterUploadError && (
+                  <p className="text-[11px] text-red-400">{reelPosterUploadError}</p>
+                )}
+
+                {bioForm.reelPosterUrl && (
+                  <PhotoAlignInlineControl
+                    align={bioForm.reelPosterAlign}
+                    imageUrl={bioForm.reelPosterUrl}
+                    aspectClass="aspect-video"
+                    label="Showreel Thumbnail Alignment"
+                    onChange={(next) => {
+                      setBioForm((prev) => ({ ...prev, reelPosterAlign: next }));
+                      onSaveDesignerInfo({ reelPosterAlign: next });
+                    }}
+                  />
                 )}
               </div>
 
@@ -966,7 +1083,23 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
                     Reel Keyframe Chapters ({currentPortfolioState.videoChapters.length})
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {currentPortfolioState.videoChapters.length > 0 &&
+                      onSyncChaptersToDuration &&
+                      reelPreviewDuration > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSyncChaptersToDuration(reelPreviewDuration, videoPathForm, true);
+                            triggerSuccess('Chapters synced proportionally to video duration!');
+                          }}
+                          className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500 hover:text-black border border-emerald-500/30 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Scale all chapters to fit the loaded showreel duration evenly"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Sync Chapters to Video</span>
+                        </button>
+                      )}
                     {currentPortfolioState.videoChapters.length > 0 && onClearAllChapters && (
                       <button
                         type="button"

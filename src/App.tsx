@@ -45,6 +45,8 @@ import {
   updateChapter, 
   deleteChapter, 
   clearChapterVideoOverrides,
+  syncChaptersToVideoDuration,
+  formatVideoTime,
   addMayaModel, 
   updateMayaModel, 
   deleteMayaModel,
@@ -184,6 +186,7 @@ export default function App() {
   const pendingWaitersRef = useRef<Array<(ok: boolean) => void>>([]);
   const hasPendingSaveRef = useRef<boolean>(false);
   const immediateSaveRequestedRef = useRef<boolean>(false);
+  const pendingChapterSyncVideoPathRef = useRef<string | null>(null);
   const hasBackendRef = useRef<boolean>(true);
   const githubStatusRef = useRef<GitHubSyncStatus>(githubStatus);
   useEffect(() => {
@@ -1233,7 +1236,12 @@ export default function App() {
   };
 
   const handleSaveDesignerInfo = (info: Partial<DesignerInfo>) => {
-    if ('resumePdfUrl' in info || 'flagshipVideoUrl' in info) {
+    if (
+      'resumePdfUrl' in info ||
+      'flagshipVideoUrl' in info ||
+      'reelPosterUrl' in info ||
+      'reelPosterAlign' in info
+    ) {
       immediateSaveRequestedRef.current = true;
     }
     setPortfolioState(prev => ({
@@ -1247,9 +1255,15 @@ export default function App() {
 
   const handleSaveVideoPath = (
     newPath: string,
-    options?: { clearChapterVideoUrls?: boolean }
+    options?: { clearChapterVideoUrls?: boolean; syncChaptersOnLoad?: boolean }
   ) => {
     immediateSaveRequestedRef.current = true;
+    const trimmedPath = newPath.trim();
+    if (trimmedPath && options?.syncChaptersOnLoad !== false) {
+      pendingChapterSyncVideoPathRef.current = trimmedPath;
+    } else if (!trimmedPath) {
+      pendingChapterSyncVideoPathRef.current = null;
+    }
     setPortfolioState(prev => ({
       ...prev,
       videoPath: newPath,
@@ -1257,6 +1271,40 @@ export default function App() {
         ? { videoChapters: clearChapterVideoOverrides(prev.videoChapters) }
         : {})
     }));
+  };
+
+  const handleSyncChaptersToDuration = (
+    durationSeconds: number,
+    sourceVideoPath?: string,
+    force = false
+  ) => {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+
+    const pendingPath = pendingChapterSyncVideoPathRef.current;
+    const normalizedSource = sourceVideoPath?.trim();
+    if (!force) {
+      if (!pendingPath) return;
+      if (normalizedSource && pendingPath !== normalizedSource) return;
+    }
+    pendingChapterSyncVideoPathRef.current = null;
+
+    let syncedCount = 0;
+    setPortfolioState(prev => {
+      if (!prev.videoChapters || prev.videoChapters.length === 0) return prev;
+      const synced = syncChaptersToVideoDuration(prev.videoChapters, durationSeconds);
+      syncedCount = synced.length;
+      return {
+        ...prev,
+        videoChapters: synced
+      };
+    });
+
+    if (syncedCount > 0) {
+      immediateSaveRequestedRef.current = true;
+      setSaveToast(
+        `Synced ${syncedCount} chapter${syncedCount === 1 ? '' : 's'} to ${formatVideoTime(durationSeconds)} video`
+      );
+    }
   };
 
   const handleImportState = (newState: PortfolioState) => {
@@ -1581,6 +1629,7 @@ export default function App() {
                       onClearAllChapters={handleClearAllChapters}
                       onEditReelSettings={() => handleOpenEditModal('video_reel')}
                       onUploadVideo={handleSaveVideoPath}
+                      onSyncChaptersToDuration={handleSyncChaptersToDuration}
                       onUpdateDesignerInfo={handleSaveDesignerInfo}
                       currentTab={resolvedTabValue}
                       onChangeTab={onChangeTab}
@@ -1905,6 +1954,7 @@ export default function App() {
         onSaveModel={handleSaveModel}
         onSaveDesignerInfo={handleSaveDesignerInfo}
         onSaveVideoPath={handleSaveVideoPath}
+        onSyncChaptersToDuration={handleSyncChaptersToDuration}
         onClearAllChapters={handleClearAllChapters}
         currentPortfolioState={portfolioState}
         onImportState={handleImportState}

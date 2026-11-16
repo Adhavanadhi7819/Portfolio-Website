@@ -25,6 +25,7 @@ import {
   moveSectionToTab,
   applyDraggedSectionOrder,
   clearChapterVideoOverrides,
+  syncChaptersToVideoDuration,
   resolveVideoMimeType
 } from './portfolioLogic';
 import { VideoChapter, ProjectItem, PortfolioSectionConfig } from '../types/portfolio';
@@ -2201,3 +2202,75 @@ test('zipped binary MP4 extraction preserves exact bytes and serveGitHubAssetReq
     } catch {}
   }
 });
+
+test('syncChaptersToVideoDuration scales chapters proportionally, maintains contiguous spans, and strips videoUrl overrides', () => {
+  const sampleChapters: VideoChapter[] = [
+    {
+      id: 'c2',
+      title: 'Middle',
+      subtitle: 'Rigging',
+      startTime: 50,
+      endTime: 150,
+      thumbnail: '/showcase/ae86.jpg',
+      videoUrl: '/api/assets/stale-subclip.mp4',
+      category: 'vehicle-rigging',
+      description: ''
+    },
+    {
+      id: 'c1',
+      title: 'Intro',
+      subtitle: 'Overview',
+      startTime: 0,
+      endTime: 50,
+      thumbnail: '/showcase/intro.jpg',
+      category: 'all',
+      description: ''
+    },
+    {
+      id: 'c3',
+      title: 'Finale',
+      subtitle: 'Level',
+      startTime: 150,
+      endTime: 200,
+      thumbnail: '/showcase/finale.jpg',
+      category: 'level-design',
+      description: ''
+    }
+  ];
+
+  // 1. Scale down 200s total (weights 50, 100, 50) -> 100s video (expect 0..25, 25..75, 75..100)
+  const scaledDown = syncChaptersToVideoDuration(sampleChapters, 100);
+  assert.equal(scaledDown.length, 3);
+  assert.deepEqual(
+    scaledDown.map((c) => ({ id: c.id, startTime: c.startTime, endTime: c.endTime, videoUrl: c.videoUrl })),
+    [
+      { id: 'c1', startTime: 0, endTime: 25, videoUrl: undefined },
+      { id: 'c2', startTime: 25, endTime: 75, videoUrl: undefined },
+      { id: 'c3', startTime: 75, endTime: 100, videoUrl: undefined }
+    ]
+  );
+
+  // 2. Scale up -> 400s video (expect 0..100, 100..300, 300..400)
+  const scaledUp = syncChaptersToVideoDuration(sampleChapters, 400);
+  assert.deepEqual(
+    scaledUp.map((c) => [c.startTime, c.endTime]),
+    [
+      [0, 100],
+      [100, 300],
+      [300, 400]
+    ]
+  );
+
+  // 3. Very short video (2s for 3 chapters) clamps safely within [0, 2]
+  const tiny = syncChaptersToVideoDuration(sampleChapters, 2);
+  assert.equal(tiny[0].startTime, 0);
+  assert.equal(tiny[tiny.length - 1].endTime, 2);
+  for (let i = 0; i < tiny.length; i++) {
+    assert.ok(tiny[i].startTime >= 0 && tiny[i].endTime <= 2);
+    assert.ok(tiny[i].startTime <= tiny[i].endTime);
+  }
+
+  // 4. Empty list returns empty
+  assert.deepEqual(syncChaptersToVideoDuration([], 120), []);
+});
+

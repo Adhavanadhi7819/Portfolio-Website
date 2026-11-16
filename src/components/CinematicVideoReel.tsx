@@ -13,6 +13,7 @@ import {
   Edit2,
   Trash2,
   Upload,
+  Image as ImageIcon,
   X
 } from 'lucide-react';
 import { VIDEO_PATH, VIDEO_CHAPTERS } from '../data/portfolioData';
@@ -22,7 +23,7 @@ import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
 import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
-import { uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
+import { uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 export interface VideoReelRef {
   seekTo: (seconds: number) => void;
@@ -43,7 +44,15 @@ interface CinematicVideoReelProps {
   onDeleteChapter?: (chapterId: string) => void;
   onClearAllChapters?: () => void;
   onEditReelSettings?: () => void;
-  onUploadVideo?: (newVideoPath: string, options?: { clearChapterVideoUrls?: boolean }) => void;
+  onUploadVideo?: (
+    newVideoPath: string,
+    options?: { clearChapterVideoUrls?: boolean; syncChaptersOnLoad?: boolean }
+  ) => void;
+  onSyncChaptersToDuration?: (
+    durationSeconds: number,
+    sourceVideoPath?: string,
+    force?: boolean
+  ) => void;
   onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
@@ -70,6 +79,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   onClearAllChapters,
   onEditReelSettings,
   onUploadVideo,
+  onSyncChaptersToDuration,
   onUpdateDesignerInfo,
   canMoveUp,
   canMoveDown,
@@ -87,6 +97,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const progressBarRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -98,15 +109,26 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [isUploadingReelVideo, setIsUploadingReelVideo] = useState(false);
+  const [isUploadingPoster, setIsUploadingPoster] = useState(false);
   const [reelUploadProgress, setReelUploadProgress] = useState<number>(0);
   const [reelUploadError, setReelUploadError] = useState<string | null>(null);
   const [confirmClearChapters, setConfirmClearChapters] = useState(false);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const pendingAutoPlaySrcRef = useRef<string | null>(null);
+  const syncChaptersCallbackRef = useRef(onSyncChaptersToDuration);
+  syncChaptersCallbackRef.current = onSyncChaptersToDuration;
 
   const activeVideoSrc = activeChapter?.videoUrl || videoPath;
+  const customThumbnailUrl = designerInfo?.reelPosterUrl?.trim() || '';
   const showThumbnailFallback = !activeVideoSrc || hasVideoError;
+
+  // Show newly set custom poster immediately whenever player is still idle before playing
+  useEffect(() => {
+    if (!isPlaying && customThumbnailUrl) {
+      setHasStartedPlayback(false);
+    }
+  }, [customThumbnailUrl]);
 
   // Keep activeChapter synchronized with edits or deletions in videoChapters
   useEffect(() => {
@@ -154,6 +176,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   }, [currentTime, videoChapters, activeChapter?.id, activeChapter?.videoUrl]);
 
   const attemptPlay = async () => {
+    setHasStartedPlayback(true);
     setIsPlaying(true);
     if (!videoRef.current || !activeVideoSrc) {
       return;
@@ -178,6 +201,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
 
   useImperativeHandle(ref, () => ({
     seekTo: (seconds: number) => {
+      setHasStartedPlayback(true);
       setCurrentTime(seconds);
       const ch = findCurrentChapter(seconds, videoChapters);
       if (ch) {
@@ -223,6 +247,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     const shouldAutoPlay = Boolean(activeVideoSrc && pendingAutoPlaySrcRef.current === activeVideoSrc);
     if (!shouldAutoPlay) {
       setIsPlaying(false);
+      setHasStartedPlayback(false);
+    } else {
+      setHasStartedPlayback(true);
     }
     if (pendingSeekRef.current === null) {
       setCurrentTime(0);
@@ -244,6 +271,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     const handleLoadedMetadata = () => {
       if (video.duration && Number.isFinite(video.duration) && video.duration > 0) {
         setDuration(video.duration);
+        syncChaptersCallbackRef.current?.(video.duration, activeVideoSrc);
       }
       if (pendingSeekRef.current !== null) {
         const target = pendingSeekRef.current;
@@ -258,6 +286,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     };
 
     const handlePlay = () => {
+      setHasStartedPlayback(true);
       setIsPlaying(true);
       setIsBuffering(false);
       setHasVideoError(false);
@@ -331,7 +360,10 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       }
       return first;
     });
-    onUploadVideo?.(assetUrl, { clearChapterVideoUrls: true });
+    onUploadVideo?.(assetUrl, { clearChapterVideoUrls: true, syncChaptersOnLoad: true });
+    if (assetUrl === activeVideoSrc && duration > 0) {
+      syncChaptersCallbackRef.current?.(duration, assetUrl);
+    }
   };
 
   const togglePlay = () => {
@@ -384,6 +416,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   };
 
   const handleSelectChapter = (chapter: VideoChapter) => {
+    setHasStartedPlayback(true);
     const targetSrc = chapter.videoUrl || videoPath;
     const needsSrcSwitch = targetSrc !== activeVideoSrc;
     setActiveChapter(chapter);
@@ -402,6 +435,9 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   };
 
   const handleSeek = (seconds: number) => {
+    if (seconds > 0) {
+      setHasStartedPlayback(true);
+    }
     setCurrentTime(seconds);
     const ch = findCurrentChapter(seconds, videoChapters);
     if (ch && !activeChapter?.videoUrl) {
@@ -546,6 +582,59 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 />
               </label>
 
+              {/* Owner-Only Thumbnail Image Upload Option */}
+              <label
+                className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Upload a custom thumbnail cover image shown before the showreel plays"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  {isUploadingPoster
+                    ? 'Uploading...'
+                    : customThumbnailUrl
+                    ? 'Change Thumbnail'
+                    : 'Upload Thumbnail'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isUploadingPoster}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    setIsUploadingPoster(true);
+                    setReelUploadError(null);
+                    try {
+                      const imgUrl = await uploadImageAsset(file, 1600, 900, 0.85);
+                      if (!isPlaying) setHasStartedPlayback(false);
+                      onUpdateDesignerInfo?.({ reelPosterUrl: imgUrl });
+                    } catch (err) {
+                      setReelUploadError(
+                        err instanceof Error && err.message
+                          ? err.message
+                          : 'Could not upload thumbnail image.'
+                      );
+                    } finally {
+                      setIsUploadingPoster(false);
+                    }
+                  }}
+                />
+              </label>
+
+              {customThumbnailUrl && (
+                <button
+                  type="button"
+                  onClick={() => onUpdateDesignerInfo?.({ reelPosterUrl: '' })}
+                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 border border-zinc-800 hover:border-red-500/40 transition-colors cursor-pointer"
+                  title="Remove custom showreel thumbnail image"
+                  aria-label="Remove custom showreel thumbnail image"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
               <button
                 onClick={onEditReelSettings}
                 className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all flex items-center gap-1.5 cursor-pointer"
@@ -596,9 +685,10 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 ref={videoRef}
                 src={activeVideoSrc}
                 poster={
-                  activeVideoSrc === VIDEO_PATH && activeChapter?.thumbnail
+                  customThumbnailUrl ||
+                  (activeVideoSrc === VIDEO_PATH && activeChapter?.thumbnail
                     ? activeChapter.thumbnail
-                    : undefined
+                    : undefined)
                 }
                 playsInline
                 preload="auto"
@@ -607,6 +697,32 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 onClick={togglePlay}
               />
             )}
+
+            {/* Pre-Play Cinematic Thumbnail Overlay (Shown cleanly in scene before playing) */}
+            {!isPlaying && !hasStartedPlayback && !showThumbnailFallback && customThumbnailUrl && (() => {
+              const { fitClass, style } = getPhotoAlignImgProps(designerInfo?.reelPosterAlign);
+              return (
+                <div
+                  className="absolute inset-0 z-10 cursor-pointer overflow-hidden group/poster select-none bg-black"
+                  onClick={togglePlay}
+                >
+                  <img
+                    src={customThumbnailUrl}
+                    alt={designerInfo?.reelHeading || 'Cinematic Showreel Thumbnail'}
+                    style={style}
+                    className={`w-full h-full ${fitClass} transition-transform duration-700 group-hover/poster:scale-[1.02]`}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/45 pointer-events-none" />
+                  <PhotoAdjustOverlay
+                    align={designerInfo?.reelPosterAlign}
+                    isOwnerMode={isOwnerMode}
+                    onChange={(next) => onUpdateDesignerInfo?.({ reelPosterAlign: next })}
+                    positionClass="top-14 left-3"
+                    compact
+                  />
+                </div>
+              );
+            })()}
 
             {/* Thumbnail Fallback Viewport (Shown ONLY if video stream is unavailable or errored) */}
             {showThumbnailFallback && (() => {
@@ -668,7 +784,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             )}
 
             {/* Top HUD Overlay (Clean Watermark, Chapter & Category — zero overlap) */}
-            <div className={`absolute top-0 left-0 right-0 p-3.5 sm:p-5 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start sm:items-center justify-between gap-3 transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+            <div className={`absolute top-0 left-0 right-0 z-20 p-3.5 sm:p-5 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start sm:items-center justify-between gap-3 transition-opacity duration-300 pointer-events-none ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <div className="px-2 sm:px-2.5 py-1 rounded bg-black/70 border border-zinc-700/80 backdrop-blur-md flex items-center gap-1.5 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -709,7 +825,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             )}
 
             {/* Bottom HUD Controls Bar */}
-            <div className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-black via-black/70 to-transparent transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+            <div className={`absolute bottom-0 left-0 right-0 z-20 p-4 sm:p-6 bg-gradient-to-t from-black via-black/70 to-transparent transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
               
               {/* Progress Scrubber Bar */}
               <div

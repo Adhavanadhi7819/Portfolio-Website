@@ -213,6 +213,8 @@ export interface DesignerInfo {
   reelHeading?: string;
   reelSubheading?: string;
   reelResolutionNote?: string;
+  reelPosterUrl?: string;
+  reelPosterAlign?: PhotoAlignConfig;
   projectsHeading?: string;
   projectsSubheading?: string;
   mayaHeading?: string;

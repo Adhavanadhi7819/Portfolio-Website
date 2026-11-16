@@ -187,6 +187,58 @@ export function clearChapterVideoOverrides(chapters: VideoChapter[]): VideoChapt
 }
 
 /**
+ * Proportionally synchronize showreel chapter startTime/endTime timestamps to match
+ * a newly uploaded video's real duration while stripping stale per-chapter videoUrl overrides.
+ */
+export function syncChaptersToVideoDuration(
+  chapters: VideoChapter[],
+  videoDurationSeconds: number
+): VideoChapter[] {
+  if (!Array.isArray(chapters) || chapters.length === 0) return [];
+  if (!Number.isFinite(videoDurationSeconds) || videoDurationSeconds <= 0) {
+    return clearChapterVideoOverrides(chapters);
+  }
+
+  const targetTotal = Math.max(1, Math.round(videoDurationSeconds));
+  const sorted = [...chapters].sort((a, b) => a.startTime - b.startTime);
+  const weights = sorted.map((ch) => Math.max(1, (Number(ch.endTime) || 0) - (Number(ch.startTime) || 0)));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0) || sorted.length;
+
+  let cursor = 0;
+  let cumulativeWeight = 0;
+
+  return sorted.map((ch, idx) => {
+    const { videoUrl: _removed, ...rest } = ch;
+    cumulativeWeight += weights[idx];
+
+    if (idx === sorted.length - 1) {
+      return {
+        ...rest,
+        startTime: Math.min(cursor, targetTotal),
+        endTime: targetTotal
+      };
+    }
+
+    const rawEnd = Math.round((cumulativeWeight / totalWeight) * targetTotal);
+    const startTime = idx === 0 ? 0 : cursor;
+    let endTime: number;
+    if (targetTotal >= sorted.length) {
+      const maxAllowed = targetTotal - (sorted.length - 1 - idx);
+      endTime = Math.max(startTime + 1, Math.min(maxAllowed, rawEnd));
+    } else {
+      endTime = Math.min(targetTotal, Math.max(startTime, rawEnd));
+    }
+    cursor = endTime;
+
+    return {
+      ...rest,
+      startTime,
+      endTime
+    };
+  });
+}
+
+/**
  * Resolve canonical video MIME type from reported browser MIME + filename extension
  * (prevents H.264/MP4/MKV/M4V files reported as application/octet-stream from turning into .bin).
  */
