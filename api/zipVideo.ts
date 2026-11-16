@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
 
-export const MAX_VIDEO_ZIP_BYTES = 100 * 1024 * 1024; // 100 MB
+export const MAX_VIDEO_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
 
 interface ZipEntryMeta {
   fileName: string;
@@ -174,7 +174,7 @@ export async function extractLargestVideoFromZip(
   const zipStat = fs.statSync(zipFilePath);
   if (zipStat.size > MAX_VIDEO_ZIP_BYTES) {
     throw new Error(
-      `ZIP archive (${(zipStat.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+      `ZIP archive (${(zipStat.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 200 MB ZIP upload limit.`
     );
   }
 

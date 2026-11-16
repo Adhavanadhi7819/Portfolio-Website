@@ -1358,7 +1358,7 @@ test('extractLargestVideoFromZip extracts Store and Deflate MP4 entries while ig
   const path = await import('node:path');
   const { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } = await import('../../api/zipVideo');
 
-  assert.equal(MAX_VIDEO_ZIP_BYTES, 100 * 1024 * 1024);
+  assert.equal(MAX_VIDEO_ZIP_BYTES, 200 * 1024 * 1024);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adhavan-zip-video-'));
   try {
@@ -1411,34 +1411,34 @@ test('extractLargestVideoFromZip extracts Store and Deflate MP4 entries while ig
   }
 });
 
-test('uploadVideoAsset enforces 100 MB ZIP limit and forwards X-Extract-Video header on valid ZIPs', async () => {
+test('uploadVideoAsset enforces 200 MB ZIP limit and forwards X-Extract-Video header on valid ZIPs', async () => {
   const {
     uploadVideoAsset,
     isZipFile,
     MAX_VIDEO_ZIP_BYTES
   } = await import('./fileHelpers');
 
-  assert.equal(MAX_VIDEO_ZIP_BYTES, 100 * 1024 * 1024);
+  assert.equal(MAX_VIDEO_ZIP_BYTES, 200 * 1024 * 1024);
 
   const prevFetch = globalThis.fetch;
   let capturedExtractHeader: string | null = null;
   let fetchCalled = false;
 
   try {
-    // 1. Over-limit 101 MB fake File object rejects client-side before calling fetch
+    // 1. Over-limit 201 MB fake File object rejects client-side before calling fetch
     const oversizedFakeFile = {
       name: 'too-big-reel.zip',
       type: 'application/zip',
-      size: 101 * 1024 * 1024
+      size: 201 * 1024 * 1024
     } as unknown as File;
     assert.equal(isZipFile(oversizedFakeFile), true);
 
     globalThis.fetch = (async () => {
       fetchCalled = true;
-      throw new Error('Should not have called fetch for >100MB ZIP');
+      throw new Error('Should not have called fetch for >200MB ZIP');
     }) as typeof fetch;
 
-    await assert.rejects(() => uploadVideoAsset(oversizedFakeFile), /100 MB ZIP upload limit/);
+    await assert.rejects(() => uploadVideoAsset(oversizedFakeFile), /200 MB ZIP upload limit/);
     assert.equal(fetchCalled, false);
 
     // 2. Valid small ZIP forwards X-Extract-Video: 1 and returns extracted /api/assets/*.mp4 URL
@@ -1528,7 +1528,7 @@ function createMockServerRes() {
   };
 }
 
-test('extractLargestVideoFromZipBlob extracts Deflate/Store videos in browser and enforces 100 MB limit', async () => {
+test('extractLargestVideoFromZipBlob extracts Deflate/Store videos in browser and enforces 200 MB limit', async () => {
   const { extractLargestVideoFromZipBlob } = await import('./zipClient');
 
   const mp4Payload = Buffer.from('00000018ftypmp42_UNREAL_REEL_CLIENT_ZIP_TEST', 'utf8');
@@ -1555,9 +1555,9 @@ test('extractLargestVideoFromZipBlob extracts Deflate/Store videos in browser an
   assert.ok(progressValues.includes(25));
 
   const oversizedFakeZip = {
-    size: 101 * 1024 * 1024
+    size: 201 * 1024 * 1024
   } as unknown as Blob;
-  await assert.rejects(() => extractLargestVideoFromZipBlob(oversizedFakeZip), /100 MB ZIP upload limit/);
+  await assert.rejects(() => extractLargestVideoFromZipBlob(oversizedFakeZip), /200 MB ZIP upload limit/);
 });
 
 test('getGitHubConfigStatus reports Vercel external BLOB_READ_WRITE_TOKEN and RESEND_API_KEY flags without leaking secrets', async () => {
@@ -1843,6 +1843,168 @@ test('api/update-portfolio accepts external VITE_GITHUB_TOKEN server-side and ca
     else process.env.VITE_GITHUB_TOKEN = prevViteToken;
   }
 });
+
+test('api/update-portfolio finalizes >45 MB (up to 250 MB) video via GitHub manifest without concatenating full buffer and streams cross-chunk HTTP 206 ranges', async () => {
+  const { handleUpdatePortfolioRequest } = await import('../../api/update-portfolio');
+
+  const prevFetch = globalThis.fetch;
+  const prevToken = process.env.GITHUB_TOKEN;
+  const prevOwner = process.env.GITHUB_OWNER;
+  const prevRepo = process.env.GITHUB_REPO;
+
+  try {
+    process.env.GITHUB_TOKEN = 'ghp_manifest_test';
+    process.env.GITHUB_OWNER = 'Adhavanadhi7819';
+    process.env.GITHUB_REPO = 'Portfolio-Website';
+
+    const shaA = 'a'.repeat(40);
+    const shaB = 'b'.repeat(40);
+    const manifestSha = 'c'.repeat(40);
+    const chunkA = Buffer.from('FIRST_CHUNK_BYTES_');
+    const chunkB = Buffer.from('SECOND_CHUNK_BYTES');
+    const fakeTotalSize = 180 * 1024 * 1024;
+    let storedManifestJson = '';
+    const fetchedBlobShas: string[] = [];
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/git/blobs') && method === 'POST') {
+        const bodyObj = JSON.parse(String(init?.body || '{}')) as { content?: string };
+        storedManifestJson = Buffer.from(String(bodyObj.content || ''), 'base64').toString('utf8');
+        return new Response(JSON.stringify({ sha: manifestSha }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('.manifest.json') && method === 'GET') {
+        return new Response(
+          storedManifestJson
+            ? JSON.stringify({ content: Buffer.from(storedManifestJson).toString('base64') })
+            : JSON.stringify({ message: 'Not Found' }),
+          {
+            status: storedManifestJson ? 200 : 404,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      if (url.includes('/contents/public/uploaded-assets/') && method === 'GET') {
+        return new Response(JSON.stringify({ message: 'Not Found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.endsWith(`/git/blobs/${shaA}`) && method === 'GET') {
+        fetchedBlobShas.push(shaA);
+        return new Response(JSON.stringify({ content: chunkA.toString('base64') }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.endsWith(`/git/blobs/${shaB}`) && method === 'GET') {
+        fetchedBlobShas.push(shaB);
+        return new Response(JSON.stringify({ content: chunkB.toString('base64') }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('/git/ref/heads/main') && method === 'GET') {
+        return new Response(JSON.stringify({ object: { sha: '1'.repeat(40) } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('/git/commits/') && method === 'GET') {
+        return new Response(JSON.stringify({ tree: { sha: '2'.repeat(40) } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('/git/trees') && method === 'POST') {
+        return new Response(JSON.stringify({ sha: '3'.repeat(40) }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('/git/commits') && method === 'POST') {
+        return new Response(JSON.stringify({ sha: '4'.repeat(40) }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.includes('/git/refs/heads/main') && method === 'PATCH') {
+        return new Response(JSON.stringify({ ref: 'refs/heads/main' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify({ message: 'Not Found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as typeof fetch;
+
+    const finalizeReq = createMockNodeReq({
+      method: 'POST',
+      url: '/api/update-portfolio',
+      body: {
+        action: 'finalize-asset-chunks',
+        chunkShas: [shaA, shaB],
+        chunkMeta: [
+          { sha: shaA, start: 0, end: chunkA.length - 1, size: chunkA.length },
+          {
+            sha: shaB,
+            start: chunkA.length,
+            end: fakeTotalSize - 1,
+            size: fakeTotalSize - chunkA.length
+          }
+        ],
+        totalSize: fakeTotalSize,
+        filename: 'big-unreal-reel.mp4',
+        mimeType: 'video/mp4'
+      }
+    });
+    const finalizeRes = createMockServerRes();
+    await handleUpdatePortfolioRequest(finalizeReq as never, finalizeRes.res as never, {
+      runtime: 'vercel',
+      isTrustedOwner: true
+    });
+
+    assert.equal(finalizeRes.res.statusCode, 201);
+    const json = finalizeRes.getJson();
+    assert.equal(json.ok, true);
+    assert.equal(json.size, fakeTotalSize);
+    assert.match(String(json.url), /^\/api\/assets\/[a-f0-9]{32}\.mp4$/);
+    // Ensure finalize-asset-chunks did NOT download chunkA/chunkB blobs to concatenate them
+    assert.equal(fetchedBlobShas.length, 0);
+
+    // Stream byte range spanning end of chunkA into start of chunkB
+    const fileId = String(json.url).replace('/api/assets/', '');
+    const rangeReq = createMockNodeReq({
+      method: 'GET',
+      url: `/api/update-portfolio?action=asset&file=${encodeURIComponent(fileId)}`,
+      headers: { range: `bytes=${chunkA.length - 6}-${chunkA.length + 5}` }
+    });
+    const rangeRes = createMockServerRes();
+    await handleUpdatePortfolioRequest(rangeReq as never, rangeRes.res as never, {
+      runtime: 'vercel'
+    });
+
+    assert.equal(rangeRes.res.statusCode, 206);
+    assert.equal(rangeRes.getBodyBuffer().toString('utf8'), 'BYTES_SECOND');
+    assert.deepEqual(fetchedBlobShas, [shaA, shaB]);
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = prevToken;
+    if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+    else process.env.GITHUB_OWNER = prevOwner;
+    if (prevRepo === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = prevRepo;
+  }
+});
+
 
 
 

@@ -387,7 +387,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                       Upload Recorded Gameplay Video
                     </h3>
                     <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-justify [text-align-last:center] hyphens-auto">
-                      Drag &amp; drop or choose your recorded gameplay build video (MP4, WebM, MOV, or ZIP up to 100 MB)
+                      Drag &amp; drop or choose your recorded gameplay build video (MP4, WebM, MOV, or ZIP up to 200 MB)
                       to showcase directly here.
                     </p>
                   </div>

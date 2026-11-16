@@ -860,7 +860,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
                 )}
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Upload an MP4/WebM/MOV video or a ZIP archive up to 100 MB, or paste any hosted MP4 URL.
+                  Upload an MP4/WebM/MOV video or a ZIP archive up to 200 MB, or paste any hosted MP4 URL.
                 </p>
               </div>
 

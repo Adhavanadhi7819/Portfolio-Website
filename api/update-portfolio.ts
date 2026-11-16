@@ -935,6 +935,149 @@ async function commitGitHubAssetFileViaGitData(params: {
   return { uploaded: true, path: repoPath };
 }
 
+export interface GitHubAssetChunkEntry {
+  sha: string;
+  start: number;
+  end: number;
+  size: number;
+}
+
+export interface GitHubAssetManifest {
+  version: 1;
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  chunks: GitHubAssetChunkEntry[];
+}
+
+async function commitGitHubAssetManifestViaGitData(params: {
+  manifest: GitHubAssetManifest;
+  commitMessage?: string;
+}): Promise<{ uploaded: boolean; path: string }> {
+  const { token, owner, repo, branch } = readServerEnv();
+  const manifestPath = `public/uploaded-assets/${params.manifest.fileId}.manifest.json`;
+  if (!token || !owner || !repo) {
+    throw new Error('GitHub sync is not configured (missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO).');
+  }
+
+  const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/contents/${manifestPath}`;
+  const checkRes = await fetch(`${contentsUrl}?ref=${encodeURIComponent(branch)}&_t=${Date.now()}`, {
+    method: 'GET',
+    headers: buildGitHubNoCacheHeaders(token),
+    cache: 'no-store'
+  });
+  if (checkRes.ok) {
+    return { uploaded: false, path: manifestPath };
+  }
+
+  const manifestBlobSha = await createGitHubBlob(
+    Buffer.from(JSON.stringify(params.manifest), 'utf8').toString('base64')
+  );
+
+  // Reference every unique chunk blob SHA in the tree so Git preserves all chunks permanently
+  const uniqueChunkShas = new Set<string>();
+  const treeEntries: Array<{ path: string; mode: '100644'; type: 'blob'; sha: string }> = [
+    {
+      path: manifestPath,
+      mode: '100644',
+      type: 'blob',
+      sha: manifestBlobSha
+    }
+  ];
+  for (const chunk of params.manifest.chunks) {
+    if (uniqueChunkShas.has(chunk.sha)) continue;
+    uniqueChunkShas.add(chunk.sha);
+    treeEntries.push({
+      path: `public/uploaded-assets/.chunks/${chunk.sha}`,
+      mode: '100644',
+      type: 'blob',
+      sha: chunk.sha
+    });
+  }
+
+  const baseApi = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const refUrl = `${baseApi}/git/ref/heads/${encodeURIComponent(branch)}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const refRes = await fetch(`${refUrl}?_t=${Date.now()}`, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    const refJson = (await refRes.json().catch(() => ({}))) as {
+      object?: { sha?: string };
+      message?: string;
+    };
+    const headSha = refJson.object?.sha;
+    if (!refRes.ok || !headSha) {
+      throw new Error(refJson.message || `Failed locating branch ${branch}`);
+    }
+
+    const commitRes = await fetch(`${baseApi}/git/commits/${headSha}`, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    const commitJson = (await commitRes.json().catch(() => ({}))) as {
+      tree?: { sha?: string };
+      message?: string;
+    };
+    const baseTreeSha = commitJson.tree?.sha;
+    if (!commitRes.ok || !baseTreeSha) {
+      throw new Error(commitJson.message || 'Failed reading base Git tree');
+    }
+
+    const treeRes = await fetch(`${baseApi}/git/trees`, {
+      method: 'POST',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: treeEntries
+      })
+    });
+    const treeJson = (await treeRes.json().catch(() => ({}))) as { sha?: string; message?: string };
+    if (!treeRes.ok || !treeJson.sha) {
+      throw new Error(treeJson.message || 'Failed creating Git tree for chunked asset manifest');
+    }
+
+    const newCommitRes = await fetch(`${baseApi}/git/commits`, {
+      method: 'POST',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: params.commitMessage || `chore(assets): upload ${params.manifest.fileId}`,
+        tree: treeJson.sha,
+        parents: [headSha]
+      })
+    });
+    const newCommitJson = (await newCommitRes.json().catch(() => ({}))) as {
+      sha?: string;
+      message?: string;
+    };
+    if (!newCommitRes.ok || !newCommitJson.sha) {
+      throw new Error(newCommitJson.message || 'Failed creating Git commit for chunked asset manifest');
+    }
+
+    const updateRefRes = await fetch(`${baseApi}/git/refs/heads/${encodeURIComponent(branch)}`, {
+      method: 'PATCH',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sha: newCommitJson.sha, force: false })
+    });
+    if (updateRefRes.ok) {
+      return { uploaded: true, path: manifestPath };
+    }
+    if ((updateRefRes.status === 422 || updateRefRes.status === 409) && attempt === 0) {
+      continue;
+    }
+    const errJson = (await updateRefRes.json().catch(() => ({}))) as { message?: string };
+    throw new Error(errJson.message || `Failed updating branch ref (HTTP ${updateRefRes.status})`);
+  }
+
+  return { uploaded: true, path: manifestPath };
+}
+
 export function extractReferencedAssetIds(value: unknown, out = new Set<string>()): Set<string> {
   if (typeof value === 'string') {
     const match = /^\/(?:api\/assets|uploaded-assets)\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(
@@ -1049,6 +1192,177 @@ async function fetchGitHubAssetBuffer(fileId: string): Promise<Buffer | null> {
   } catch {}
 
   return null;
+}
+
+async function fetchGitHubAssetManifest(fileId: string): Promise<GitHubAssetManifest | null> {
+  const { token, owner, repo, branch } = readServerEnv();
+  if (!owner || !repo) return null;
+
+  const repoPath = `public/uploaded-assets/${fileId}.manifest.json`;
+  const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/contents/${repoPath}?ref=${encodeURIComponent(branch)}&_t=${Date.now()}`;
+
+  const parseManifest = (text: string): GitHubAssetManifest | null => {
+    try {
+      const parsed = JSON.parse(text) as Partial<GitHubAssetManifest>;
+      if (
+        parsed &&
+        parsed.version === 1 &&
+        Array.isArray(parsed.chunks) &&
+        typeof parsed.size === 'number' &&
+        parsed.size > 0
+      ) {
+        return parsed as GitHubAssetManifest;
+      }
+    } catch {}
+    return null;
+  };
+
+  try {
+    const res = await fetch(contentsUrl, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { sha?: string; content?: string };
+      if (typeof json.content === 'string' && json.content.trim()) {
+        return parseManifest(Buffer.from(json.content.replace(/\n/g, ''), 'base64').toString('utf8'));
+      }
+      if (json.sha) {
+        const buf = await fetchGitHubBlobBuffer(json.sha).catch(() => null);
+        if (buf) return parseManifest(buf.toString('utf8'));
+      }
+    }
+  } catch {}
+
+  try {
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(
+      owner
+    )}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${repoPath}?_t=${Date.now()}`;
+    const rawRes = await fetch(rawUrl, {
+      method: 'GET',
+      headers: { 'Cache-Control': 'no-cache, no-store' },
+      cache: 'no-store'
+    });
+    if (rawRes.ok) {
+      return parseManifest(await rawRes.text());
+    }
+  } catch {}
+
+  return null;
+}
+
+export async function serveGitHubAssetRequest(
+  req: NodeReq,
+  res: ServerResponse,
+  fileId: string,
+  runtimeMode: 'express' | 'vercel' | 'node' = process.env.VERCEL ? 'vercel' : 'node'
+): Promise<boolean> {
+  if (!/^[a-f0-9]{16,64}\.[a-z0-9]{1,8}$/i.test(fileId) || fileId.endsWith('.json')) {
+    return false;
+  }
+
+  const VERCEL_MAX_RANGE_CHUNK_BYTES = 3 * 1024 * 1024;
+  const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : '';
+  const ext = path.extname(fileId).toLowerCase();
+  const defaultMime = ASSET_EXT_TO_MIME[ext] || 'application/octet-stream';
+
+  const assetBuffer = await fetchGitHubAssetBuffer(fileId);
+  if (assetBuffer) {
+    const totalLength = assetBuffer.length;
+    res.setHeader('Content-Type', defaultMime);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+      if (match) {
+        const start = match[1] ? Number(match[1]) : 0;
+        const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+        const end =
+          runtimeMode === 'vercel'
+            ? Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1)
+            : requestedEnd;
+        if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end && end < totalLength) {
+          const slice = assetBuffer.subarray(start, end + 1);
+          res.statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
+          res.setHeader('Content-Length', String(slice.length));
+          res.end(slice);
+          return true;
+        }
+      }
+    }
+
+    if (runtimeMode === 'vercel' && totalLength > VERCEL_MAX_RANGE_CHUNK_BYTES) {
+      const end = VERCEL_MAX_RANGE_CHUNK_BYTES - 1;
+      const slice = assetBuffer.subarray(0, end + 1);
+      res.statusCode = 206;
+      res.setHeader('Content-Range', `bytes 0-${end}/${totalLength}`);
+      res.setHeader('Content-Length', String(slice.length));
+      res.end(slice);
+      return true;
+    }
+
+    res.statusCode = 200;
+    res.setHeader('Content-Length', String(totalLength));
+    res.end(assetBuffer);
+    return true;
+  }
+
+  const manifest = await fetchGitHubAssetManifest(fileId);
+  if (!manifest) return false;
+
+  const totalLength = manifest.size;
+  const mimeType = manifest.mimeType || defaultMime;
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+  let start = 0;
+  let end = Math.min(totalLength - 1, VERCEL_MAX_RANGE_CHUNK_BYTES - 1);
+
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+    if (match) {
+      start = match[1] ? Number(match[1]) : 0;
+      const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+      end = Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1);
+    }
+  }
+
+  if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= totalLength) {
+    res.statusCode = 416;
+    res.setHeader('Content-Range', `bytes */${totalLength}`);
+    res.end();
+    return true;
+  }
+
+  const overlappingChunks = manifest.chunks.filter((c) => c.end >= start && c.start <= end);
+  if (overlappingChunks.length === 0) return false;
+
+  const chunkBuffers = await Promise.all(overlappingChunks.map((c) => fetchGitHubBlobBuffer(c.sha)));
+  const slices: Buffer[] = [];
+  for (let i = 0; i < overlappingChunks.length; i++) {
+    const chunk = overlappingChunks[i];
+    const buf = chunkBuffers[i];
+    const sliceStart = Math.max(0, start - chunk.start);
+    const sliceEndExclusive = Math.min(buf.length, end - chunk.start + 1);
+    if (sliceEndExclusive > sliceStart) {
+      slices.push(buf.subarray(sliceStart, sliceEndExclusive));
+    }
+  }
+
+  const output = Buffer.concat(slices);
+  res.statusCode = 206;
+  res.setHeader('Content-Range', `bytes ${start}-${start + output.length - 1}/${totalLength}`);
+  res.setHeader('Content-Length', String(output.length));
+  res.end(output);
+  return true;
 }
 
 export function isRemoteNewerThanLocal(
@@ -1403,62 +1717,11 @@ export async function handleUpdatePortfolioRequest(
     const action = getQueryParam(req, 'action');
     if (action === 'asset') {
       const fileId = getQueryParam(req, 'file');
-      if (!/^[a-f0-9]{16,64}\.[a-z0-9]{1,8}$/i.test(fileId) || fileId.endsWith('.json')) {
+      const served = await serveGitHubAssetRequest(req, res, fileId, runtimeMode);
+      if (!served) {
         res.statusCode = 404;
         res.end();
-        return;
       }
-      const assetBuffer = await fetchGitHubAssetBuffer(fileId);
-      if (!assetBuffer) {
-        res.statusCode = 404;
-        res.end();
-        return;
-      }
-      const ext = path.extname(fileId).toLowerCase();
-      const mimeType = ASSET_EXT_TO_MIME[ext] || 'application/octet-stream';
-      const totalLength = assetBuffer.length;
-      const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : '';
-
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-      const VERCEL_MAX_RANGE_CHUNK_BYTES = 3 * 1024 * 1024; // Stay under Vercel's 4.5 MB response payload cap
-
-      if (rangeHeader) {
-        const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-        if (match) {
-          const start = match[1] ? Number(match[1]) : 0;
-          const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
-          const end =
-            runtimeMode === 'vercel'
-              ? Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1)
-              : requestedEnd;
-          if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end && end < totalLength) {
-            const slice = assetBuffer.subarray(start, end + 1);
-            res.statusCode = 206;
-            res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
-            res.setHeader('Content-Length', String(slice.length));
-            res.end(slice);
-            return;
-          }
-        }
-      }
-
-      if (runtimeMode === 'vercel' && totalLength > VERCEL_MAX_RANGE_CHUNK_BYTES) {
-        const end = VERCEL_MAX_RANGE_CHUNK_BYTES - 1;
-        const slice = assetBuffer.subarray(0, end + 1);
-        res.statusCode = 206;
-        res.setHeader('Content-Range', `bytes 0-${end}/${totalLength}`);
-        res.setHeader('Content-Length', String(slice.length));
-        res.end(slice);
-        return;
-      }
-
-      res.statusCode = 200;
-      res.setHeader('Content-Length', String(totalLength));
-      res.end(assetBuffer);
       return;
     }
 
@@ -2145,6 +2408,8 @@ export async function handleUpdatePortfolioRequest(
         ? body.mimeType.trim()
         : 'application/octet-stream';
     const extractVideo = Boolean(body.extractVideo);
+    const totalSize = typeof body.totalSize === 'number' ? body.totalSize : 0;
+    const rawChunkMeta = Array.isArray(body.chunkMeta) ? body.chunkMeta : [];
 
     if (chunkShas.length === 0 || chunkShas.length !== rawShas.length) {
       sendJson(res, 400, { ok: false, error: 'Invalid chunk SHA list.' });
@@ -2152,6 +2417,56 @@ export async function handleUpdatePortfolioRequest(
     }
 
     try {
+      const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+      const validChunkMeta: GitHubAssetChunkEntry[] = rawChunkMeta.filter(
+        (c): c is GitHubAssetChunkEntry =>
+          Boolean(c) &&
+          typeof (c as GitHubAssetChunkEntry).sha === 'string' &&
+          /^[a-f0-9]{40}$/i.test((c as GitHubAssetChunkEntry).sha) &&
+          typeof (c as GitHubAssetChunkEntry).start === 'number' &&
+          typeof (c as GitHubAssetChunkEntry).end === 'number' &&
+          typeof (c as GitHubAssetChunkEntry).size === 'number'
+      );
+
+      // Zero-concat GitHub Manifest path for large videos (> 45 MB up to 250 MB) without hitting GitHub's single-file limit
+      const SINGLE_BLOB_DIRECT_LIMIT = 45 * 1024 * 1024;
+      if (
+        !blobToken &&
+        !extractVideo &&
+        totalSize > SINGLE_BLOB_DIRECT_LIMIT &&
+        totalSize <= 250 * 1024 * 1024 &&
+        validChunkMeta.length === chunkShas.length
+      ) {
+        const hashInput = validChunkMeta.map((c) => `${c.sha}:${c.size}`).join('|');
+        const hash = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 32);
+        const ext = resolveAssetExtension(rawMime, rawFilename);
+        const fileId = `${hash}${ext}`;
+
+        await commitGitHubAssetManifestViaGitData({
+          manifest: {
+            version: 1,
+            fileId,
+            filename: rawFilename || fileId,
+            mimeType: rawMime,
+            size: totalSize,
+            chunks: validChunkMeta
+          },
+          commitMessage: `chore(assets): add chunked ${rawFilename || fileId} (${(
+            totalSize /
+            (1024 * 1024)
+          ).toFixed(1)} MB) via Owner Mode`
+        });
+
+        sendJson(res, 201, {
+          ok: true,
+          url: `/api/assets/${fileId}`,
+          filename: rawFilename || fileId,
+          size: totalSize,
+          mimeType: rawMime
+        });
+        return;
+      }
+
       const buffers: Buffer[] = new Array(chunkShas.length);
       const CONCURRENCY = 6;
       for (let i = 0; i < chunkShas.length; i += CONCURRENCY) {
@@ -2175,7 +2490,7 @@ export async function handleUpdatePortfolioRequest(
         if (finalBuffer.length > MAX_VIDEO_ZIP_BYTES) {
           sendJson(res, 400, {
             ok: false,
-            error: `ZIP archive (${(finalBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+            error: `ZIP archive (${(finalBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 200 MB ZIP upload limit.`
           });
           return;
         }
@@ -2201,7 +2516,6 @@ export async function handleUpdatePortfolioRequest(
       const ext = resolveAssetExtension(finalMime, finalFilename);
       const fileId = `${hash}${ext}`;
 
-      const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
       if (blobToken) {
         const blobResult = await put(`uploaded-assets/${fileId}`, finalBuffer, {
           access: 'public',

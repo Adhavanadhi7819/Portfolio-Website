@@ -772,7 +772,7 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                      <span>Video URL / Upload (MP4/ZIP ≤100MB)</span>
+                      <span>Video URL / Upload (MP4/ZIP ≤200MB)</span>
                       <button
                         type="button"
                         onClick={() => videoUploadRef.current?.click()}

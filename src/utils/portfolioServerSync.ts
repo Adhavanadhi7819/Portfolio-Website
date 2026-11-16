@@ -1228,22 +1228,25 @@ export async function uploadAssetToServer(
     };
   }
 
-  // 3. Stateless 2 MB Chunked Vercel Serverless Upload -> GitHub Git Blobs -> Atomic Commit
-  const VERCEL_MAX_GITHUB_FILE_BYTES = 98 * 1024 * 1024;
-  if (targetBlob.size > VERCEL_MAX_GITHUB_FILE_BYTES) {
+  // 3. Stateless 2 MB Chunked Vercel Serverless Upload -> GitHub Git Blobs -> Atomic Commit / Manifest
+  const VERCEL_MAX_CHUNKED_FILE_BYTES = 250 * 1024 * 1024;
+  if (targetBlob.size > VERCEL_MAX_CHUNKED_FILE_BYTES) {
     throw new Error(
-      `Video (${(targetBlob.size / (1024 * 1024)).toFixed(1)} MB) exceeds GitHub's 98 MB single-file limit. Compress below 98 MB or paste an external video URL.`
+      `Extracted video (${(targetBlob.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 250 MB server limit. Compress the video or paste an external video URL.`
     );
   }
 
   const VERCEL_CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB -> ~2.67 MB base64 JSON, always under Vercel's 4.5 MB limit
   const totalChunks = Math.ceil(targetBlob.size / VERCEL_CHUNK_BYTES);
-  const chunkShas: string[] = [];
+  const chunkShas: string[] = new Array(totalChunks);
+  const chunkMeta: Array<{ sha: string; start: number; end: number; size: number }> = new Array(totalChunks);
+  let completedChunks = 0;
 
-  for (let i = 0; i < totalChunks; i++) {
+  const uploadSingleChunk = async (i: number) => {
     const start = i * VERCEL_CHUNK_BYTES;
-    const end = Math.min(targetBlob.size, start + VERCEL_CHUNK_BYTES);
-    const chunkBase64 = await blobToBase64(targetBlob.slice(start, end));
+    const endExclusive = Math.min(targetBlob.size, start + VERCEL_CHUNK_BYTES);
+    const slice = targetBlob.slice(start, endExclusive);
+    const chunkBase64 = await blobToBase64(slice);
 
     const chunkRes = await fetch('/api/update-portfolio', {
       method: 'POST',
@@ -1273,8 +1276,24 @@ export async function uploadAssetToServer(
       throw new Error(chunkData.error || `Failed uploading chunk ${i + 1}/${totalChunks}`);
     }
 
-    chunkShas.push(chunkData.sha);
-    onProgress?.(20 + Math.round(((i + 1) / totalChunks) * 70));
+    chunkShas[i] = chunkData.sha;
+    chunkMeta[i] = {
+      sha: chunkData.sha,
+      start,
+      end: endExclusive - 1,
+      size: slice.size
+    };
+    completedChunks += 1;
+    onProgress?.(20 + Math.round((completedChunks / totalChunks) * 70));
+  };
+
+  const CONCURRENCY = 3;
+  for (let i = 0; i < totalChunks; i += CONCURRENCY) {
+    const batchIndices: number[] = [];
+    for (let j = i; j < Math.min(totalChunks, i + CONCURRENCY); j++) {
+      batchIndices.push(j);
+    }
+    await Promise.all(batchIndices.map((idx) => uploadSingleChunk(idx)));
   }
 
   const finalRes = await fetch('/api/update-portfolio', {
@@ -1284,6 +1303,8 @@ export async function uploadAssetToServer(
     body: JSON.stringify({
       action: 'finalize-asset-chunks',
       chunkShas,
+      chunkMeta,
+      totalSize: targetBlob.size,
       filename: targetFilename,
       mimeType: targetMime
     })

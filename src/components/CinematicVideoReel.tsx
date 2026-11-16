@@ -448,7 +448,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               {/* Owner-Only Video Upload Option */}
               <label 
                 className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                title="Upload your video (MP4/WebM/MOV) or a .zip archive up to 100 MB"
+                title="Upload your video (MP4/WebM/MOV) or a .zip archive up to 200 MB"
               >
                 <Upload className="w-3.5 h-3.5 text-amber-400" />
                 <span>

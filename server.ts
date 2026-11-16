@@ -16,7 +16,8 @@ import {
   isRemoteNewerThanLocal,
   ensureGitHubAssetsSynced,
   resolveCanonicalPairingStatus,
-  syncAuthenticatorPairedState
+  syncAuthenticatorPairedState,
+  serveGitHubAssetRequest
 } from './api/update-portfolio';
 import { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } from './api/zipVideo';
 
@@ -1480,7 +1481,7 @@ async function startServer(): Promise<void> {
             } catch {}
             res.status(400).json({
               ok: false,
-              error: `ZIP archive (${(currentSize / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+              error: `ZIP archive (${(currentSize / (1024 * 1024)).toFixed(1)} MB) exceeds the 200 MB ZIP upload limit.`
             });
             return;
           }
@@ -1564,7 +1565,7 @@ async function startServer(): Promise<void> {
         if (bodyBuffer.length > MAX_VIDEO_ZIP_BYTES) {
           res.status(400).json({
             ok: false,
-            error: `ZIP archive (${(bodyBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+            error: `ZIP archive (${(bodyBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 200 MB ZIP upload limit.`
           });
           return;
         }
@@ -1630,32 +1631,16 @@ async function startServer(): Promise<void> {
       : null;
 
     if (!assetPath) {
-      // Fallback: serve asset directly from GitHub public/uploaded-assets/<fileId> if uploaded from Vercel
-      const ghStatus = getGitHubConfigStatus();
-      if (ghStatus.canPullFromGitHub && ghStatus.owner && ghStatus.repo) {
-        const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(
-          ghStatus.owner
-        )}/${encodeURIComponent(ghStatus.repo)}/${encodeURIComponent(
-          ghStatus.branch || 'main'
-        )}/public/uploaded-assets/${encodeURIComponent(fileId)}`;
-        fetch(rawUrl, { cache: 'no-store' })
-          .then(async (ghRes) => {
-            if (!ghRes.ok) {
-              res.status(404).end();
-              return;
-            }
-            const buf = Buffer.from(await ghRes.arrayBuffer());
-            const ext = path.extname(fileId).toLowerCase();
-            const mimeType = EXT_TO_MIME[ext] || 'application/octet-stream';
-            saveBufferAsAsset(buf, mimeType, fileId);
-            res.setHeader('Content-Type', mimeType);
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-            res.end(buf);
-          })
-          .catch(() => res.status(404).end());
-        return;
-      }
-      res.status(404).end();
+      // Fallback: serve single-file or chunked-manifest asset directly from GitHub
+      void serveGitHubAssetRequest(req, res, fileId, 'express')
+        .then((served) => {
+          if (!served && !res.headersSent) {
+            res.status(404).end();
+          }
+        })
+        .catch(() => {
+          if (!res.headersSent) res.status(404).end();
+        });
       return;
     }
 
