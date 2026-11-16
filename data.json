@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 46,
-  "updatedAt": "2026-11-16T16:42:16.447Z",
+  "version": 47,
+  "updatedAt": "2026-11-16T16:42:18.352Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-16T16:42:13.900Z",
+      "updatedAt": "2026-11-16T16:42:16.490Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -431,16 +431,6 @@
         },
         "videoPath": "/api/assets/556c15bc4e7f5507f53ebf54d56cd07e.mp4",
         "videoChapters": [
-          {
-            "id": "pirate-haven",
-            "title": "Tavern Island & Pirate Galleon",
-            "subtitle": "Maritime Outpost & Vessel Rig",
-            "startTime": 33,
-            "endTime": 64,
-            "thumbnail": "/showcase/pirate-ship.jpg",
-            "category": "environment",
-            "description": "Multi-tiered wooden cliffside tavern fortress, blue ocean physics, shipwreck cove, and full 18th-century pirate galleon ship sailing on open sea."
-          },
           {
             "id": "ae86-speedrun",
             "title": "Car Speedrun & Rigging (AE86)",
