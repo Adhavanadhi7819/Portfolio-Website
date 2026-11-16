@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 47,
-  "updatedAt": "2026-11-16T16:42:18.352Z",
+  "version": 48,
+  "updatedAt": "2026-11-16T16:42:22.311Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-16T16:42:16.490Z",
+      "updatedAt": "2026-11-16T16:42:21.870Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -430,18 +430,7 @@
           }
         },
         "videoPath": "/api/assets/556c15bc4e7f5507f53ebf54d56cd07e.mp4",
-        "videoChapters": [
-          {
-            "id": "ae86-speedrun",
-            "title": "Car Speedrun & Rigging (AE86)",
-            "subtitle": "Urban Drift & Dynamic Sequencer",
-            "startTime": 65,
-            "endTime": 120,
-            "thumbnail": "/showcase/ae86-drift.jpg",
-            "category": "vehicle-rigging",
-            "description": "Initial D style Toyota AE86 Trueno drifting through city streets with speed line camera shakes, tire physics, and dynamic chase sequence."
-          }
-        ],
+        "videoChapters": [],
         "projects": [
           {
             "id": "stylized-pirate-rpg",
