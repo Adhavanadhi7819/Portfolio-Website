@@ -17,9 +17,12 @@ import {
   ensureGitHubAssetsSynced,
   resolveCanonicalPairingStatus,
   syncAuthenticatorPairedState,
-  serveGitHubAssetRequest
+  serveGitHubAssetRequest,
+  extractLargestVideoFromZip,
+  MAX_VIDEO_ZIP_BYTES,
+  resolveAssetExtension,
+  resolveCanonicalAssetMime
 } from './api/update-portfolio';
-import { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } from './api/zipVideo';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -387,24 +390,6 @@ function isPreviewRequest(req: Request): boolean {
 }
 
 // --- Media / Asset Storage & Data-URL Dehydration ---
-const MIME_TO_EXT: Record<string, string> = {
-  'application/pdf': '.pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-  'application/msword': '.doc',
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/jpg': '.jpg',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-  'image/svg+xml': '.svg',
-  'video/mp4': '.mp4',
-  'video/webm': '.webm',
-  'video/quicktime': '.mov',
-  'model/gltf-binary': '.glb',
-  'model/gltf+json': '.gltf',
-  'application/octet-stream': '.bin'
-};
-
 const EXT_TO_MIME: Record<string, string> = {
   '.pdf': 'application/pdf',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -416,25 +401,19 @@ const EXT_TO_MIME: Record<string, string> = {
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
   '.webm': 'video/webm',
   '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.ogv': 'video/ogg',
+  '.avi': 'video/x-msvideo',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.bin': 'application/octet-stream'
 };
 
 function sanitizeExtension(mimeType: string, originalFilename?: string): string {
-  const normalizedMime = (mimeType || '').split(';')[0].trim().toLowerCase();
-  if (MIME_TO_EXT[normalizedMime]) {
-    return MIME_TO_EXT[normalizedMime];
-  }
-  if (originalFilename) {
-    const ext = path.extname(originalFilename).toLowerCase();
-    if (/^\.[a-z0-9]{1,8}$/.test(ext) && ext !== '.json') {
-      return ext;
-    }
-  }
-  return '.bin';
+  return resolveAssetExtension(mimeType, originalFilename);
 }
 
 function saveBufferAsAsset(
@@ -447,9 +426,7 @@ function saveBufferAsAsset(
   const fileId = `${hash}${ext}`;
   const assetPath = path.join(ASSETS_DIR, fileId);
   const metaPath = path.join(ASSETS_DIR, `${fileId}.json`);
-  const cleanMime = (mimeType || EXT_TO_MIME[ext] || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const cleanMime = resolveCanonicalAssetMime(mimeType, ext);
   const safeName = (originalFilename || `asset${ext}`).replace(/["\r\n/\\]/g, '_');
 
   if (!fs.existsSync(assetPath)) {
@@ -491,9 +468,7 @@ async function finalizeStreamedAssetFile(
   const fileId = `${hash}${ext}`;
   const assetPath = path.join(ASSETS_DIR, fileId);
   const metaPath = path.join(ASSETS_DIR, `${fileId}.json`);
-  const cleanMime = (mimeType || EXT_TO_MIME[ext] || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const cleanMime = resolveCanonicalAssetMime(mimeType, ext);
   const safeName = (originalFilename || `asset${ext}`).replace(/["\r\n/\\]/g, '_');
 
   if (!fs.existsSync(assetPath)) {
@@ -596,8 +571,17 @@ function rewriteAssetsForStaticDeploy(
       if (existingShowcaseUrl) {
         return existingShowcaseUrl;
       }
-      referencedFiles.add(fileId);
-      return `/uploaded-assets/${fileId}`;
+      const srcPath = resolveExistingAssetPath(fileId);
+      if (srcPath) {
+        try {
+          if (fs.statSync(srcPath).size <= 45 * 1024 * 1024) {
+            referencedFiles.add(fileId);
+            return `/uploaded-assets/${fileId}`;
+          }
+        } catch {}
+      }
+      // Keep /api/assets/:fileId for large (>45 MB) or remotely stored assets so range streaming works
+      return `/api/assets/${fileId}`;
     }
     return value;
   }
@@ -1615,7 +1599,7 @@ async function startServer(): Promise<void> {
     }
   );
 
-  app.get('/api/assets/:fileId', (req: Request, res: Response) => {
+  app.get(['/api/assets/:fileId', '/uploaded-assets/:fileId'], (req: Request, res: Response) => {
     const fileId = String(req.params.fileId || '');
     if (!/^[a-f0-9]{16,64}\.[a-z0-9]{1,8}$/i.test(fileId) || fileId.endsWith('.json')) {
       res.status(404).end();
@@ -1624,10 +1608,13 @@ async function startServer(): Promise<void> {
 
     const primaryAssetPath = path.join(ASSETS_DIR, fileId);
     const bundledAssetPath = path.join(BUNDLED_DATA_DIR, 'assets', fileId);
+    const publicUploadedAssetPath = path.join(STATIC_ASSETS_DIR, fileId);
     const assetPath = fs.existsSync(primaryAssetPath)
       ? primaryAssetPath
       : fs.existsSync(bundledAssetPath)
       ? bundledAssetPath
+      : fs.existsSync(publicUploadedAssetPath)
+      ? publicUploadedAssetPath
       : null;
 
     if (!assetPath) {
@@ -1655,21 +1642,98 @@ async function startServer(): Promise<void> {
     try {
       if (fs.existsSync(metaPath)) {
         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as Partial<AssetMeta>;
-        if (meta.mimeType) mimeType = meta.mimeType;
+        mimeType = resolveCanonicalAssetMime(meta.mimeType || '', ext);
         if (meta.originalFilename) originalFilename = meta.originalFilename;
       }
     } catch {}
 
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(assetPath);
+    } catch {
+      res.status(404).end();
+      return;
+    }
+
+    const totalLength = stat.size;
     const asciiFilename = originalFilename.replace(/[^a-zA-Z0-9._ -]/g, '_');
     const encodedFilename = encodeURIComponent(originalFilename);
 
     res.setHeader('Content-Type', mimeType);
+    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader(
       'Content-Disposition',
       `inline; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`
     );
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.sendFile(assetPath);
+    res.setHeader('Last-Modified', stat.mtime.toUTCString());
+
+    // Cap single HTTP response size at 4 MB so Cloud Run / reverse proxies never abort >32 MB video streams
+    const MAX_STREAM_CHUNK_BYTES = 4 * 1024 * 1024;
+    const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range.trim() : '';
+
+    const streamFileSlice = (start: number, end: number, isPartial: boolean) => {
+      const contentLength = end - start + 1;
+      res.status(isPartial ? 206 : 200);
+      if (isPartial) {
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
+      }
+      res.setHeader('Content-Length', String(contentLength));
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      if (totalLength === 0) {
+        res.end();
+        return;
+      }
+      const stream = fs.createReadStream(assetPath, { start, end });
+      stream.on('error', () => {
+        if (!res.headersSent) {
+          res.status(500).end();
+        } else {
+          res.destroy();
+        }
+      });
+      res.on('close', () => {
+        if (!stream.destroyed) stream.destroy();
+      });
+      stream.pipe(res);
+    };
+
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+      if (!match || (!match[1] && !match[2]) || totalLength === 0) {
+        res.status(416);
+        res.setHeader('Content-Range', `bytes */${totalLength}`);
+        res.end();
+        return;
+      }
+
+      let start: number;
+      let requestedEnd: number;
+      if (!match[1] && match[2]) {
+        const suffixLen = Number(match[2]);
+        start = Math.max(0, totalLength - suffixLen);
+        requestedEnd = totalLength - 1;
+      } else {
+        start = Number(match[1]);
+        requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+      }
+
+      if (Number.isNaN(start) || Number.isNaN(requestedEnd) || start < 0 || start >= totalLength || start > requestedEnd) {
+        res.status(416);
+        res.setHeader('Content-Range', `bytes */${totalLength}`);
+        res.end();
+        return;
+      }
+
+      const end = Math.min(requestedEnd, start + MAX_STREAM_CHUNK_BYTES - 1);
+      streamFileSlice(start, end, true);
+      return;
+    }
+
+    streamFileSlice(0, Math.max(0, totalLength - 1), false);
   });
 
   // --- Portfolio Canonical Read / Write / Live SSE Stream ---

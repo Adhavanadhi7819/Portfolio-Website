@@ -75,6 +75,7 @@ function syncPortfolioSnapshotOnBuild(): Plugin {
           }
         }
 
+        const MAX_STATIC_ASSET_BYTES = 45 * 1024 * 1024;
         const referencedFiles = new Set<string>();
         const rewrite = (val: unknown): unknown => {
           if (typeof val === 'string') {
@@ -83,8 +84,16 @@ function syncPortfolioSnapshotOnBuild(): Plugin {
               const fileId = m[1];
               const existing = showcaseIndex.get(fileId.split('.')[0]);
               if (existing) return existing;
-              referencedFiles.add(fileId);
-              return `/uploaded-assets/${fileId}`;
+              const src = path.join(dataAssetsDir, fileId);
+              if (fs.existsSync(src)) {
+                try {
+                  if (fs.statSync(src).size <= MAX_STATIC_ASSET_BYTES) {
+                    referencedFiles.add(fileId);
+                    return `/uploaded-assets/${fileId}`;
+                  }
+                } catch {}
+              }
+              return `/api/assets/${fileId}`;
             }
             return val;
           }
@@ -100,13 +109,19 @@ function syncPortfolioSnapshotOnBuild(): Plugin {
         };
 
         const staticPortfolios = rewrite(parsed.portfolios) as unknown[];
-        if (referencedFiles.size > 0) {
-          fs.mkdirSync(staticAssetsDir, { recursive: true });
-          for (const fileId of referencedFiles) {
-            const src = path.join(dataAssetsDir, fileId);
-            const dest = path.join(staticAssetsDir, fileId);
-            if (fs.existsSync(src)) {
-              fs.copyFileSync(src, dest);
+        fs.mkdirSync(staticAssetsDir, { recursive: true });
+        for (const fileId of referencedFiles) {
+          const src = path.join(dataAssetsDir, fileId);
+          const dest = path.join(staticAssetsDir, fileId);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dest);
+          }
+        }
+        for (const existingStatic of fs.readdirSync(staticAssetsDir)) {
+          if (!referencedFiles.has(existingStatic)) {
+            const stale = path.join(staticAssetsDir, existingStatic);
+            if (fs.statSync(stale).isFile()) {
+              fs.unlinkSync(stale);
             }
           }
         }

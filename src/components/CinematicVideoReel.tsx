@@ -41,8 +41,9 @@ interface CinematicVideoReelProps {
   onEditChapter?: (chapter: VideoChapter) => void;
   onSaveChapter?: (chapter: VideoChapter) => void;
   onDeleteChapter?: (chapterId: string) => void;
+  onClearAllChapters?: () => void;
   onEditReelSettings?: () => void;
-  onUploadVideo?: (newVideoPath: string) => void;
+  onUploadVideo?: (newVideoPath: string, options?: { clearChapterVideoUrls?: boolean }) => void;
   onUpdateDesignerInfo?: (updates: Partial<DesignerInfo>) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
@@ -66,6 +67,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   onEditChapter,
   onSaveChapter,
   onDeleteChapter,
+  onClearAllChapters,
   onEditReelSettings,
   onUploadVideo,
   onUpdateDesignerInfo,
@@ -87,77 +89,89 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(292.65);
+  const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.85);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [activeChapter, setActiveChapter] = useState<VideoChapter>(videoChapters[0] || VIDEO_CHAPTERS[0]);
+  const [activeChapter, setActiveChapter] = useState<VideoChapter | null>(videoChapters[0] ?? null);
   const [showControls, setShowControls] = useState(true);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [isNativePlaying, setIsNativePlaying] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [isUploadingReelVideo, setIsUploadingReelVideo] = useState(false);
   const [reelUploadProgress, setReelUploadProgress] = useState<number>(0);
   const [reelUploadError, setReelUploadError] = useState<string | null>(null);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [confirmClearChapters, setConfirmClearChapters] = useState(false);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
-  const activeVideoSrc = activeChapter.videoUrl || videoPath;
+  const pendingAutoPlaySrcRef = useRef<string | null>(null);
 
-  // Keep activeChapter synchronized with edits to videoChapters
+  const activeVideoSrc = activeChapter?.videoUrl || videoPath;
+  const showThumbnailFallback = !activeVideoSrc || hasVideoError;
+
+  // Keep activeChapter synchronized with edits or deletions in videoChapters
   useEffect(() => {
+    if (videoChapters.length === 0) {
+      if (activeChapter !== null) setActiveChapter(null);
+      return;
+    }
+    if (!activeChapter) {
+      setActiveChapter(videoChapters[0]);
+      return;
+    }
     const matched = videoChapters.find(c => c.id === activeChapter.id);
     if (matched && matched !== activeChapter) {
       setActiveChapter(matched);
-    } else if (!matched && videoChapters[0]) {
+    } else if (!matched) {
       setActiveChapter(videoChapters[0]);
     }
   }, [videoChapters, activeChapter]);
 
-  // Playback simulation timer when native video is not available or errored
+  // Playback simulation timer only when video stream is missing or errored
   useEffect(() => {
-    if (!isPlaying || isNativePlaying) return;
+    if (!isPlaying || !showThumbnailFallback) return;
+    const simDuration = duration > 0 ? duration : 292.65;
 
     const interval = setInterval(() => {
       setCurrentTime(prevTime => {
         const nextTime = prevTime + 0.1 * playbackSpeed;
-        if (nextTime >= duration) {
-          return 0; // loop smoothly from beginning
+        if (nextTime >= simDuration) {
+          return 0;
         }
         return nextTime;
       });
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPlaying, isNativePlaying, playbackSpeed, duration]);
+  }, [isPlaying, showThumbnailFallback, playbackSpeed, duration]);
 
   // Synchronize active chapter as currentTime advances (only for shared master showreel video)
   useEffect(() => {
-    if (activeChapter.videoUrl) return;
+    if (activeChapter?.videoUrl || videoChapters.length === 0) return;
     const ch = findCurrentChapter(currentTime, videoChapters);
-    if (ch && ch.id !== activeChapter.id) {
+    if (ch && ch.id !== activeChapter?.id) {
       setActiveChapter(ch);
     }
-  }, [currentTime, videoChapters, activeChapter.id, activeChapter.videoUrl]);
+  }, [currentTime, videoChapters, activeChapter?.id, activeChapter?.videoUrl]);
 
   const attemptPlay = async () => {
     setIsPlaying(true);
-    if (!videoRef.current || hasVideoError) {
-      setIsNativePlaying(false);
+    if (!videoRef.current || !activeVideoSrc) {
       return;
     }
     try {
       await videoRef.current.play();
-      setIsNativePlaying(true);
+      setHasVideoError(false);
     } catch {
       try {
         if (videoRef.current) {
           videoRef.current.muted = true;
           setIsMuted(true);
           await videoRef.current.play();
-          setIsNativePlaying(true);
+          setHasVideoError(false);
         }
       } catch {
-        setIsNativePlaying(false);
+        // Autoplay may be deferred until user gesture; keep native <video> visible with Play button
+        setIsPlaying(false);
       }
     }
   };
@@ -171,7 +185,10 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         setActiveChapter(ch);
         onChapterSelect?.(ch);
         if (needsSrcSwitch) {
+          const targetSrc = ch.videoUrl || videoPath;
           pendingSeekRef.current = ch.videoUrl ? 0 : seconds;
+          pendingAutoPlaySrcRef.current = targetSrc;
+          return;
         }
       }
       if (videoRef.current) {
@@ -179,14 +196,13 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           videoRef.current.currentTime = seconds;
         } catch {}
       }
-      attemptPlay();
+      void attemptPlay();
     },
     play: () => {
-      attemptPlay();
+      void attemptPlay();
     },
     pause: () => {
       setIsPlaying(false);
-      setIsNativePlaying(false);
       if (videoRef.current) {
         try {
           videoRef.current.pause();
@@ -198,30 +214,35 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     }
   }));
 
-  // Re-load video whenever activeVideoSrc changes
-  useEffect(() => {
-    setHasVideoError(false);
-    setIsNativePlaying(false);
-    setIsPlaying(false);
-    if (videoRef.current) {
-      try {
-        videoRef.current.load();
-      } catch {}
-    }
-  }, [activeVideoSrc]);
-
+  // Bind native HTML5 video lifecycle cleanly whenever activeVideoSrc changes (and video remounts via key)
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    setHasVideoError(false);
+    setIsBuffering(Boolean(activeVideoSrc));
+
+    const shouldAutoPlay = Boolean(activeVideoSrc && pendingAutoPlaySrcRef.current === activeVideoSrc);
+    if (!shouldAutoPlay) {
+      setIsPlaying(false);
+    }
+    if (pendingSeekRef.current === null) {
+      setCurrentTime(0);
+    }
+
+    if (!video || !activeVideoSrc) {
+      setIsBuffering(false);
+      return;
+    }
+
+    video.muted = isMuted;
+    video.volume = volume;
+    video.playbackRate = playbackSpeed;
 
     const handleTimeUpdate = () => {
-      if (isNativePlaying) {
-        setCurrentTime(video.currentTime);
-      }
+      setCurrentTime(video.currentTime);
     };
 
     const handleLoadedMetadata = () => {
-      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+      if (video.duration && Number.isFinite(video.duration) && video.duration > 0) {
         setDuration(video.duration);
       }
       if (pendingSeekRef.current !== null) {
@@ -233,65 +254,96 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         } catch {}
       }
       setHasVideoError(false);
+      setIsBuffering(false);
     };
 
     const handlePlay = () => {
       setIsPlaying(true);
-      setIsNativePlaying(true);
       setIsBuffering(false);
+      setHasVideoError(false);
     };
     const handlePause = () => {
-      if (isNativePlaying) setIsPlaying(false);
+      setIsPlaying(false);
     };
     const handleEnded = () => {
       setIsPlaying(false);
-      setIsNativePlaying(false);
     };
     const handleWaiting = () => {
-      if (isNativePlaying) setIsBuffering(true);
+      setIsBuffering(true);
     };
     const handleCanPlay = () => {
       setIsBuffering(false);
       setHasVideoError(false);
+      if (pendingAutoPlaySrcRef.current === activeVideoSrc) {
+        pendingAutoPlaySrcRef.current = null;
+        void attemptPlay();
+      }
     };
     const handleError = () => {
       setIsBuffering(false);
-      setIsNativePlaying(false);
+      setIsPlaying(false);
       setHasVideoError(true);
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
+    video.addEventListener('playing', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('error', handleError);
 
+    try {
+      video.load();
+      if (shouldAutoPlay) {
+        void attemptPlay().catch(() => {});
+      }
+    } catch {}
+
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
+      video.removeEventListener('playing', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
     };
-  }, [isNativePlaying]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVideoSrc]);
+
+  const applyUploadedMasterReel = (assetUrl: string) => {
+    pendingAutoPlaySrcRef.current = assetUrl;
+    pendingSeekRef.current = 0;
+    setCurrentTime(0);
+    setHasVideoError(false);
+    setActiveChapter((prev) => {
+      if (videoChapters.length === 0) return null;
+      const first = videoChapters[0];
+      if (!first) return prev;
+      if (first.videoUrl) {
+        const { videoUrl: _removed, ...rest } = first;
+        return rest;
+      }
+      return first;
+    });
+    onUploadVideo?.(assetUrl, { clearChapterVideoUrls: true });
+  };
 
   const togglePlay = () => {
     if (isPlaying) {
       setIsPlaying(false);
-      setIsNativePlaying(false);
       if (videoRef.current) {
         try {
           videoRef.current.pause();
         } catch {}
       }
     } else {
-      attemptPlay();
+      void attemptPlay();
     }
   };
 
@@ -332,24 +384,27 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   };
 
   const handleSelectChapter = (chapter: VideoChapter) => {
-    const needsSrcSwitch = (chapter.videoUrl || videoPath) !== activeVideoSrc;
+    const targetSrc = chapter.videoUrl || videoPath;
+    const needsSrcSwitch = targetSrc !== activeVideoSrc;
     setActiveChapter(chapter);
     const nextStart = chapter.videoUrl ? 0 : chapter.startTime;
     setCurrentTime(nextStart);
     onChapterSelect?.(chapter);
     if (needsSrcSwitch) {
       pendingSeekRef.current = nextStart;
+      pendingAutoPlaySrcRef.current = targetSrc;
     } else if (videoRef.current) {
       try {
         videoRef.current.currentTime = nextStart;
       } catch {}
+      void attemptPlay();
     }
   };
 
   const handleSeek = (seconds: number) => {
     setCurrentTime(seconds);
     const ch = findCurrentChapter(seconds, videoChapters);
-    if (ch) {
+    if (ch && !activeChapter?.videoUrl) {
       setActiveChapter(ch);
       onChapterSelect?.(ch);
     }
@@ -360,12 +415,14 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     }
   };
 
+  const effectiveDuration = duration > 0 ? duration : 292.65;
+
   const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressBarRef.current) return;
     const rect = progressBarRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-    handleSeek(ratio * duration);
+    handleSeek(ratio * effectiveDuration);
   };
 
   const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -373,7 +430,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     const rect = progressBarRef.current.getBoundingClientRect();
     const hoverX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, hoverX / rect.width));
-    setHoverTime(ratio * duration);
+    setHoverTime(ratio * effectiveDuration);
   };
 
   const handleProgressMouseLeave = () => {
@@ -390,7 +447,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     }, 3500);
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent = effectiveDuration > 0 ? Math.min(100, (currentTime / effectiveDuration) * 100) : 0;
 
   return (
     <section id="reel" ref={containerRef} className="py-5 sm:py-7 relative bg-transparent border-b border-zinc-800/60 scroll-mt-[68px]">
@@ -448,7 +505,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               {/* Owner-Only Video Upload Option */}
               <label 
                 className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                title="Upload your video (MP4/WebM/MOV) or a .zip archive up to 200 MB"
+                title="Upload your video (MP4/WebM/MOV/MKV) or a .zip archive up to 200 MB"
               >
                 <Upload className="w-3.5 h-3.5 text-amber-400" />
                 <span>
@@ -472,11 +529,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                       const assetUrl = await uploadVideoAsset(file, (pct) =>
                         setReelUploadProgress(pct)
                       );
-                      onUploadVideo?.(assetUrl);
-                      setHasVideoError(false);
-                      setTimeout(() => {
-                        attemptPlay();
-                      }, 120);
+                      applyUploadedMasterReel(assetUrl);
                     } catch (err) {
                       const msg =
                         err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
@@ -536,24 +589,28 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         >
           {/* Main Viewport Container */}
           <div className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
-            {/* HTML5 Video element */}
-            <video
-              ref={videoRef}
-              src={activeVideoSrc}
-              poster={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
-              playsInline
-              preload="auto"
-              controlsList="nodownload"
-              className={`w-full h-full object-contain cursor-pointer ${isNativePlaying ? 'block' : 'hidden'}`}
-              onClick={togglePlay}
-            >
-              <source src={activeVideoSrc} type="video/mp4" />
-              Your browser does not support HTML5 MP4 video playback.
-            </video>
+            {/* HTML5 Video element — always visible whenever a valid video source exists */}
+            {activeVideoSrc && (
+              <video
+                key={activeVideoSrc}
+                ref={videoRef}
+                src={activeVideoSrc}
+                poster={
+                  activeVideoSrc === VIDEO_PATH && activeChapter?.thumbnail
+                    ? activeChapter.thumbnail
+                    : undefined
+                }
+                playsInline
+                preload="auto"
+                controlsList="nodownload"
+                className={`w-full h-full object-contain cursor-pointer ${showThumbnailFallback ? 'hidden' : 'block'}`}
+                onClick={togglePlay}
+              />
+            )}
 
-            {/* Interactive Scene Viewport (Active when native video stream is not playing) */}
-            {!isNativePlaying && (() => {
-              const { fitClass, style } = getPhotoAlignImgProps(activeChapter.thumbnailAlign);
+            {/* Thumbnail Fallback Viewport (Shown ONLY if video stream is unavailable or errored) */}
+            {showThumbnailFallback && (() => {
+              const { fitClass, style } = getPhotoAlignImgProps(activeChapter?.thumbnailAlign);
               return (
                 <div 
                   className="relative w-full h-full cursor-pointer overflow-hidden group/screen select-none"
@@ -565,25 +622,27 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                     }`}
                   >
                     <img
-                      src={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
-                      alt={activeChapter.title}
+                      src={activeChapter?.thumbnail || '/showcase/hero-adhavan.jpg'}
+                      alt={activeChapter?.title || designerInfo?.reelHeading || 'Cinematic Showreel'}
                       style={style}
                       className={`w-full h-full ${fitClass}`}
                     />
                   </div>
                   {/* Cinematic gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/40 pointer-events-none" />
-                  <PhotoAdjustOverlay
-                    align={activeChapter.thumbnailAlign}
-                    isOwnerMode={isOwnerMode}
-                    onChange={(next) => {
-                      const updated = { ...activeChapter, thumbnailAlign: next };
-                      setActiveChapter(updated);
-                      onSaveChapter?.(updated);
-                    }}
-                    positionClass="top-14 left-3"
-                    compact
-                  />
+                  {activeChapter && (
+                    <PhotoAdjustOverlay
+                      align={activeChapter.thumbnailAlign}
+                      isOwnerMode={isOwnerMode}
+                      onChange={(next) => {
+                        const updated = { ...activeChapter, thumbnailAlign: next };
+                        setActiveChapter(updated);
+                        onSaveChapter?.(updated);
+                      }}
+                      positionClass="top-14 left-3"
+                      compact
+                    />
+                  )}
                 </div>
               );
             })()}
@@ -594,9 +653,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               mediaType="video"
               isOwnerMode={isOwnerMode}
               onMediaUploaded={(newUrl) => {
-                onUploadVideo?.(newUrl);
-                setHasVideoError(false);
-                setTimeout(() => attemptPlay(), 100);
+                applyUploadedMasterReel(newUrl);
               }}
               label="Upload Video File"
               position="top-right"
@@ -617,17 +674,17 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                   <span className="text-[10px] sm:text-[11px] font-mono font-bold tracking-widest text-zinc-200 uppercase">REEL</span>
                 </div>
-                {activeChapter.category && (
+                {activeChapter?.category && (
                   <span className="hidden xs:inline-block px-2 py-0.5 rounded bg-amber-500 text-black font-mono font-bold text-[10px] tracking-wider uppercase shadow-sm shrink-0">
                     {activeChapter.category}
                   </span>
                 )}
                 <div className="min-w-0">
                   <h3 className="text-xs sm:text-base font-bold text-white tracking-wide drop-shadow-md truncate">
-                    {activeChapter.title}
+                    {activeChapter?.title || designerInfo?.reelHeading || 'Cinematic Showreel'}
                   </h3>
                   <p className="text-[10px] sm:text-[11px] text-amber-400 font-mono tracking-wider truncate">
-                    {activeChapter.subtitle}
+                    {activeChapter?.subtitle || designerInfo?.reelResolutionNote || 'Uploaded Showreel Video'}
                   </p>
                 </div>
               </div>
@@ -636,7 +693,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 <Clock className="w-3.5 h-3.5 text-amber-400" />
                 <span>{formatVideoTime(currentTime)}</span>
                 <span className="text-zinc-600">/</span>
-                <span>{formatVideoTime(duration)}</span>
+                <span>{formatVideoTime(effectiveDuration)}</span>
               </div>
             </div>
 
@@ -664,7 +721,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               >
                 {/* Chapter Ticks */}
                 {videoChapters.map((ch) => {
-                  const tickPercent = (ch.startTime / duration) * 100;
+                  const tickPercent = effectiveDuration > 0 ? Math.min(100, (ch.startTime / effectiveDuration) * 100) : 0;
                   return (
                     <div
                       key={ch.id}
@@ -686,7 +743,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
                 {/* Hover time tooltip */}
                 {hoverTime !== null && (
                   <div
-                    style={{ left: `${(hoverTime / duration) * 100}%` }}
+                    style={{ left: `${(hoverTime / effectiveDuration) * 100}%` }}
                     className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-[11px] font-mono text-amber-400 pointer-events-none whitespace-nowrap shadow-lg"
                   >
                     {formatVideoTime(hoverTime)}
@@ -738,11 +795,11 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
 
                   {/* Mobile Time */}
                   <span className="font-mono text-xs text-zinc-300 sm:hidden">
-                    {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+                    {formatVideoTime(currentTime)} / {formatVideoTime(effectiveDuration)}
                   </span>
                 </div>
 
-                {/* Right: Chapter name, Speed, Fullscreen */}
+                {/* Right: Speed, Fullscreen */}
                 <div className="flex items-center gap-2 sm:gap-3">
                   <button
                     onClick={cycleSpeed}
@@ -768,176 +825,217 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
         </div>
 
         {/* Active Scene Inspection Details Card */}
-        <div className="mt-3 p-4 rounded-xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-sm font-bold text-white tracking-wide">
-                  {activeChapter.title}
-                </h4>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                  {activeChapter.subtitle}
-                </span>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  Keyframe: {formatVideoTime(activeChapter.startTime)} – {formatVideoTime(activeChapter.endTime)}
-                </span>
+        {activeChapter && (
+          <div className="mt-3 p-4 rounded-xl bg-zinc-950/70 backdrop-blur-md border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4" />
               </div>
-              <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
-                {activeChapter.description}
-              </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-sm font-bold text-white tracking-wide">
+                    {activeChapter.title}
+                  </h4>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    {activeChapter.subtitle}
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    Keyframe: {formatVideoTime(activeChapter.startTime)} – {formatVideoTime(activeChapter.endTime)}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed text-justify [text-justify:inter-word] hyphens-auto">
+                  {activeChapter.description}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-            <button
-              onClick={() => {
-                const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
-                const prevIndex = (currentIndex - 1 + videoChapters.length) % videoChapters.length;
-                handleSelectChapter(videoChapters[prevIndex]);
-              }}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
-            >
-              ← Prev Scene
-            </button>
-            <button
-              onClick={() => {
-                const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
-                const nextIndex = (currentIndex + 1) % videoChapters.length;
-                handleSelectChapter(videoChapters[nextIndex]);
-              }}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
-            >
-              Next Scene →
-            </button>
+            {videoChapters.length > 1 && (
+              <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                <button
+                  onClick={() => {
+                    const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
+                    const prevIndex = (currentIndex - 1 + videoChapters.length) % videoChapters.length;
+                    handleSelectChapter(videoChapters[prevIndex]);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  ← Prev Scene
+                </button>
+                <button
+                  onClick={() => {
+                    const currentIndex = videoChapters.findIndex(c => c.id === activeChapter.id);
+                    const nextIndex = (currentIndex + 1) % videoChapters.length;
+                    handleSelectChapter(videoChapters[nextIndex]);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  Next Scene →
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Interactive Chapter Strip */}
-        <div className="mt-3 sm:mt-4">
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-400">
-              <Layers className="w-4 h-4 text-amber-500" />
-              <span>Select Scene Chapter To Inspect:</span>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400">
-                {videoChapters.length} Keyframe Milestones
-              </span>
+        {(videoChapters.length > 0 || isOwnerMode) && (
+          <div className="mt-3 sm:mt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-400">
+                <Layers className="w-4 h-4 text-amber-500" />
+                <span>
+                  {videoChapters.length > 0
+                    ? 'Select Scene Chapter To Inspect:'
+                    : 'No Scene Chapters Configured'}
+                </span>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-xs text-zinc-400">
+                  {videoChapters.length} Keyframe Milestones
+                </span>
 
-              {isOwnerMode && (
-                <button
-                  onClick={onAddChapter}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Chapter</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-            {videoChapters.map((chapter) => {
-              const isActive = activeChapter.id === chapter.id;
-              return (
-                <div
-                  key={chapter.id}
-                  className={`relative rounded-xl p-2.5 transition-all duration-200 border group ${
-                    isActive
-                      ? 'bg-zinc-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
-                      : 'bg-zinc-900/50 hover:bg-zinc-800/60 border-zinc-800/80 hover:border-zinc-700'
-                  }`}
-                >
-                  {/* Owner edit & delete controls on chapter */}
-                  {isOwnerMode && (
-                    <div className="absolute top-1.5 right-1.5 z-20 flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditChapter?.(chapter);
-                        }}
-                        className="p-1 rounded bg-black/80 hover:bg-amber-500 text-zinc-300 hover:text-black border border-zinc-700 transition-colors"
-                        title="Edit Chapter"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteChapter?.(chapter.id);
-                        }}
-                        className="p-1 rounded bg-black/80 hover:bg-red-500 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
-                        title={`Delete Chapter "${chapter.title}"`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="relative aspect-video rounded-lg overflow-hidden mb-2 bg-zinc-950">
+                {isOwnerMode && videoChapters.length > 0 && onClearAllChapters && (
+                  confirmClearChapters ? (
                     <button
                       type="button"
-                      onClick={() => handleSelectChapter(chapter)}
-                      className="w-full h-full block cursor-pointer"
-                      aria-label={`Jump to chapter ${chapter.title}`}
+                      onClick={() => {
+                        onClearAllChapters();
+                        setConfirmClearChapters(false);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold cursor-pointer"
                     >
-                      {(() => {
-                        const { fitClass, style } = getPhotoAlignImgProps(chapter.thumbnailAlign);
-                        return (
-                          <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
-                            <img
-                              src={chapter.thumbnail}
-                              alt={chapter.title}
-                              style={style}
-                              className={`w-full h-full ${fitClass}`}
-                            />
-                          </div>
-                        );
-                      })()}
-                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 font-mono text-[10px] text-zinc-300">
-                        {formatVideoTime(chapter.startTime)}
-                      </span>
-                      {isActive && (
-                        <div className="absolute inset-0 bg-amber-500/20 flex items-center justify-center">
-                          <span className="px-2 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow">
-                            NOW PLAYING
-                          </span>
+                      <Trash2 className="w-3 h-3" />
+                      <span>Confirm Clear All?</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmClearChapters(true);
+                        setTimeout(() => setConfirmClearChapters(false), 3500);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 border border-zinc-800 hover:border-red-500/40 text-xs font-semibold cursor-pointer"
+                      title="Remove all chapter cards if using a standalone uploaded reel"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear Chapters</span>
+                    </button>
+                  )
+                )}
+
+                {isOwnerMode && (
+                  <button
+                    onClick={onAddChapter}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Chapter</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {videoChapters.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+                {videoChapters.map((chapter) => {
+                  const isActive = activeChapter?.id === chapter.id;
+                  return (
+                    <div
+                      key={chapter.id}
+                      className={`relative rounded-xl p-2.5 transition-all duration-200 border group ${
+                        isActive
+                          ? 'bg-zinc-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                          : 'bg-zinc-900/50 hover:bg-zinc-800/60 border-zinc-800/80 hover:border-zinc-700'
+                      }`}
+                    >
+                      {/* Owner edit & delete controls on chapter */}
+                      {isOwnerMode && (
+                        <div className="absolute top-1.5 right-1.5 z-20 flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditChapter?.(chapter);
+                            }}
+                            className="p-1 rounded bg-black/80 hover:bg-amber-500 text-zinc-300 hover:text-black border border-zinc-700 transition-colors"
+                            title="Edit Chapter"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteChapter?.(chapter.id);
+                            }}
+                            className="p-1 rounded bg-black/80 hover:bg-red-500 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
+                            title={`Delete Chapter "${chapter.title}"`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                       )}
-                    </button>
-                    <PhotoAdjustOverlay
-                      align={chapter.thumbnailAlign}
-                      isOwnerMode={isOwnerMode}
-                      onChange={(next) => {
-                        const updated = { ...chapter, thumbnailAlign: next };
-                        if (activeChapter.id === chapter.id) setActiveChapter(updated);
-                        onSaveChapter?.(updated);
-                      }}
-                      positionClass="top-1.5 left-1.5"
-                      compact
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectChapter(chapter)}
-                    className="w-full text-left cursor-pointer"
-                  >
-                    <h4 className={`text-xs font-bold truncate ${isActive ? 'text-amber-400' : 'text-zinc-200 group-hover:text-white'}`}>
-                      {chapter.title}
-                    </h4>
-                    <p className="text-[10px] text-zinc-400 font-mono truncate">
-                      {chapter.subtitle}
-                    </p>
-                  </button>
-                </div>
-              );
-            })}
+
+                      <div className="relative aspect-video rounded-lg overflow-hidden mb-2 bg-zinc-950">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectChapter(chapter)}
+                          className="w-full h-full block cursor-pointer"
+                          aria-label={`Jump to chapter ${chapter.title}`}
+                        >
+                          {(() => {
+                            const { fitClass, style } = getPhotoAlignImgProps(chapter.thumbnailAlign);
+                            return (
+                              <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
+                                <img
+                                  src={chapter.thumbnail}
+                                  alt={chapter.title}
+                                  style={style}
+                                  className={`w-full h-full ${fitClass}`}
+                                />
+                              </div>
+                            );
+                          })()}
+                          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 font-mono text-[10px] text-zinc-300">
+                            {formatVideoTime(chapter.startTime)}
+                          </span>
+                          {isActive && (
+                            <div className="absolute inset-0 bg-amber-500/20 flex items-center justify-center">
+                              <span className="px-2 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow">
+                                NOW PLAYING
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                        <PhotoAdjustOverlay
+                          align={chapter.thumbnailAlign}
+                          isOwnerMode={isOwnerMode}
+                          onChange={(next) => {
+                            const updated = { ...chapter, thumbnailAlign: next };
+                            if (activeChapter?.id === chapter.id) setActiveChapter(updated);
+                            onSaveChapter?.(updated);
+                          }}
+                          positionClass="top-1.5 left-1.5"
+                          compact
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectChapter(chapter)}
+                        className="w-full text-left cursor-pointer"
+                      >
+                        <h4 className={`text-xs font-bold truncate ${isActive ? 'text-amber-400' : 'text-zinc-200 group-hover:text-white'}`}>
+                          {chapter.title}
+                        </h4>
+                        <p className="text-[10px] text-zinc-400 font-mono truncate">
+                          {chapter.subtitle}
+                        </p>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
       </div>
     </section>

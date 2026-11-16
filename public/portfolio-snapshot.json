@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 42,
-  "updatedAt": "2026-11-16T13:19:57.180Z",
+  "version": 44,
+  "updatedAt": "2026-11-16T15:02:39.793Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-16T13:19:55.990Z",
+      "updatedAt": "2026-11-16T15:02:39.571Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -428,7 +428,7 @@
             "cursorMode": "attract"
           }
         },
-        "videoPath": "/assets/aistudio/Portfolio_46956db1.mp4",
+        "videoPath": "/api/assets/556c15bc4e7f5507f53ebf54d56cd07e.mp4",
         "videoChapters": [
           {
             "id": "intro",
@@ -445,26 +445,6 @@
             },
             "category": "all",
             "description": "Overview of Adhavan’s design philosophy, Unreal Engine focus, and 3D character work."
-          },
-          {
-            "id": "temple-upside",
-            "title": "New Temple (Upside Concept)",
-            "subtitle": "Sacred Daytime Architecture",
-            "startTime": 11,
-            "endTime": 23,
-            "thumbnail": "/showcase/temple-upside.jpg",
-            "category": "environment",
-            "description": "Grand Dravidian-style Indian temple environment featuring intricate Ganesha, Nandi, and sanctum sculptures with warm daylight god-rays."
-          },
-          {
-            "id": "temple-downside",
-            "title": "Ruined Temple (Downside Concept)",
-            "subtitle": "Mystical Subterranean Ruins",
-            "startTime": 24,
-            "endTime": 32,
-            "thumbnail": "/showcase/temple-ruins.jpg",
-            "category": "environment",
-            "description": "Atmospheric counterpart concept: dark temple ruins illuminated by ceremonial fire brazier bowls, fog, and moody dusk lighting."
           },
           {
             "id": "pirate-haven",
@@ -485,56 +465,6 @@
             "thumbnail": "/showcase/ae86-drift.jpg",
             "category": "vehicle-rigging",
             "description": "Initial D style Toyota AE86 Trueno drifting through city streets with speed line camera shakes, tire physics, and dynamic chase sequence."
-          },
-          {
-            "id": "gas-station",
-            "title": "Gas Station Cars Lineup & Night Lighting",
-            "subtitle": "Post-Process Volume & Wet Reflections",
-            "startTime": 90,
-            "endTime": 109,
-            "thumbnail": "/showcase/gas-station-night.jpg",
-            "category": "level-design",
-            "description": "Night environment with \"OPTIMAL\" neon canopy, muscle Mustang, BMW M4, and Porsche GT3 RS with rain/wet surface shaders."
-          },
-          {
-            "id": "maya-3d",
-            "title": "Autodesk Maya 3D Asset Models",
-            "subtitle": "Gramophone, Gaming Room & Guitar",
-            "startTime": 110,
-            "endTime": 112,
-            "thumbnail": "/showcase/maya-models.jpg",
-            "category": "maya-3d",
-            "description": "Precision hard-surface modeling in Autodesk Maya showcasing vintage gramophone, modern streaming gaming room, and acoustic guitar."
-          },
-          {
-            "id": "level-design-breakdown",
-            "title": "Level Design & Vehicle Rigging Breakdown",
-            "subtitle": "Cinematic Sequencing Deep Dive",
-            "startTime": 113,
-            "endTime": 170,
-            "thumbnail": "/showcase/station-cars-detail.jpg",
-            "category": "level-design",
-            "description": "Detailed analysis of level composition, camera cuts, post-process color grading, and car suspension responsiveness."
-          },
-          {
-            "id": "flagship-rpg",
-            "title": "Latest Project: Stylized Pirate RPG",
-            "subtitle": "In-Progress Third-Person Game",
-            "startTime": 171,
-            "endTime": 284,
-            "thumbnail": "/showcase/pirate-village-hero.jpg",
-            "category": "flagship-game",
-            "description": "Full gameplay walkthrough of in-development stylized third-person adventure game. Features vibrant port town, sprinting, jumping over bridges, and marketplace."
-          },
-          {
-            "id": "credits-contact",
-            "title": "Contact & Future Releases",
-            "subtitle": "Get In Touch with Adhavan",
-            "startTime": 285,
-            "endTime": 292,
-            "thumbnail": "/showcase/contact-slide.jpg",
-            "category": "all",
-            "description": "Direct contact information, professional links, and upcoming final game releases announcement."
           }
         ],
         "projects": [

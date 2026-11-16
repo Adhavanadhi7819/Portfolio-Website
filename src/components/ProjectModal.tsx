@@ -92,6 +92,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-black border border-zinc-800">
               {showProjectVideo && project.videoUrl ? (
                 <video
+                  key={project.videoUrl}
                   src={project.videoUrl}
                   poster={project.thumbnail}
                   controls

@@ -44,6 +44,7 @@ import {
   addChapter, 
   updateChapter, 
   deleteChapter, 
+  clearChapterVideoOverrides,
   addMayaModel, 
   updateMayaModel, 
   deleteMayaModel,
@@ -69,6 +70,7 @@ import {
   fetchGitHubSyncStatus,
   pullLatestFromGitHub,
   commitPortfolioToGitHub,
+  hasActiveAssetUpload,
   GitHubSyncStatus
 } from './utils/portfolioServerSync';
 
@@ -652,6 +654,7 @@ export default function App() {
         isSyncRunningRef.current ||
         hasPendingSaveRef.current ||
         desiredSaveRef.current ||
+        hasActiveAssetUpload() ||
         !hasBackendRef.current
       ) {
         return;
@@ -662,7 +665,8 @@ export default function App() {
           !active ||
           isSyncRunningRef.current ||
           hasPendingSaveRef.current ||
-          desiredSaveRef.current
+          desiredSaveRef.current ||
+          hasActiveAssetUpload()
         ) {
           return;
         }
@@ -839,11 +843,7 @@ export default function App() {
       immediateSaveRequestedRef.current = false;
       const ok = await pushStateToServer(mergedPortfolios, activePortfolioId, sig);
       if (ok && wasImmediate) {
-        setSaveToast(
-          portfolioState.designerInfo.resumePdfUrl
-            ? 'Resume uploaded, pushed to GitHub & published'
-            : 'Resume changes pushed to GitHub & published'
-        );
+        setSaveToast('Changes saved, pushed to GitHub & published');
       }
     }, delayMs);
 
@@ -1158,6 +1158,9 @@ export default function App() {
 
   // Portfolio Mutation Handlers
   const handleSaveProject = (proj: ProjectItem) => {
+    if (proj.videoUrl) {
+      immediateSaveRequestedRef.current = true;
+    }
     setPortfolioState(prev => {
       const exists = prev.projects.some(p => p.id === proj.id);
       return {
@@ -1181,6 +1184,9 @@ export default function App() {
   };
 
   const handleSaveChapter = (chapter: VideoChapter) => {
+    if (chapter.videoUrl) {
+      immediateSaveRequestedRef.current = true;
+    }
     setPortfolioState(prev => {
       const exists = prev.videoChapters.some(c => c.id === chapter.id);
       return {
@@ -1191,13 +1197,25 @@ export default function App() {
   };
 
   const handleDeleteChapter = (id: string) => {
+    immediateSaveRequestedRef.current = true;
     setPortfolioState(prev => ({
       ...prev,
       videoChapters: deleteChapter(prev.videoChapters, id)
     }));
   };
 
+  const handleClearAllChapters = () => {
+    immediateSaveRequestedRef.current = true;
+    setPortfolioState(prev => ({
+      ...prev,
+      videoChapters: []
+    }));
+  };
+
   const handleSaveModel = (model: MayaModelItem) => {
+    if (model.videoUrl) {
+      immediateSaveRequestedRef.current = true;
+    }
     setPortfolioState(prev => {
       const exists = prev.mayaModels.some(m => m.id === model.id);
       return {
@@ -1215,7 +1233,7 @@ export default function App() {
   };
 
   const handleSaveDesignerInfo = (info: Partial<DesignerInfo>) => {
-    if ('resumePdfUrl' in info) {
+    if ('resumePdfUrl' in info || 'flagshipVideoUrl' in info) {
       immediateSaveRequestedRef.current = true;
     }
     setPortfolioState(prev => ({
@@ -1227,10 +1245,17 @@ export default function App() {
     }));
   };
 
-  const handleSaveVideoPath = (newPath: string) => {
+  const handleSaveVideoPath = (
+    newPath: string,
+    options?: { clearChapterVideoUrls?: boolean }
+  ) => {
+    immediateSaveRequestedRef.current = true;
     setPortfolioState(prev => ({
       ...prev,
-      videoPath: newPath
+      videoPath: newPath,
+      ...(options?.clearChapterVideoUrls
+        ? { videoChapters: clearChapterVideoOverrides(prev.videoChapters) }
+        : {})
     }));
   };
 
@@ -1553,6 +1578,7 @@ export default function App() {
                       onEditChapter={(ch) => handleOpenEditModal('chapter', ch)}
                       onSaveChapter={handleSaveChapter}
                       onDeleteChapter={handleDeleteChapter}
+                      onClearAllChapters={handleClearAllChapters}
                       onEditReelSettings={() => handleOpenEditModal('video_reel')}
                       onUploadVideo={handleSaveVideoPath}
                       onUpdateDesignerInfo={handleSaveDesignerInfo}
@@ -1879,6 +1905,7 @@ export default function App() {
         onSaveModel={handleSaveModel}
         onSaveDesignerInfo={handleSaveDesignerInfo}
         onSaveVideoPath={handleSaveVideoPath}
+        onClearAllChapters={handleClearAllChapters}
         currentPortfolioState={portfolioState}
         onImportState={handleImportState}
       />

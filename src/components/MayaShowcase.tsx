@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Box, Play, CheckCircle2, Plus, Edit3, Trash2 } from 'lucide-react';
 import { MAYA_MODELS } from '../data/portfolioData';
@@ -56,6 +56,15 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
   const [viewMode, setViewMode] = useState<'textured' | 'wireframe' | 'clay' | 'video'>('textured');
 
   const selectedModel = currentModels.find(m => m.id === selectedModelId) || currentModels[0];
+
+  useEffect(() => {
+    if (selectedModel?.videoUrl) {
+      setViewMode('video');
+    } else {
+      setViewMode((prev) => (prev === 'video' ? 'textured' : prev));
+    }
+  }, [selectedModel?.id, selectedModel?.videoUrl]);
+
   const { fitClass: modelFitClass, style: modelAlignStyle } = getPhotoAlignImgProps(
     selectedModel?.thumbnailAlign
   );
@@ -143,11 +152,12 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
               {/* Asset Image / Video with simulated render shader modes */}
               {viewMode === 'video' && selectedModel.videoUrl ? (
                 <video
+                  key={selectedModel.videoUrl}
                   src={selectedModel.videoUrl}
                   poster={selectedModel.thumbnail}
                   controls
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                   className="w-full h-full object-contain bg-black"
                 />
               ) : (

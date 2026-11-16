@@ -237,9 +237,39 @@ export async function verifyOwnerTwoFactorWithServer(
     });
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
+      if (knownExpressAvailable !== false) {
+        try {
+          const expressRes = await fetch('/api/auth/verify', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin, code })
+          });
+          const expressCt = expressRes.headers.get('content-type') || '';
+          if (expressCt.includes('application/json')) {
+            const expressData = (await expressRes.json().catch(() => ({}))) as {
+              ok?: boolean;
+              token?: string;
+              error?: string;
+            };
+            if (expressRes.ok && expressData.ok) {
+              knownExpressAvailable = true;
+              if (expressData.token) setStoredOwnerToken(expressData.token);
+              return { ok: true };
+            }
+            if (expressRes.status !== 404) {
+              return {
+                ok: false,
+                error: expressData.error || 'Admin PIN or 6-digit Authenticator verification failed.'
+              };
+            }
+          }
+        } catch {}
+      }
+      const previewSnippet = (await res.text().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 120);
       return {
         ok: false,
-        error: 'Server verification endpoint (/api/update-portfolio) returned a non-JSON response.'
+        error: `Server verification endpoint (/api/update-portfolio) returned HTTP ${res.status} (${contentType || 'non-JSON'})${previewSnippet ? `: ${previewSnippet}` : '.'}`
       };
     }
     const data = (await res.json().catch(() => ({}))) as Partial<GitHubSyncStatus> & {
@@ -1001,7 +1031,28 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+let activeAssetUploadCount = 0;
+
+export function hasActiveAssetUpload(): boolean {
+  return activeAssetUploadCount > 0;
+}
+
 export async function uploadAssetToServer(
+  fileOrBlob: Blob,
+  filename: string,
+  mimeType?: string,
+  onProgress?: (percent: number) => void,
+  options?: { extractVideo?: boolean }
+): Promise<UploadedAssetResponse> {
+  activeAssetUploadCount += 1;
+  try {
+    return await executeUploadAssetToServer(fileOrBlob, filename, mimeType, onProgress, options);
+  } finally {
+    activeAssetUploadCount = Math.max(0, activeAssetUploadCount - 1);
+  }
+}
+
+async function executeUploadAssetToServer(
   fileOrBlob: Blob,
   filename: string,
   mimeType?: string,

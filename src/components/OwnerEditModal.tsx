@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Save, 
@@ -70,7 +70,8 @@ interface OwnerEditModalProps {
   onSaveChapter: (chapter: VideoChapter) => void;
   onSaveModel: (model: MayaModelItem) => void;
   onSaveDesignerInfo: (info: Partial<DesignerInfo>) => void;
-  onSaveVideoPath?: (path: string) => void;
+  onSaveVideoPath?: (path: string, options?: { clearChapterVideoUrls?: boolean }) => void;
+  onClearAllChapters?: () => void;
   currentPortfolioState: PortfolioState;
   onImportState: (state: PortfolioState) => void;
 }
@@ -85,6 +86,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   onSaveModel,
   onSaveDesignerInfo,
   onSaveVideoPath,
+  onClearAllChapters,
   currentPortfolioState,
   onImportState
 }) => {
@@ -110,17 +112,27 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const [videoPreviewError, setVideoPreviewError] = useState<string | null>(null);
+  const wasOpenRef = useRef(false);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    const isFreshOpen = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!isFreshOpen) return;
+
     setErrors({});
     setJsonError('');
     setSavedSuccessMessage(null);
     setResumeUploadError(null);
     setVideoUploadError(null);
+    setVideoPreviewError(null);
 
     const initialMode = mode === 'bio' ? 'hero' : mode;
     setActiveTab(initialMode);
@@ -213,6 +225,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     setIsUploadingVideo(true);
     setVideoUploadProgress(0);
     setVideoUploadError(null);
+    setVideoPreviewError(null);
     try {
       const url = await uploadVideoAsset(file, (pct) => setVideoUploadProgress(pct));
       onUploaded(url);
@@ -343,8 +356,13 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     } as DesignerInfo;
 
     onSaveDesignerInfo(updated);
-    if (onSaveVideoPath && videoPathForm) {
-      onSaveVideoPath(videoPathForm);
+    const trimmedVideoPath = videoPathForm.trim();
+    const existingVideoPath = (currentPortfolioState.videoPath || '').trim();
+    if (onSaveVideoPath && (activeTab === 'video_reel' || trimmedVideoPath !== existingVideoPath)) {
+      const videoChanged = trimmedVideoPath !== existingVideoPath;
+      onSaveVideoPath(trimmedVideoPath, {
+        clearChapterVideoUrls: activeTab === 'video_reel' && videoChanged && Boolean(trimmedVideoPath)
+      });
     }
     triggerSuccess(successMsg);
   };
@@ -829,25 +847,43 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
                     Main Video Source Path / URL *
                   </label>
-                  <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
-                    <Video className="w-3 h-3" />
-                    <span>
-                      {isUploadingVideo
-                        ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}`
-                        : 'Upload Video (MP4 / ZIP)'}
-                    </span>
-                    <input
-                      type="file"
-                      accept={VIDEO_FILE_ACCEPT}
-                      className="hidden"
-                      disabled={isUploadingVideo}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = '';
-                        await handleModalVideoUpload(file, (url) => setVideoPathForm(url));
-                      }}
-                    />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                      <Video className="w-3 h-3" />
+                      <span>
+                        {isUploadingVideo
+                          ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}`
+                          : 'Upload Video (MP4 / ZIP)'}
+                      </span>
+                      <input
+                        type="file"
+                        accept={VIDEO_FILE_ACCEPT}
+                        className="hidden"
+                        disabled={isUploadingVideo}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          await handleModalVideoUpload(file, (url) => {
+                            setVideoPathForm(url);
+                            onSaveVideoPath?.(url, { clearChapterVideoUrls: true });
+                            triggerSuccess('Uploaded showreel video & updated scene!');
+                          });
+                        }}
+                      />
+                    </label>
+                    {videoPathForm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVideoPathForm('');
+                          onSaveVideoPath?.('');
+                        }}
+                        className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <input
                   type="text"
@@ -860,8 +896,31 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
                 )}
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Upload an MP4/WebM/MOV video or a ZIP archive up to 200 MB, or paste any hosted MP4 URL.
+                  Upload an MP4/H.264/WebM/MOV/MKV video or a ZIP archive up to 200 MB, or paste any hosted MP4 URL.
                 </p>
+                {videoPathForm && (
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="aspect-video rounded-xl overflow-hidden bg-black border border-zinc-800">
+                      <video
+                        key={videoPathForm}
+                        src={videoPathForm}
+                        controls
+                        playsInline
+                        preload="auto"
+                        onLoadedData={() => setVideoPreviewError(null)}
+                        onError={() =>
+                          setVideoPreviewError(
+                            'Video stream could not load or uses an unsupported codec (H.265/HEVC). Re-encode as H.264 MP4/WebM or refresh after saving.'
+                          )
+                        }
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    {videoPreviewError && (
+                      <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -903,52 +962,92 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
 
               {/* Chapters Quick Manager */}
               <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
                     Reel Keyframe Chapters ({currentPortfolioState.videoChapters.length})
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setChapterForm({
-                        id: `ch-${Date.now()}`,
-                        title: '',
-                        subtitle: '',
-                        startTime: 0,
-                        endTime: 20,
-                        thumbnail: '/showcase/hero-adhavan.jpg',
-                        category: 'all',
-                        description: ''
-                      });
-                      setActiveTab('chapter');
-                    }}
-                    className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Add Chapter</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {currentPortfolioState.videoChapters.length > 0 && onClearAllChapters && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClearAllChapters();
+                          triggerSuccess('Cleared all old showreel chapters.');
+                        }}
+                        className="px-2.5 py-1 rounded bg-red-500/15 text-red-300 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Clear All</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChapterForm({
+                          id: `ch-${Date.now()}`,
+                          title: '',
+                          subtitle: '',
+                          startTime: 0,
+                          endTime: 20,
+                          thumbnail: '/showcase/hero-adhavan.jpg',
+                          category: 'all',
+                          description: ''
+                        });
+                        setActiveTab('chapter');
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Chapter</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {currentPortfolioState.videoChapters.map((ch) => (
                     <div key={ch.id} className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-bold text-white mr-2">{ch.title}</span>
-                        <span className="text-amber-400 font-mono">({Math.floor(ch.startTime / 60)}:{String(ch.startTime % 60).padStart(2, '0')})</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-bold text-white truncate">{ch.title}</span>
+                        <span className="text-amber-400 font-mono shrink-0">({Math.floor(ch.startTime / 60)}:{String(ch.startTime % 60).padStart(2, '0')})</span>
+                        {ch.videoUrl && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[9px] uppercase shrink-0">
+                            Clip Override
+                          </span>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setChapterForm({ ...ch });
-                          setActiveTab('chapter');
-                        }}
-                        className="p-1 rounded text-zinc-400 hover:text-amber-400"
-                        title="Edit chapter"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {ch.videoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSaveChapter({ ...ch, videoUrl: undefined });
+                              triggerSuccess(`Cleared custom video override on "${ch.title}".`);
+                            }}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-mono text-red-400 hover:bg-red-500/15 cursor-pointer"
+                            title="Use main showreel video for this chapter"
+                          >
+                            Clear Clip
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChapterForm({ ...ch });
+                            setActiveTab('chapter');
+                          }}
+                          className="p-1 rounded text-zinc-400 hover:text-amber-400 cursor-pointer"
+                          title="Edit chapter"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
+                  {currentPortfolioState.videoChapters.length === 0 && (
+                    <p className="text-[11px] font-mono text-zinc-500 py-2 text-center">
+                      No chapters configured — the Showreel plays your uploaded video directly.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1050,9 +1149,11 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             e.target.value = '';
-                            await handleModalVideoUpload(file, (url) =>
-                              setBioForm((prev) => ({ ...prev, flagshipVideoUrl: url }))
-                            );
+                            await handleModalVideoUpload(file, (url) => {
+                              setBioForm((prev) => ({ ...prev, flagshipVideoUrl: url }));
+                              onSaveDesignerInfo({ flagshipVideoUrl: url });
+                              triggerSuccess('Uploaded gameplay video & updated showcase!');
+                            });
                           }}
                         />
                       </label>
@@ -1076,6 +1177,29 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   />
                   {videoUploadError && (
                     <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
+                  )}
+                  {bioForm.flagshipVideoUrl && (
+                    <div className="mt-2.5 space-y-1.5">
+                      <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                        <video
+                          key={bioForm.flagshipVideoUrl}
+                          src={bioForm.flagshipVideoUrl}
+                          controls
+                          playsInline
+                          preload="auto"
+                          onLoadedData={() => setVideoPreviewError(null)}
+                          onError={() =>
+                            setVideoPreviewError(
+                              'Video stream could not load or uses an unsupported codec (H.265/HEVC). Re-encode as H.264 MP4/WebM.'
+                            )
+                          }
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      {videoPreviewError && (
+                        <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1393,14 +1517,26 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400">{videoUploadError}</p>
                 )}
                 {projectForm.videoUrl && (
-                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
-                    <video
-                      src={projectForm.videoUrl}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="w-full h-full object-contain"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                      <video
+                        key={projectForm.videoUrl}
+                        src={projectForm.videoUrl}
+                        controls
+                        playsInline
+                        preload="auto"
+                        onLoadedData={() => setVideoPreviewError(null)}
+                        onError={() =>
+                          setVideoPreviewError(
+                            'Video stream could not load or uses an unsupported codec (H.265/HEVC). Re-encode as H.264 MP4/WebM.'
+                          )
+                        }
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    {videoPreviewError && (
+                      <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1657,14 +1793,26 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400">{videoUploadError}</p>
                 )}
                 {chapterForm.videoUrl && (
-                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
-                    <video
-                      src={chapterForm.videoUrl}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="w-full h-full object-contain"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                      <video
+                        key={chapterForm.videoUrl}
+                        src={chapterForm.videoUrl}
+                        controls
+                        playsInline
+                        preload="auto"
+                        onLoadedData={() => setVideoPreviewError(null)}
+                        onError={() =>
+                          setVideoPreviewError(
+                            'Video stream could not load or uses an unsupported codec (H.265/HEVC). Re-encode as H.264 MP4/WebM.'
+                          )
+                        }
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    {videoPreviewError && (
+                      <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1803,14 +1951,26 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   <p className="text-[11px] text-red-400">{videoUploadError}</p>
                 )}
                 {modelForm.videoUrl && (
-                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
-                    <video
-                      src={modelForm.videoUrl}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="w-full h-full object-contain"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                      <video
+                        key={modelForm.videoUrl}
+                        src={modelForm.videoUrl}
+                        controls
+                        playsInline
+                        preload="auto"
+                        onLoadedData={() => setVideoPreviewError(null)}
+                        onError={() =>
+                          setVideoPreviewError(
+                            'Video stream could not load or uses an unsupported codec (H.265/HEVC). Re-encode as H.264 MP4/WebM.'
+                          )
+                        }
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    {videoPreviewError && (
+                      <p className="text-[11px] text-amber-300 font-mono">{videoPreviewError}</p>
+                    )}
                   </div>
                 )}
               </div>

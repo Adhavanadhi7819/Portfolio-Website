@@ -2,8 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/*.ts": {
-      "includeFiles": "{data.json,portfolio-data/auth.json,api/zipVideo.ts}",
-      "maxDuration": 60
+      "includeFiles": "{data.json,portfolio-data/auth.json}"
     }
   },
   "headers": [
@@ -47,6 +46,10 @@
   "rewrites": [
     {
       "source": "/api/assets/:fileId",
+      "destination": "/api/update-portfolio?action=asset&file=:fileId"
+    },
+    {
+      "source": "/uploaded-assets/:fileId",
       "destination": "/api/update-portfolio?action=asset&file=:fileId"
     },
     {

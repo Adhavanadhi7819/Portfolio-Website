@@ -339,10 +339,11 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 <>
                   <div className="relative flex-1 aspect-video bg-black flex items-center justify-center">
                     <video
+                      key={designerInfo?.flagshipVideoUrl}
                       src={designerInfo?.flagshipVideoUrl}
                       controls
                       playsInline
-                      preload="metadata"
+                      preload="auto"
                       className="w-full h-full object-contain bg-black"
                     />
                   </div>

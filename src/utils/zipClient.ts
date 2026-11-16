@@ -77,8 +77,22 @@ export async function extractLargestVideoFromZipBlob(
     throw new Error('Invalid ZIP file: missing End of Central Directory record.');
   }
 
-  const cdSize = tailView.getUint32(eocdPos + 12, true);
-  const cdOffset = tailView.getUint32(eocdPos + 16, true);
+  let cdSize = tailView.getUint32(eocdPos + 12, true);
+  let cdOffset = tailView.getUint32(eocdPos + 16, true);
+
+  if ((cdSize === 0xffffffff || cdOffset === 0xffffffff) && eocdPos >= 20) {
+    if (tailView.getUint32(eocdPos - 20, true) === 0x07064b50) {
+      const zip64EocdOffset = Number(tailView.getBigUint64(eocdPos - 12, true));
+      if (zip64EocdOffset >= 0 && zip64EocdOffset + 56 <= zipBlob.size) {
+        const z64Buf = await zipBlob.slice(zip64EocdOffset, zip64EocdOffset + 56).arrayBuffer();
+        const z64View = new DataView(z64Buf);
+        if (z64View.getUint32(0, true) === 0x06064b50) {
+          cdSize = Number(z64View.getBigUint64(40, true));
+          cdOffset = Number(z64View.getBigUint64(48, true));
+        }
+      }
+    }
+  }
 
   if (cdOffset + cdSize > zipBlob.size || cdSize === 0) {
     throw new Error('Invalid ZIP file: central directory offsets are out of bounds.');

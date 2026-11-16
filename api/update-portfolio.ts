@@ -4,9 +4,281 @@ import fs from 'node:fs';
 import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
-import { put } from '@vercel/blob';
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } from './zipVideo';
+import { pipeline } from 'node:stream/promises';
+import zlib from 'node:zlib';
+
+export const MAX_VIDEO_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
+
+interface ZipEntryMeta {
+  fileName: string;
+  compressionMethod: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+}
+
+const PRIMARY_VIDEO_EXT_TO_MIME: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime'
+};
+
+const FALLBACK_VIDEO_EXT_TO_MIME: Record<string, string> = {
+  '.ogv': 'video/ogg',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo'
+};
+
+export function resolveVideoMimeFromFilename(filename: string): string | null {
+  const ext = path.extname(filename).toLowerCase();
+  return PRIMARY_VIDEO_EXT_TO_MIME[ext] || FALLBACK_VIDEO_EXT_TO_MIME[ext] || null;
+}
+
+function readZipCentralDirectoryEntries(zipFilePath: string): ZipEntryMeta[] {
+  const fd = fs.openSync(zipFilePath, 'r');
+  try {
+    const stat = fs.fstatSync(fd);
+    const fileSize = stat.size;
+    if (fileSize < 22) {
+      throw new Error('Uploaded ZIP archive is incomplete or corrupted.');
+    }
+
+    const tailSize = Math.min(fileSize, 65557);
+    const tailOffset = fileSize - tailSize;
+    const tailBuf = Buffer.alloc(tailSize);
+    fs.readSync(fd, tailBuf, 0, tailSize, tailOffset);
+
+    let eocdPos = -1;
+    for (let i = tailSize - 22; i >= 0; i--) {
+      if (
+        tailBuf[i] === 0x50 &&
+        tailBuf[i + 1] === 0x4b &&
+        tailBuf[i + 2] === 0x05 &&
+        tailBuf[i + 3] === 0x06
+      ) {
+        const commentLen = tailBuf.readUInt16LE(i + 20);
+        if (i + 22 + commentLen === tailSize) {
+          eocdPos = i;
+          break;
+        }
+      }
+    }
+
+    if (eocdPos === -1) {
+      throw new Error('Invalid ZIP file: missing End of Central Directory record.');
+    }
+
+    let cdSize = tailBuf.readUInt32LE(eocdPos + 12);
+    let cdOffset = tailBuf.readUInt32LE(eocdPos + 16);
+
+    if ((cdSize === 0xffffffff || cdOffset === 0xffffffff) && eocdPos >= 20) {
+      if (tailBuf.readUInt32LE(eocdPos - 20) === 0x07064b50) {
+        const zip64EocdOffset = Number(tailBuf.readBigUInt64LE(eocdPos - 12));
+        if (zip64EocdOffset >= 0 && zip64EocdOffset + 56 <= fileSize) {
+          const z64Buf = Buffer.alloc(56);
+          fs.readSync(fd, z64Buf, 0, 56, zip64EocdOffset);
+          if (z64Buf.readUInt32LE(0) === 0x06064b50) {
+            cdSize = Number(z64Buf.readBigUInt64LE(40));
+            cdOffset = Number(z64Buf.readBigUInt64LE(48));
+          }
+        }
+      }
+    }
+
+    if (cdOffset + cdSize > fileSize || cdSize === 0) {
+      throw new Error('Invalid ZIP file: central directory offsets are out of bounds.');
+    }
+
+    const cdBuf = Buffer.alloc(cdSize);
+    fs.readSync(fd, cdBuf, 0, cdSize, cdOffset);
+
+    const entries: ZipEntryMeta[] = [];
+    let pos = 0;
+
+    while (pos + 46 <= cdBuf.length) {
+      const sig = cdBuf.readUInt32LE(pos);
+      if (sig !== 0x02014b50) break;
+
+      const compressionMethod = cdBuf.readUInt16LE(pos + 10);
+      let compressedSize = cdBuf.readUInt32LE(pos + 20);
+      let uncompressedSize = cdBuf.readUInt32LE(pos + 24);
+      const fileNameLen = cdBuf.readUInt16LE(pos + 28);
+      const extraFieldLen = cdBuf.readUInt16LE(pos + 30);
+      const commentLen = cdBuf.readUInt16LE(pos + 32);
+      let localHeaderOffset = cdBuf.readUInt32LE(pos + 42);
+
+      const fileNameStart = pos + 46;
+      const extraStart = fileNameStart + fileNameLen;
+      const nextPos = extraStart + extraFieldLen + commentLen;
+      if (nextPos > cdBuf.length) break;
+
+      const fileName = cdBuf.subarray(fileNameStart, extraStart).toString('utf8');
+
+      if (
+        extraFieldLen >= 4 &&
+        (compressedSize === 0xffffffff ||
+          uncompressedSize === 0xffffffff ||
+          localHeaderOffset === 0xffffffff)
+      ) {
+        const extraBuf = cdBuf.subarray(extraStart, extraStart + extraFieldLen);
+        let ePos = 0;
+        while (ePos + 4 <= extraBuf.length) {
+          const headerId = extraBuf.readUInt16LE(ePos);
+          const dataSize = extraBuf.readUInt16LE(ePos + 2);
+          if (headerId === 0x0001 && ePos + 4 + dataSize <= extraBuf.length) {
+            let zPos = ePos + 4;
+            if (uncompressedSize === 0xffffffff && zPos + 8 <= ePos + 4 + dataSize) {
+              uncompressedSize = Number(extraBuf.readBigUInt64LE(zPos));
+              zPos += 8;
+            }
+            if (compressedSize === 0xffffffff && zPos + 8 <= ePos + 4 + dataSize) {
+              compressedSize = Number(extraBuf.readBigUInt64LE(zPos));
+              zPos += 8;
+            }
+            if (localHeaderOffset === 0xffffffff && zPos + 8 <= ePos + 4 + dataSize) {
+              localHeaderOffset = Number(extraBuf.readBigUInt64LE(zPos));
+            }
+            break;
+          }
+          ePos += 4 + dataSize;
+        }
+      }
+
+      entries.push({
+        fileName,
+        compressionMethod,
+        compressedSize,
+        uncompressedSize,
+        localHeaderOffset
+      });
+
+      pos = nextPos;
+    }
+
+    return entries;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function getLocalFileDataOffset(zipFilePath: string, localHeaderOffset: number): number {
+  const fd = fs.openSync(zipFilePath, 'r');
+  try {
+    const headerBuf = Buffer.alloc(30);
+    const bytesRead = fs.readSync(fd, headerBuf, 0, 30, localHeaderOffset);
+    if (bytesRead < 30 || headerBuf.readUInt32LE(0) !== 0x04034b50) {
+      throw new Error('Corrupted ZIP entry: invalid local file header.');
+    }
+    const nameLen = headerBuf.readUInt16LE(26);
+    const extraLen = headerBuf.readUInt16LE(28);
+    return localHeaderOffset + 30 + nameLen + extraLen;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export async function extractLargestVideoFromZip(
+  zipFilePath: string,
+  destDir: string
+): Promise<{
+  extractedPath: string;
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+}> {
+  const zipStat = fs.statSync(zipFilePath);
+  if (zipStat.size > MAX_VIDEO_ZIP_BYTES) {
+    throw new Error(
+      `ZIP archive (${(zipStat.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 200 MB ZIP upload limit.`
+    );
+  }
+
+  const entries = readZipCentralDirectoryEntries(zipFilePath);
+  const videoCandidates = entries
+    .map((entry) => {
+      const normalizedName = entry.fileName.replace(/\\/g, '/');
+      if (normalizedName.endsWith('/')) return null;
+      const baseName = path.posix.basename(normalizedName);
+      if (
+        !baseName ||
+        normalizedName.startsWith('__MACOSX/') ||
+        baseName.startsWith('._') ||
+        baseName.startsWith('.')
+      ) {
+        return null;
+      }
+      const ext = path.posix.extname(baseName).toLowerCase();
+      const primaryMime = PRIMARY_VIDEO_EXT_TO_MIME[ext];
+      const fallbackMime = FALLBACK_VIDEO_EXT_TO_MIME[ext];
+      if (!primaryMime && !fallbackMime) return null;
+      return {
+        entry,
+        baseName,
+        mimeType: primaryMime || fallbackMime,
+        priority: primaryMime ? 2 : 1
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return (
+        (b.entry.uncompressedSize || b.entry.compressedSize) -
+        (a.entry.uncompressedSize || a.entry.compressedSize)
+      );
+    });
+
+  const best = videoCandidates[0];
+  if (!best) {
+    throw new Error(
+      'No playable video file (.mp4, .webm, .mov, .m4v) was found inside this ZIP archive.'
+    );
+  }
+
+  if (best.entry.compressedSize <= 0) {
+    throw new Error(`Video entry "${best.baseName}" inside ZIP archive is empty.`);
+  }
+
+  const dataStart = getLocalFileDataOffset(zipFilePath, best.entry.localHeaderOffset);
+  const dataEnd = dataStart + best.entry.compressedSize - 1;
+  const ext = path.posix.extname(best.baseName).toLowerCase() || '.mp4';
+  const tempOutPath = path.join(
+    destDir,
+    `.zip-video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
+  );
+
+  try {
+    const readStream = fs.createReadStream(zipFilePath, { start: dataStart, end: dataEnd });
+    const writeStream = fs.createWriteStream(tempOutPath);
+
+    if (best.entry.compressionMethod === 0) {
+      await pipeline(readStream, writeStream);
+    } else if (best.entry.compressionMethod === 8) {
+      await pipeline(readStream, zlib.createInflateRaw(), writeStream);
+    } else {
+      throw new Error(
+        `Unsupported ZIP compression method (${best.entry.compressionMethod}). Re-zip using standard Deflate or Store.`
+      );
+    }
+
+    const outStat = fs.statSync(tempOutPath);
+    if (outStat.size === 0) {
+      throw new Error(`Extracted video "${best.baseName}" is empty.`);
+    }
+
+    return {
+      extractedPath: tempOutPath,
+      originalFilename: best.baseName,
+      mimeType: best.mimeType,
+      size: outStat.size
+    };
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempOutPath)) fs.unlinkSync(tempOutPath);
+    } catch {}
+    throw err;
+  }
+}
 
 const ADMIN_SESSION_COOKIE = 'adhavan_admin_session';
 const TOTP_PAIRED_COOKIE = 'adhavan_totp_paired';
@@ -666,11 +938,17 @@ const ASSET_MIME_TO_EXT: Record<string, string> = {
   'image/gif': '.gif',
   'image/svg+xml': '.svg',
   'video/mp4': '.mp4',
+  'video/h264': '.mp4',
+  'video/x-m4v': '.mp4',
+  'video/mp4v-es': '.mp4',
   'video/webm': '.webm',
   'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'video/ogg': '.ogv',
+  'video/x-msvideo': '.avi',
+  'video/avi': '.avi',
   'model/gltf-binary': '.glb',
-  'model/gltf+json': '.gltf',
-  'application/octet-stream': '.bin'
+  'model/gltf+json': '.gltf'
 };
 
 const ASSET_EXT_TO_MIME: Record<string, string> = {
@@ -684,21 +962,39 @@ const ASSET_EXT_TO_MIME: Record<string, string> = {
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
   '.webm': 'video/webm',
   '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.ogv': 'video/ogg',
+  '.avi': 'video/x-msvideo',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.bin': 'application/octet-stream'
 };
 
-function resolveAssetExtension(mimeType: string, originalFilename?: string): string {
+export function resolveAssetExtension(mimeType: string, originalFilename?: string): string {
   const cleanMime = (mimeType || '').split(';')[0].trim().toLowerCase();
-  if (ASSET_MIME_TO_EXT[cleanMime]) return ASSET_MIME_TO_EXT[cleanMime];
+  if (cleanMime && cleanMime !== 'application/octet-stream' && ASSET_MIME_TO_EXT[cleanMime]) {
+    return ASSET_MIME_TO_EXT[cleanMime];
+  }
   if (originalFilename) {
     const ext = path.extname(originalFilename).toLowerCase();
     if (/^\.[a-z0-9]{1,8}$/.test(ext) && ext !== '.json') return ext;
   }
   return '.bin';
+}
+
+export function resolveCanonicalAssetMime(mimeType: string, ext: string): string {
+  const normalizedExt = (ext || '').toLowerCase();
+  const cleanMime = (mimeType || '').split(';')[0].trim().toLowerCase();
+  if (cleanMime === 'video/h264' || cleanMime === 'video/x-m4v' || cleanMime === 'video/mp4v-es') {
+    return 'video/mp4';
+  }
+  if (cleanMime && cleanMime !== 'application/octet-stream') {
+    return cleanMime;
+  }
+  return ASSET_EXT_TO_MIME[normalizedExt] || 'application/octet-stream';
 }
 
 function writeLocalAssetIfWritable(fileId: string, buffer: Buffer): void {
@@ -1099,8 +1395,10 @@ export function extractReferencedAssetIds(value: unknown, out = new Set<string>(
 }
 
 const MAX_GITHUB_REST_ASSET_BYTES = 45 * 1024 * 1024;
+const MAX_GITHUB_CHUNKED_ASSET_BYTES = 250 * 1024 * 1024;
+const GITHUB_SYNC_CHUNK_BYTES = 2 * 1024 * 1024;
 
-function getLocalAssetSize(fileId: string): number | null {
+function resolveLocalAssetFilePath(fileId: string): { filePath: string; size: number } | null {
   const candidates = [
     path.resolve(process.cwd(), 'portfolio-data', 'assets', fileId),
     path.resolve(process.cwd(), 'public', 'uploaded-assets', fileId)
@@ -1108,10 +1406,86 @@ function getLocalAssetSize(fileId: string): number | null {
   for (const p of candidates) {
     try {
       const stat = fs.statSync(p);
-      if (stat.isFile()) return stat.size;
+      if (stat.isFile()) return { filePath: p, size: stat.size };
     } catch {}
   }
   return null;
+}
+
+async function syncLargeLocalAssetToGitHubManifest(
+  fileId: string,
+  filePath: string,
+  assetSize: number
+): Promise<void> {
+  const existingManifest = await fetchGitHubAssetManifest(fileId).catch(() => null);
+  if (existingManifest) return;
+
+  const totalChunks = Math.ceil(assetSize / GITHUB_SYNC_CHUNK_BYTES);
+  const chunks: GitHubAssetChunkEntry[] = new Array(totalChunks);
+  const fd = fs.openSync(filePath, 'r');
+
+  try {
+    const uploadChunkAt = async (index: number) => {
+      const start = index * GITHUB_SYNC_CHUNK_BYTES;
+      const chunkLen = Math.min(GITHUB_SYNC_CHUNK_BYTES, assetSize - start);
+      const buf = Buffer.allocUnsafe(chunkLen);
+      let offset = 0;
+      while (offset < chunkLen) {
+        const bytesRead = fs.readSync(fd, buf, offset, chunkLen - offset, start + offset);
+        if (bytesRead <= 0) break;
+        offset += bytesRead;
+      }
+      const slice = offset === chunkLen ? buf : buf.subarray(0, offset);
+      const sha = await createGitHubBlob(slice.toString('base64'));
+      chunks[index] = {
+        sha,
+        start,
+        end: start + slice.length - 1,
+        size: slice.length
+      };
+    };
+
+    const CONCURRENCY = 4;
+    for (let i = 0; i < totalChunks; i += CONCURRENCY) {
+      const batch: Promise<void>[] = [];
+      for (let j = i; j < Math.min(totalChunks, i + CONCURRENCY); j++) {
+        batch.push(uploadChunkAt(j));
+      }
+      await Promise.all(batch);
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  const ext = path.extname(fileId).toLowerCase();
+  let filename = fileId;
+  let mimeType = resolveCanonicalAssetMime('', ext);
+  try {
+    const metaPath = `${filePath}.json`;
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as {
+        mimeType?: string;
+        originalFilename?: string;
+      };
+      if (meta.originalFilename) filename = meta.originalFilename;
+      mimeType = resolveCanonicalAssetMime(meta.mimeType || '', ext);
+    }
+  } catch {}
+
+  await commitGitHubAssetManifestViaGitData({
+    manifest: {
+      version: 1,
+      fileId,
+      filename,
+      mimeType,
+      size: assetSize,
+      chunks
+    },
+    commitMessage: `chore(assets): sync chunked ${filename} (${(
+      assetSize /
+      (1024 * 1024)
+    ).toFixed(1)} MB)`
+  });
 }
 
 export async function ensureGitHubAssetsSynced(value: unknown): Promise<void> {
@@ -1119,12 +1493,18 @@ export async function ensureGitHubAssetsSynced(value: unknown): Promise<void> {
   if (!token || !owner || !repo) return;
   const assetIds = extractReferencedAssetIds(value);
   for (const fileId of assetIds) {
-    const assetSize = getLocalAssetSize(fileId);
-    if (assetSize === null) continue;
-    if (assetSize > MAX_GITHUB_REST_ASSET_BYTES) {
+    const found = resolveLocalAssetFilePath(fileId);
+    if (!found) continue;
+    if (found.size > MAX_GITHUB_CHUNKED_ASSET_BYTES) {
       console.warn(
-        `Skipping GitHub REST upload for large asset ${fileId} (${(assetSize / (1024 * 1024)).toFixed(1)} MB > 45 MB limit).`
+        `Skipping GitHub sync for oversized asset ${fileId} (${(found.size / (1024 * 1024)).toFixed(1)} MB > 250 MB limit).`
       );
+      continue;
+    }
+    if (found.size > MAX_GITHUB_REST_ASSET_BYTES) {
+      await syncLargeLocalAssetToGitHubManifest(fileId, found.filePath, found.size).catch((err) => {
+        console.warn(`Skipped chunk-syncing large asset ${fileId} to GitHub:`, err);
+      });
       continue;
     }
     const localBuf = readLocalAssetIfPresent(fileId);
@@ -1279,22 +1659,35 @@ export async function serveGitHubAssetRequest(
 
     if (rangeHeader) {
       const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-      if (match) {
-        const start = match[1] ? Number(match[1]) : 0;
-        const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+      if (match && (match[1] || match[2])) {
+        const start = !match[1] && match[2]
+          ? Math.max(0, totalLength - Number(match[2]))
+          : Number(match[1]);
+        const requestedEnd = !match[1] && match[2]
+          ? totalLength - 1
+          : match[2]
+          ? Math.min(Number(match[2]), totalLength - 1)
+          : totalLength - 1;
         const end =
           runtimeMode === 'vercel'
             ? Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1)
             : requestedEnd;
-        if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end && end < totalLength) {
+        if (!Number.isNaN(start) && !Number.isNaN(end) && start >= 0 && start <= end && end < totalLength) {
           const slice = assetBuffer.subarray(start, end + 1);
           res.statusCode = 206;
           res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
           res.setHeader('Content-Length', String(slice.length));
-          res.end(slice);
+          res.end(req.method === 'HEAD' ? undefined : slice);
           return true;
         }
       }
+    }
+
+    if (req.method === 'HEAD') {
+      res.statusCode = 200;
+      res.setHeader('Content-Length', String(totalLength));
+      res.end();
+      return true;
     }
 
     if (runtimeMode === 'vercel' && totalLength > VERCEL_MAX_RANGE_CHUNK_BYTES) {
@@ -1317,7 +1710,7 @@ export async function serveGitHubAssetRequest(
   if (!manifest) return false;
 
   const totalLength = manifest.size;
-  const mimeType = manifest.mimeType || defaultMime;
+  const mimeType = resolveCanonicalAssetMime(manifest.mimeType || '', ext);
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
@@ -1328,16 +1721,35 @@ export async function serveGitHubAssetRequest(
 
   if (rangeHeader) {
     const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-    if (match) {
-      start = match[1] ? Number(match[1]) : 0;
-      const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+    if (match && (match[1] || match[2])) {
+      start = !match[1] && match[2]
+        ? Math.max(0, totalLength - Number(match[2]))
+        : Number(match[1]);
+      const requestedEnd = !match[1] && match[2]
+        ? totalLength - 1
+        : match[2]
+        ? Math.min(Number(match[2]), totalLength - 1)
+        : totalLength - 1;
       end = Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1);
     }
+  } else if (req.method === 'HEAD') {
+    res.statusCode = 200;
+    res.setHeader('Content-Length', String(totalLength));
+    res.end();
+    return true;
   }
 
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= totalLength) {
+  if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start > end || end >= totalLength) {
     res.statusCode = 416;
     res.setHeader('Content-Range', `bytes */${totalLength}`);
+    res.end();
+    return true;
+  }
+
+  if (req.method === 'HEAD') {
+    res.statusCode = 206;
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
+    res.setHeader('Content-Length', String(end - start + 1));
     res.end();
     return true;
   }
@@ -1874,7 +2286,7 @@ export async function handleUpdatePortfolioRequest(
       return;
     }
 
-    const uploadBody = body as unknown as HandleUploadBody;
+    const uploadBody = body as unknown as { type?: string };
     const isCompletedWebhook = uploadBody?.type === 'blob.upload-completed';
     if (!isCompletedWebhook && !isAuthenticated) {
       sendJson(res, 401, {
@@ -1885,9 +2297,10 @@ export async function handleUpdatePortfolioRequest(
     }
 
     try {
+      const { handleUpload } = await import('@vercel/blob/client');
       const jsonResponse = await handleUpload({
         token: blobToken,
-        body: uploadBody,
+        body: body as unknown as Parameters<typeof handleUpload>[0]['body'],
         request: req,
         onBeforeGenerateToken: async () => ({
           allowedContentTypes: [
@@ -2440,6 +2853,7 @@ export async function handleUpdatePortfolioRequest(
         const hashInput = validChunkMeta.map((c) => `${c.sha}:${c.size}`).join('|');
         const hash = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 32);
         const ext = resolveAssetExtension(rawMime, rawFilename);
+        const canonicalMime = resolveCanonicalAssetMime(rawMime, ext);
         const fileId = `${hash}${ext}`;
 
         await commitGitHubAssetManifestViaGitData({
@@ -2447,7 +2861,7 @@ export async function handleUpdatePortfolioRequest(
             version: 1,
             fileId,
             filename: rawFilename || fileId,
-            mimeType: rawMime,
+            mimeType: canonicalMime,
             size: totalSize,
             chunks: validChunkMeta
           },
@@ -2462,7 +2876,7 @@ export async function handleUpdatePortfolioRequest(
           url: `/api/assets/${fileId}`,
           filename: rawFilename || fileId,
           size: totalSize,
-          mimeType: rawMime
+          mimeType: canonicalMime
         });
         return;
       }
@@ -2514,9 +2928,11 @@ export async function handleUpdatePortfolioRequest(
 
       const hash = crypto.createHash('sha256').update(finalBuffer).digest('hex').slice(0, 32);
       const ext = resolveAssetExtension(finalMime, finalFilename);
+      finalMime = resolveCanonicalAssetMime(finalMime, ext);
       const fileId = `${hash}${ext}`;
 
       if (blobToken) {
+        const { put } = await import('@vercel/blob');
         const blobResult = await put(`uploaded-assets/${fileId}`, finalBuffer, {
           access: 'public',
           token: blobToken,
@@ -2610,11 +3026,13 @@ export async function handleUpdatePortfolioRequest(
 
     const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 32);
     const ext = resolveAssetExtension(finalMime, finalFilename);
+    finalMime = resolveCanonicalAssetMime(finalMime, ext);
     const fileId = `${hash}${ext}`;
 
     const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
     if (blobToken) {
       try {
+        const { put } = await import('@vercel/blob');
         const blobResult = await put(`uploaded-assets/${fileId}`, buffer, {
           access: 'public',
           token: blobToken,
@@ -2769,5 +3187,14 @@ export async function handleUpdatePortfolioRequest(
 }
 
 export default async function handler(req: NodeReq, res: ServerResponse): Promise<void> {
-  return handleUpdatePortfolioRequest(req, res);
+  try {
+    await handleUpdatePortfolioRequest(req, res);
+  } catch (err) {
+    if (!res.headersSent && !res.writableEnded) {
+      sendJson(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Unexpected error in /api/update-portfolio.'
+      });
+    }
+  }
 }

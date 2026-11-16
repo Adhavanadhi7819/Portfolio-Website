@@ -175,6 +175,55 @@ export function deleteChapter(chapters: VideoChapter[], chapterId: string): Vide
 }
 
 /**
+ * Strip per-chapter custom videoUrl overrides so the newly uploaded master showreel plays across the scene.
+ */
+export function clearChapterVideoOverrides(chapters: VideoChapter[]): VideoChapter[] {
+  if (!Array.isArray(chapters)) return [];
+  return chapters.map((ch) => {
+    if (!ch.videoUrl) return ch;
+    const { videoUrl: _removed, ...rest } = ch;
+    return rest;
+  });
+}
+
+/**
+ * Resolve canonical video MIME type from reported browser MIME + filename extension
+ * (prevents H.264/MP4/MKV/M4V files reported as application/octet-stream from turning into .bin).
+ */
+export function resolveVideoMimeType(filename: string, reportedMime?: string): string {
+  const cleanReported = (reportedMime || '').split(';')[0].trim().toLowerCase();
+  const normalizedName = (filename || '').toLowerCase();
+  const dot = normalizedName.lastIndexOf('.');
+  const ext = dot >= 0 ? normalizedName.slice(dot) : '';
+
+  const extToMime: Record<string, string> = {
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska',
+    '.ogv': 'video/ogg',
+    '.avi': 'video/x-msvideo'
+  };
+
+  if (
+    cleanReported === 'video/h264' ||
+    cleanReported === 'video/x-m4v' ||
+    cleanReported === 'video/mp4v-es'
+  ) {
+    return 'video/mp4';
+  }
+  if (
+    !cleanReported ||
+    cleanReported === 'application/octet-stream' ||
+    cleanReported === 'binary/octet-stream'
+  ) {
+    return extToMime[ext] || 'video/mp4';
+  }
+  return cleanReported;
+}
+
+/**
  * Maya 3D models mutations
  */
 export function addMayaModel(models: MayaModelItem[], newModel: MayaModelItem): MayaModelItem[] {

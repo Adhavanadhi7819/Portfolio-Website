@@ -23,7 +23,9 @@ import {
   updateSectionConfig,
   getSectionTargetTab,
   moveSectionToTab,
-  applyDraggedSectionOrder
+  applyDraggedSectionOrder,
+  clearChapterVideoOverrides,
+  resolveVideoMimeType
 } from './portfolioLogic';
 import { VideoChapter, ProjectItem, PortfolioSectionConfig } from '../types/portfolio';
 import {
@@ -448,7 +450,8 @@ test('data.json exists at repository root and contains complete portfolio schema
   assert.ok(mainState.designerInfo.name);
   assert.ok(Array.isArray(mainState.designerInfo.skills) && mainState.designerInfo.skills.length > 0);
   assert.ok(Array.isArray(mainState.projects) && mainState.projects.length > 0);
-  assert.ok(Array.isArray(mainState.videoChapters) && mainState.videoChapters.length > 0);
+  assert.ok(Array.isArray(mainState.sections) && mainState.sections.length > 0);
+  assert.ok(mainState.videoChapters === undefined || Array.isArray(mainState.videoChapters));
 });
 
 test('Admin PIN validation, session token signing, and bundle normalization work securely', async () => {
@@ -1356,7 +1359,7 @@ test('extractLargestVideoFromZip extracts Store and Deflate MP4 entries while ig
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
-  const { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } = await import('../../api/zipVideo');
+  const { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } = await import('../../api/update-portfolio');
 
   assert.equal(MAX_VIDEO_ZIP_BYTES, 200 * 1024 * 1024);
 
@@ -2005,7 +2008,196 @@ test('api/update-portfolio finalizes >45 MB (up to 250 MB) video via GitHub mani
   }
 });
 
+test('api/update-portfolio has zero relative or third-party top-level imports for Vercel ESM cold start and always returns JSON on default handler', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const source = fs.readFileSync(path.resolve(process.cwd(), 'api/update-portfolio.ts'), 'utf8');
 
+  const topLevelImports = source
+    .split(/\r?\n/)
+    .filter((line) => /^\s*import\s+/.test(line));
 
+  assert.ok(topLevelImports.length > 0);
+  for (const importLine of topLevelImports) {
+    assert.match(
+      importLine,
+      /from\s+['"]node:[^'"]+['"];?$/,
+      `Expected only node:* built-in top-level imports in api/update-portfolio.ts, found: ${importLine}`
+    );
+  }
 
+  const mod = await import('../../api/update-portfolio');
+  const handler = mod.default;
 
+  const statusReq = createMockNodeReq({
+    method: 'GET',
+    url: '/api/update-portfolio?action=status&skipRemotePairing=1'
+  });
+  const statusRes = createMockServerRes();
+  await handler(statusReq as never, statusRes.res as never);
+  assert.equal(statusRes.res.statusCode, 200);
+  assert.match(String(statusRes.headers.get('content-type') || ''), /application\/json/);
+  assert.equal(statusRes.getJson().ok, true);
+
+  const crashRes = createMockServerRes();
+  // Passing a malformed req object whose property getter throws ensures top-level JSON guard works
+  const brokenReq = {
+    get method(): string {
+      throw new Error('Simulated handler crash');
+    }
+  };
+  await handler(brokenReq as never, crashRes.res as never);
+  assert.equal(crashRes.res.statusCode, 500);
+  assert.match(String(crashRes.headers.get('content-type') || ''), /application\/json/);
+  assert.equal(crashRes.getJson().ok, false);
+  assert.match(String(crashRes.getJson().error || ''), /Simulated handler crash/);
+});
+
+test('verifyOwnerTwoFactorWithServer falls back to Express /api/auth/verify if /api/update-portfolio returns non-JSON', async () => {
+  const { verifyOwnerTwoFactorWithServer } = await import('./portfolioServerSync');
+  const prevFetch = globalThis.fetch;
+  const calledUrls: string[] = [];
+
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calledUrls.push(url);
+      if (url === '/api/update-portfolio') {
+        return new Response('<html>500 Error</html>', {
+          status: 500,
+          headers: { 'Content-Type': 'text/html' }
+        });
+      }
+      if (url === '/api/auth/verify') {
+        return new Response(JSON.stringify({ ok: true, token: 'fallback_express_token' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response('Not Found', { status: 404 });
+    }) as typeof fetch;
+
+    const result = await verifyOwnerTwoFactorWithServer('906', '123456');
+    assert.equal(result.ok, true);
+    assert.deepEqual(calledUrls, ['/api/update-portfolio', '/api/auth/verify']);
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('resolveVideoMimeType and clearChapterVideoOverrides normalize H.264/MP4 clips and strip masking chapter URLs', async () => {
+  assert.equal(resolveVideoMimeType('showreel_final.mp4', ''), 'video/mp4');
+  assert.equal(resolveVideoMimeType('capture.mp4', 'application/octet-stream'), 'video/mp4');
+  assert.equal(resolveVideoMimeType('clip.h264', 'video/h264'), 'video/mp4');
+  assert.equal(resolveVideoMimeType('scene.m4v', 'video/x-m4v'), 'video/mp4');
+  assert.equal(resolveVideoMimeType('gameplay.mkv', 'application/octet-stream'), 'video/x-matroska');
+  assert.equal(resolveVideoMimeType('turntable.mov', ''), 'video/quicktime');
+  assert.equal(resolveVideoMimeType('reel.webm', 'video/webm'), 'video/webm');
+
+  const chapters: VideoChapter[] = [
+    {
+      id: 'ch-1',
+      title: 'Temple Scene',
+      subtitle: 'UE5',
+      startTime: 0,
+      endTime: 30,
+      thumbnail: '/showcase/temple-upside.jpg',
+      videoUrl: '/api/assets/old-chapter-video.mp4',
+      category: 'environment',
+      description: 'Desc'
+    },
+    {
+      id: 'ch-2',
+      title: 'Car Rig',
+      subtitle: 'Chaos',
+      startTime: 31,
+      endTime: 60,
+      thumbnail: '/showcase/ae86-drift.jpg',
+      category: 'vehicle-rigging',
+      description: 'Drift'
+    }
+  ];
+
+  const cleared = clearChapterVideoOverrides(chapters);
+  assert.equal(cleared.length, 2);
+  assert.equal(cleared[0].videoUrl, undefined);
+  assert.equal(cleared[0].title, 'Temple Scene');
+  assert.equal(cleared[0].startTime, 0);
+  assert.equal(cleared[1].videoUrl, undefined);
+
+  const { resolveAssetExtension, resolveCanonicalAssetMime } = await import('../../api/update-portfolio');
+  assert.equal(resolveAssetExtension('application/octet-stream', 'unreal-capture.mp4'), '.mp4');
+  assert.equal(resolveAssetExtension('video/h264', 'h264-export'), '.mp4');
+  assert.equal(resolveAssetExtension('video/x-m4v', 'turntable.m4v'), '.mp4');
+  assert.equal(resolveAssetExtension('application/octet-stream', 'clip.mkv'), '.mkv');
+  assert.equal(resolveCanonicalAssetMime('application/octet-stream', '.mp4'), 'video/mp4');
+  assert.equal(resolveCanonicalAssetMime('video/h264', '.mp4'), 'video/mp4');
+  assert.equal(resolveCanonicalAssetMime('video/x-m4v', '.m4v'), 'video/mp4');
+});
+
+test('zipped binary MP4 extraction preserves exact bytes and serveGitHubAssetRequest handles HEAD and suffix Range requests', async () => {
+  const crypto = await import('node:crypto');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { extractLargestVideoFromZipBlob } = await import('./zipClient');
+  const { extractLargestVideoFromZip, serveGitHubAssetRequest } = await import('../../api/update-portfolio');
+
+  const header = Buffer.from('00000018ftypmp42_MOOV_TAIL_', 'utf8');
+  const randomPayload = crypto.randomBytes(64 * 1024);
+  const fullMp4 = Buffer.concat([header, randomPayload]);
+  const expectedSha = crypto.createHash('sha256').update(fullMp4).digest('hex');
+
+  const archiveBuf = await buildTestZipArchive([
+    { name: 'renders/Final Out Web.mp4', data: fullMp4, compressionMethod: 8 }
+  ]);
+
+  const zipBlob = new File([new Uint8Array(archiveBuf)], 'Final Out Web.zip', { type: 'application/zip' });
+  const browserExtracted = await extractLargestVideoFromZipBlob(zipBlob);
+  assert.equal(browserExtracted.mimeType, 'video/mp4');
+  assert.equal(browserExtracted.size, fullMp4.length);
+  const browserBuf = Buffer.from(await browserExtracted.file.arrayBuffer());
+  assert.equal(crypto.createHash('sha256').update(browserBuf).digest('hex'), expectedSha);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zip-verify-'));
+  try {
+    const tmpZip = path.join(tmpDir, 'video.zip');
+    fs.writeFileSync(tmpZip, archiveBuf);
+    const serverExtracted = await extractLargestVideoFromZip(tmpZip, tmpDir);
+    const serverBuf = fs.readFileSync(serverExtracted.extractedPath);
+    assert.equal(crypto.createHash('sha256').update(serverBuf).digest('hex'), expectedSha);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  // Test HEAD & suffix Range on local asset via serveGitHubAssetRequest
+  const fileId = `${expectedSha.slice(0, 32)}.mp4`;
+  const assetsDir = path.resolve(process.cwd(), 'portfolio-data', 'assets');
+  const assetPath = path.join(assetsDir, fileId);
+  fs.mkdirSync(assetsDir, { recursive: true });
+  fs.writeFileSync(assetPath, fullMp4);
+  try {
+    const headReq = createMockNodeReq({ method: 'HEAD', url: `/api/assets/${fileId}`, headers: {} });
+    const headRes = createMockServerRes();
+    const headServed = await serveGitHubAssetRequest(headReq as never, headRes.res as never, fileId, 'vercel');
+    assert.equal(headServed, true);
+    assert.equal(headRes.res.statusCode, 200);
+    assert.equal(headRes.headers.get('content-length'), String(fullMp4.length));
+    assert.equal(headRes.getBodyBuffer().length, 0);
+
+    const suffixReq = createMockNodeReq({
+      method: 'GET',
+      url: `/api/assets/${fileId}`,
+      headers: { range: 'bytes=-16' }
+    });
+    const suffixRes = createMockServerRes();
+    const suffixServed = await serveGitHubAssetRequest(suffixReq as never, suffixRes.res as never, fileId, 'vercel');
+    assert.equal(suffixServed, true);
+    assert.equal(suffixRes.res.statusCode, 206);
+    assert.deepEqual(suffixRes.getBodyBuffer(), fullMp4.subarray(fullMp4.length - 16));
+  } finally {
+    try {
+      if (fs.existsSync(assetPath)) fs.unlinkSync(assetPath);
+    } catch {}
+  }
+});

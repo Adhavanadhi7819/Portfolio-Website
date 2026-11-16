@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
 import { ProjectItem } from '../types/portfolio';
 import { formatVideoTime } from '../utils/portfolioLogic';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
@@ -26,7 +26,24 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onSaveProject
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isCardPlaying, setIsCardPlaying] = useState(false);
+  const [isCardMuted, setIsCardMuted] = useState(true);
+  const cardVideoRef = useRef<HTMLVideoElement>(null);
   const { fitClass, style: alignStyle } = getPhotoAlignImgProps(project.thumbnailAlign);
+
+  const toggleCardVideo = () => {
+    const vid = cardVideoRef.current;
+    if (!vid) {
+      onOpenModal(project);
+      return;
+    }
+    if (vid.paused) {
+      void vid.play().then(() => setIsCardPlaying(true)).catch(() => {});
+    } else {
+      vid.pause();
+      setIsCardPlaying(false);
+    }
+  };
 
   return (
     <motion.div
@@ -34,17 +51,52 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
       className="h-full group rounded-2xl bg-zinc-950/65 hover:bg-zinc-900/80 backdrop-blur-md border border-zinc-800/80 hover:border-amber-500/50 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-colors duration-300 flex flex-col justify-between"
     >
-      {/* Top Image & Overlays */}
+      {/* Top Image / Video & Overlays */}
       <div>
         <div className="relative aspect-[16/10] overflow-hidden bg-black">
-          <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
-            <img
-              src={project.thumbnail}
-              alt={project.title}
-              className={`w-full h-full ${fitClass} transition-all duration-300`}
-              style={alignStyle}
-            />
-          </div>
+          {project.videoUrl ? (
+            <>
+              <video
+                key={project.videoUrl}
+                ref={cardVideoRef}
+                src={project.videoUrl}
+                poster={project.thumbnail}
+                muted={isCardMuted}
+                playsInline
+                loop
+                preload="metadata"
+                onPlay={() => setIsCardPlaying(true)}
+                onPause={() => setIsCardPlaying(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCardVideo();
+                }}
+                className="w-full h-full object-cover bg-black cursor-pointer"
+              />
+              {!isCardPlaying && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCardVideo();
+                  }}
+                  aria-label={`Play ${project.title} video preview`}
+                  className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black flex items-center justify-center shadow-xl z-10 cursor-pointer transition-transform hover:scale-105"
+                >
+                  <Play className="w-5 h-5 fill-black ml-0.5" />
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="w-full h-full group-hover:scale-105 transition-transform duration-500">
+              <img
+                src={project.thumbnail}
+                alt={project.title}
+                className={`w-full h-full ${fitClass} transition-all duration-300`}
+                style={alignStyle}
+              />
+            </div>
+          )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-black/30"></div>
 
           {/* Top badges */}
@@ -56,20 +108,22 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             <div className="flex items-center gap-1 flex-wrap justify-end">
               {isOwnerMode && (
                 <>
-                  <PhotoAdjustOverlay
-                    align={project.thumbnailAlign}
-                    isOwnerMode={isOwnerMode}
-                    compact
-                    staticPosition
-                    onChange={(nextAlign) => {
-                      const updated = { ...project, thumbnailAlign: nextAlign };
-                      if (onSaveProject) {
-                        onSaveProject(updated);
-                      } else if (onEdit) {
-                        onEdit(updated);
-                      }
-                    }}
-                  />
+                  {!project.videoUrl && (
+                    <PhotoAdjustOverlay
+                      align={project.thumbnailAlign}
+                      isOwnerMode={isOwnerMode}
+                      compact
+                      staticPosition
+                      onChange={(nextAlign) => {
+                        const updated = { ...project, thumbnailAlign: nextAlign };
+                        if (onSaveProject) {
+                          onSaveProject(updated);
+                        } else if (onEdit) {
+                          onEdit(updated);
+                        }
+                      }}
+                    />
+                  )}
                   <MediaUploadOverlay
                     currentUrl={project.thumbnail}
                     mediaType="image"
@@ -96,6 +150,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                       } else if (onEdit) {
                         onEdit({ ...project, videoUrl: newVideoUrl });
                       }
+                      setTimeout(() => {
+                        const vid = cardVideoRef.current;
+                        if (vid) {
+                          vid.muted = true;
+                          void vid.play().then(() => setIsCardPlaying(true)).catch(() => {});
+                        }
+                      }, 120);
                     }}
                     label="Video"
                     position="top-right"
@@ -143,17 +204,32 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               )}
 
               {project.videoUrl ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenModal(project);
-                  }}
-                  className="px-2 py-0.5 rounded-md bg-black/75 hover:bg-amber-500 hover:text-black backdrop-blur-md text-[10px] font-mono text-amber-300 border border-amber-500/40 hover:border-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
-                  title="Watch uploaded project video"
-                >
-                  <Play className="w-2.5 h-2.5 fill-current" />
-                  <span>Video</span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCardVideo();
+                    }}
+                    className="p-1 rounded-md bg-black/75 hover:bg-amber-500 hover:text-black backdrop-blur-md text-amber-300 border border-amber-500/40 transition-colors cursor-pointer"
+                    title={isCardPlaying ? 'Pause preview' : 'Play preview'}
+                  >
+                    {isCardPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5 fill-current" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextMuted = !isCardMuted;
+                      setIsCardMuted(nextMuted);
+                      if (cardVideoRef.current) cardVideoRef.current.muted = nextMuted;
+                    }}
+                    className="p-1 rounded-md bg-black/75 hover:bg-zinc-800 backdrop-blur-md text-zinc-200 border border-zinc-700/80 transition-colors cursor-pointer"
+                    title={isCardMuted ? 'Unmute preview' : 'Mute preview'}
+                  >
+                    {isCardMuted ? <VolumeX className="w-2.5 h-2.5" /> : <Volume2 className="w-2.5 h-2.5 text-amber-400" />}
+                  </button>
+                </div>
               ) : project.videoTimestamp !== undefined && (
                 <button
                   onClick={(e) => {
@@ -171,7 +247,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </div>
 
           {project.isFlagship && (
-            <div className="absolute bottom-2.5 left-2.5 px-2.5 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow">
+            <div className="pointer-events-none absolute bottom-2.5 left-2.5 px-2.5 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider shadow z-10">
               FLAGSHIP GAME
             </div>
           )}

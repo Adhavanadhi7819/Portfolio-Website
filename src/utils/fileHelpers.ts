@@ -2,6 +2,7 @@
  * Utility functions for persistent server-backed media uploads (images, videos, PDF/DOCX resumes)
  */
 import { uploadAssetToServer } from './portfolioServerSync';
+import { resolveVideoMimeType } from './portfolioLogic';
 
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
@@ -109,7 +110,7 @@ export async function uploadImageAsset(
 
 export const MAX_VIDEO_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
 export const VIDEO_FILE_ACCEPT =
-  'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v,.zip,application/zip,application/x-zip-compressed';
+  'video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.m4v,.mkv,.avi,.zip,application/zip,application/x-zip-compressed';
 
 export function isZipFile(file: File): boolean {
   const name = file.name.toLowerCase();
@@ -123,7 +124,7 @@ export function isZipFile(file: File): boolean {
 }
 
 /**
- * Uploads a video file (MP4, WebM, MOV, M4V) or a ZIP archive containing a video (up to 200 MB).
+ * Uploads a video file (MP4, WebM, MOV, M4V, MKV) or a ZIP archive containing a video (up to 200 MB).
  * Returns a permanent `/api/assets/...` streaming URL accessible across all devices.
  */
 export async function uploadVideoAsset(
@@ -137,10 +138,14 @@ export async function uploadVideoAsset(
     );
   }
 
+  const normalizedMime = zipArchive
+    ? file.type || 'application/zip'
+    : resolveVideoMimeType(file.name, file.type);
+
   const uploaded = await uploadAssetToServer(
     file,
     file.name,
-    zipArchive ? file.type || 'application/zip' : file.type || 'video/mp4',
+    normalizedMime,
     onProgress,
     zipArchive ? { extractVideo: true } : undefined
   );

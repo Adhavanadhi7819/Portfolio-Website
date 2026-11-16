@@ -195,10 +195,11 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
     }
     return (
       <video
+        key={videoUrl}
         src={videoUrl}
         controls
         playsInline
-        preload="metadata"
+        preload="auto"
         className="w-full h-full object-cover bg-black"
       />
     );
