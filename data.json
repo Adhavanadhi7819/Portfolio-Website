@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 50,
-  "updatedAt": "2026-11-16T16:45:00.588Z",
+  "version": 51,
+  "updatedAt": "2026-11-16T17:04:14.867Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-16T16:45:00.061Z",
+      "updatedAt": "2026-11-16T17:04:14.200Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -430,7 +430,24 @@
           }
         },
         "videoPath": "/api/assets/d8c15692969065095d7653a5761de0d0.mp4",
-        "videoChapters": [],
+        "videoChapters": [
+          {
+            "id": "ch-1794848593009",
+            "title": "New Temple",
+            "subtitle": "",
+            "startTime": 0,
+            "endTime": 13,
+            "thumbnail": "/api/assets/8487775bc8d348913c9690dc646e51b8.jpg",
+            "thumbnailAlign": {
+              "x": 50,
+              "y": 50,
+              "zoom": 1,
+              "fit": "cover"
+            },
+            "category": "all",
+            "description": ""
+          }
+        ],
         "projects": [
           {
             "id": "stylized-pirate-rpg",
