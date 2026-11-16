@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 44,
-  "updatedAt": "2026-11-16T15:02:39.793Z",
+  "version": 45,
+  "updatedAt": "2026-11-16T16:42:14.340Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-16T15:02:39.571Z",
+      "updatedAt": "2026-11-16T16:42:13.863Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -431,22 +431,6 @@
         },
         "videoPath": "/api/assets/556c15bc4e7f5507f53ebf54d56cd07e.mp4",
         "videoChapters": [
-          {
-            "id": "intro",
-            "title": "Identity & Introduction",
-            "subtitle": "Adhavan // Game Designer Reel",
-            "startTime": 0,
-            "endTime": 10,
-            "thumbnail": "/showcase/hero-adhavan.jpg",
-            "thumbnailAlign": {
-              "x": 53,
-              "y": 26,
-              "zoom": 1.3,
-              "fit": "cover"
-            },
-            "category": "all",
-            "description": "Overview of Adhavan’s design philosophy, Unreal Engine focus, and 3D character work."
-          },
           {
             "id": "pirate-haven",
             "title": "Tavern Island & Pirate Galleon",
