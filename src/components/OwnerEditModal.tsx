@@ -21,9 +21,10 @@ import {
   Image,
   Box,
   ExternalLink,
-  Edit3
+  Edit3,
+  Video
 } from 'lucide-react';
-import { uploadDocumentAsset, uploadImageAsset } from '../utils/fileHelpers';
+import { uploadDocumentAsset, uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 import { PhotoAlignInlineControl } from './PhotoAdjustOverlay';
 import { 
   ProjectItem, 
@@ -106,6 +107,9 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string | null>(null);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [resumeUploadError, setResumeUploadError] = useState<string | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -116,6 +120,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     setJsonError('');
     setSavedSuccessMessage(null);
     setResumeUploadError(null);
+    setVideoUploadError(null);
 
     const initialMode = mode === 'bio' ? 'hero' : mode;
     setActiveTab(initialMode);
@@ -200,6 +205,31 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
     }, 2500);
   };
 
+  const handleModalVideoUpload = async (
+    file: File | undefined,
+    onUploaded: (url: string) => void
+  ) => {
+    if (!file) return;
+    setIsUploadingVideo(true);
+    setVideoUploadProgress(0);
+    setVideoUploadError(null);
+    try {
+      const url = await uploadVideoAsset(file, (pct) => setVideoUploadProgress(pct));
+      onUploaded(url);
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+          ? 'Owner session expired. Re-verify 2FA to upload videos.'
+          : err instanceof Error && err.message
+          ? err.message
+          : 'Failed to upload video file. Try a smaller MP4/WebM or paste a hosted video URL.';
+      setVideoUploadError(msg);
+    } finally {
+      setIsUploadingVideo(false);
+      setVideoUploadProgress(0);
+    }
+  };
+
   // Handlers
   const handleSaveProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,6 +264,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
         ? projectForm.galleryImages
         : [projectForm.thumbnail || '/showcase/hero-adhavan.jpg'],
       galleryAligns: projectForm.galleryAligns,
+      videoUrl: projectForm.videoUrl?.trim() || undefined,
       videoTimestamp: Number(projectForm.videoTimestamp) || 0,
       isFlagship: Boolean(projectForm.isFlagship),
       conceptNotes: projectForm.conceptNotes
@@ -259,6 +290,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
       endTime: Number(chapterForm.endTime) || ((Number(chapterForm.startTime) || 0) + 15),
       thumbnail: chapterForm.thumbnail || '/showcase/hero-adhavan.jpg',
       thumbnailAlign: chapterForm.thumbnailAlign,
+      videoUrl: chapterForm.videoUrl?.trim() || undefined,
       category: (chapterForm.category as ProjectCategory) || 'all',
       description: chapterForm.description || ''
     };
@@ -281,6 +313,7 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
       description: modelForm.description || '',
       thumbnail: modelForm.thumbnail || '/showcase/maya-models.jpg',
       thumbnailAlign: modelForm.thumbnailAlign,
+      videoUrl: modelForm.videoUrl?.trim() || undefined,
       software: modelForm.software || 'Autodesk Maya',
       details: Array.isArray(modelForm.details) ? modelForm.details : [],
       specs: {
@@ -792,9 +825,30 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold mb-1.5">
-                  Main Video Source Path / URL *
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    Main Video Source Path / URL *
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                    <Video className="w-3 h-3" />
+                    <span>
+                      {isUploadingVideo
+                        ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}`
+                        : 'Upload Video (MP4 / ZIP)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept={VIDEO_FILE_ACCEPT}
+                      className="hidden"
+                      disabled={isUploadingVideo}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        await handleModalVideoUpload(file, (url) => setVideoPathForm(url));
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={videoPathForm}
@@ -802,8 +856,11 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                   placeholder="/assets/aistudio/Portfolio_46956db1.mp4"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-amber-500/50 text-sm text-white font-mono focus:outline-none focus:border-amber-400"
                 />
+                {videoUploadError && (
+                  <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
+                )}
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Default local video: <code className="text-amber-400">/assets/aistudio/Portfolio_46956db1.mp4</code>. You can paste any local video path or hosted MP4 URL.
+                  Upload an MP4/WebM/MOV video or a ZIP archive up to 100 MB, or paste any hosted MP4 URL.
                 </p>
               </div>
 
@@ -977,16 +1034,49 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300 mb-1">
-                    Recorded Gameplay Video URL / Path
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-300">
+                      Recorded Gameplay Video URL / Path
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[10px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                        <Video className="w-3 h-3" />
+                        <span>{isUploadingVideo ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}` : 'Upload Video'}</span>
+                        <input
+                          type="file"
+                          accept={VIDEO_FILE_ACCEPT}
+                          className="hidden"
+                          disabled={isUploadingVideo}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            await handleModalVideoUpload(file, (url) =>
+                              setBioForm((prev) => ({ ...prev, flagshipVideoUrl: url }))
+                            );
+                          }}
+                        />
+                      </label>
+                      {bioForm.flagshipVideoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setBioForm((prev) => ({ ...prev, flagshipVideoUrl: '' }))}
+                          className="text-[10px] font-mono text-red-400 hover:underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={bioForm.flagshipVideoUrl || ''}
                     onChange={(e) => setBioForm({ ...bioForm, flagshipVideoUrl: e.target.value })}
-                    placeholder="Upload directly on the Latest Project video slot or paste MP4 URL"
+                    placeholder="Upload MP4/WebM gameplay capture or paste MP4 URL"
                     className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-xs text-amber-400 font-mono focus:outline-none focus:border-amber-500"
                   />
+                  {videoUploadError && (
+                    <p className="text-[11px] text-red-400 mt-1">{videoUploadError}</p>
+                  )}
                 </div>
               </div>
 
@@ -1257,10 +1347,91 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 />
               )}
 
+              {/* Project Showcase Video Upload or URL */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    Project Showcase Video (Upload MP4/WebM or URL)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                      <Video className="w-3 h-3" />
+                      <span>{isUploadingVideo ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}` : 'Upload Video'}</span>
+                      <input
+                        type="file"
+                        accept={VIDEO_FILE_ACCEPT}
+                        className="hidden"
+                        disabled={isUploadingVideo}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          await handleModalVideoUpload(file, (url) =>
+                            setProjectForm((prev) => ({ ...prev, videoUrl: url }))
+                          );
+                        }}
+                      />
+                    </label>
+                    {projectForm.videoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setProjectForm((prev) => ({ ...prev, videoUrl: '' }))}
+                        className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={projectForm.videoUrl || ''}
+                  onChange={(e) => setProjectForm({ ...projectForm, videoUrl: e.target.value })}
+                  placeholder="Optional: Upload video clip or paste MP4/WebM URL"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                {videoUploadError && (
+                  <p className="text-[11px] text-red-400">{videoUploadError}</p>
+                )}
+                {projectForm.videoUrl && (
+                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                    <video
+                      src={projectForm.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
-                  Gallery Photos (1 URL / Path per line)
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300">
+                    Gallery Photos (1 URL / Path per line)
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 cursor-pointer">
+                    <Upload className="w-3 h-3" />
+                    <span>Upload Gallery Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        try {
+                          const url = await uploadImageAsset(file);
+                          setProjectForm((prev) => ({
+                            ...prev,
+                            galleryImages: [...(prev.galleryImages || []), url]
+                          }));
+                        } catch {}
+                      }}
+                    />
+                  </label>
+                </div>
                 <textarea
                   rows={2}
                   value={projectForm.galleryImages ? projectForm.galleryImages.join('\n') : ''}
@@ -1437,6 +1608,67 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                 )}
               </div>
 
+              {/* Dedicated Chapter Video Upload or URL */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    Chapter Video (Upload Video or URL)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                      <Video className="w-3 h-3" />
+                      <span>{isUploadingVideo ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}` : 'Upload Video'}</span>
+                      <input
+                        type="file"
+                        accept={VIDEO_FILE_ACCEPT}
+                        className="hidden"
+                        disabled={isUploadingVideo}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          await handleModalVideoUpload(file, (url) =>
+                            setChapterForm((prev) => ({ ...prev, videoUrl: url }))
+                          );
+                        }}
+                      />
+                    </label>
+                    {chapterForm.videoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setChapterForm((prev) => ({ ...prev, videoUrl: '' }))}
+                        className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={chapterForm.videoUrl || ''}
+                  onChange={(e) => setChapterForm({ ...chapterForm, videoUrl: e.target.value })}
+                  placeholder="Optional: Upload MP4/WebM/MOV clip or paste video URL"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[11px] text-zinc-400">
+                  Upload a dedicated video for this chapter, or leave blank to play the main showreel timestamp.
+                </p>
+                {videoUploadError && (
+                  <p className="text-[11px] text-red-400">{videoUploadError}</p>
+                )}
+                {chapterForm.videoUrl && (
+                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                    <video
+                      src={chapterForm.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-zinc-300 mb-1.5">
                   Short Description
@@ -1523,6 +1755,63 @@ export const OwnerEditModal: React.FC<OwnerEditModalProps> = ({
                     label="3D Render Photo Alignment"
                     aspectClass="aspect-square"
                   />
+                )}
+              </div>
+
+              <div className="space-y-2 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    3D Turntable / Viewport Video (Upload Video or URL)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-[11px] font-mono font-bold uppercase cursor-pointer transition-colors">
+                      <Video className="w-3 h-3" />
+                      <span>{isUploadingVideo ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}` : 'Upload Video'}</span>
+                      <input
+                        type="file"
+                        accept={VIDEO_FILE_ACCEPT}
+                        className="hidden"
+                        disabled={isUploadingVideo}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          await handleModalVideoUpload(file, (url) =>
+                            setModelForm((prev) => ({ ...prev, videoUrl: url }))
+                          );
+                        }}
+                      />
+                    </label>
+                    {modelForm.videoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setModelForm((prev) => ({ ...prev, videoUrl: '' }))}
+                        className="text-[11px] font-mono text-red-400 hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={modelForm.videoUrl || ''}
+                  onChange={(e) => setModelForm({ ...modelForm, videoUrl: e.target.value })}
+                  placeholder="Optional: Upload MP4/WebM/MOV clip or paste video URL"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                {videoUploadError && (
+                  <p className="text-[11px] text-red-400">{videoUploadError}</p>
+                )}
+                {modelForm.videoUrl && (
+                  <div className="aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800">
+                    <video
+                      src={modelForm.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 )}
               </div>
 

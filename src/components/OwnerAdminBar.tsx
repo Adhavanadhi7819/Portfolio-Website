@@ -90,12 +90,12 @@ export const OwnerAdminBar: React.FC<OwnerAdminBarProps> = ({
                   ? `GitHub (${lastCommitSha.slice(0, 7)})`
                   : 'GitHub Auto-Push'
                 : isStaticHost
-                ? 'Setup GITHUB_TOKEN'
+                ? 'Vercel External Env'
                 : syncStatus === 'saved'
                 ? 'Saved to data.json'
                 : hasUnsavedChanges
                 ? 'Edits detected'
-                : 'Live CMS'}
+                : 'Vercel External Env'}
             </span>
           </div>
         </div>

@@ -12,7 +12,8 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
 import { VIDEO_PATH, VIDEO_CHAPTERS } from '../data/portfolioData';
 import { formatVideoTime, findCurrentChapter } from '../utils/portfolioLogic';
@@ -21,7 +22,7 @@ import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
 import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
-import { uploadVideoAsset } from '../utils/fileHelpers';
+import { uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 export interface VideoReelRef {
   seekTo: (seconds: number) => void;
@@ -95,7 +96,22 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [isNativePlaying, setIsNativePlaying] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
+  const [isUploadingReelVideo, setIsUploadingReelVideo] = useState(false);
+  const [reelUploadProgress, setReelUploadProgress] = useState<number>(0);
+  const [reelUploadError, setReelUploadError] = useState<string | null>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const activeVideoSrc = activeChapter.videoUrl || videoPath;
+
+  // Keep activeChapter synchronized with edits to videoChapters
+  useEffect(() => {
+    const matched = videoChapters.find(c => c.id === activeChapter.id);
+    if (matched && matched !== activeChapter) {
+      setActiveChapter(matched);
+    } else if (!matched && videoChapters[0]) {
+      setActiveChapter(videoChapters[0]);
+    }
+  }, [videoChapters, activeChapter]);
 
   // Playback simulation timer when native video is not available or errored
   useEffect(() => {
@@ -114,13 +130,14 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     return () => clearInterval(interval);
   }, [isPlaying, isNativePlaying, playbackSpeed, duration]);
 
-  // Synchronize active chapter as currentTime advances
+  // Synchronize active chapter as currentTime advances (only for shared master showreel video)
   useEffect(() => {
+    if (activeChapter.videoUrl) return;
     const ch = findCurrentChapter(currentTime, videoChapters);
     if (ch && ch.id !== activeChapter.id) {
       setActiveChapter(ch);
     }
-  }, [currentTime, videoChapters, activeChapter.id]);
+  }, [currentTime, videoChapters, activeChapter.id, activeChapter.videoUrl]);
 
   const attemptPlay = async () => {
     setIsPlaying(true);
@@ -150,8 +167,12 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
       setCurrentTime(seconds);
       const ch = findCurrentChapter(seconds, videoChapters);
       if (ch) {
+        const needsSrcSwitch = (ch.videoUrl || videoPath) !== activeVideoSrc;
         setActiveChapter(ch);
         onChapterSelect?.(ch);
+        if (needsSrcSwitch) {
+          pendingSeekRef.current = ch.videoUrl ? 0 : seconds;
+        }
       }
       if (videoRef.current) {
         try {
@@ -177,15 +198,17 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     }
   }));
 
-  // Re-load video whenever videoPath changes
+  // Re-load video whenever activeVideoSrc changes
   useEffect(() => {
     setHasVideoError(false);
+    setIsNativePlaying(false);
+    setIsPlaying(false);
     if (videoRef.current) {
       try {
         videoRef.current.load();
       } catch {}
     }
-  }, [videoPath]);
+  }, [activeVideoSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -200,6 +223,14 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
     const handleLoadedMetadata = () => {
       if (video.duration && !isNaN(video.duration) && video.duration > 0) {
         setDuration(video.duration);
+      }
+      if (pendingSeekRef.current !== null) {
+        const target = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+        try {
+          video.currentTime = target;
+          setCurrentTime(target);
+        } catch {}
       }
       setHasVideoError(false);
     };
@@ -301,12 +332,16 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
   };
 
   const handleSelectChapter = (chapter: VideoChapter) => {
+    const needsSrcSwitch = (chapter.videoUrl || videoPath) !== activeVideoSrc;
     setActiveChapter(chapter);
-    setCurrentTime(chapter.startTime);
+    const nextStart = chapter.videoUrl ? 0 : chapter.startTime;
+    setCurrentTime(nextStart);
     onChapterSelect?.(chapter);
-    if (videoRef.current) {
+    if (needsSrcSwitch) {
+      pendingSeekRef.current = nextStart;
+    } else if (videoRef.current) {
       try {
-        videoRef.current.currentTime = chapter.startTime;
+        videoRef.current.currentTime = nextStart;
       } catch {}
     }
   };
@@ -413,28 +448,47 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               {/* Owner-Only Video Upload Option */}
               <label 
                 className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 hover:border-amber-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                title="Upload your MP4 video reel file from your computer"
+                title="Upload your video (MP4/WebM/MOV) or a .zip archive up to 100 MB"
               >
                 <Upload className="w-3.5 h-3.5 text-amber-400" />
-                <span>Upload Reel (MP4)</span>
+                <span>
+                  {isUploadingReelVideo
+                    ? `Uploading ${reelUploadProgress > 0 ? `${reelUploadProgress}%` : '...'}`
+                    : 'Upload Reel (MP4 / ZIP)'}
+                </span>
                 <input
                   type="file"
-                  accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                  accept={VIDEO_FILE_ACCEPT}
                   className="hidden"
+                  disabled={isUploadingReelVideo}
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
+                    e.target.value = '';
                     if (!file) return;
+                    setIsUploadingReelVideo(true);
+                    setReelUploadProgress(0);
+                    setReelUploadError(null);
                     try {
-                      const assetUrl = await uploadVideoAsset(file);
+                      const assetUrl = await uploadVideoAsset(file, (pct) =>
+                        setReelUploadProgress(pct)
+                      );
                       onUploadVideo?.(assetUrl);
                       setHasVideoError(false);
                       setTimeout(() => {
                         attemptPlay();
                       }, 120);
                     } catch (err) {
-                      console.error('Reel video upload failed:', err);
+                      const msg =
+                        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+                          ? 'Session expired. Unlock Owner Mode with 2FA to upload videos.'
+                          : err instanceof Error && err.message
+                          ? err.message
+                          : 'Could not upload reel video. Try again or paste an external video URL.';
+                      setReelUploadError(msg);
+                    } finally {
+                      setIsUploadingReelVideo(false);
+                      setReelUploadProgress(0);
                     }
-                    e.target.value = '';
                   }}
                 />
               </label>
@@ -459,6 +513,21 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
           )}
         </div>
 
+        {/* Video Upload Error Notice */}
+        {reelUploadError && (
+          <div className="mb-3 p-3 rounded-xl bg-red-950/90 border border-red-500/60 text-red-200 text-xs flex items-center justify-between gap-3">
+            <span>{reelUploadError}</span>
+            <button
+              type="button"
+              onClick={() => setReelUploadError(null)}
+              className="p-1 text-red-200 hover:text-white cursor-pointer shrink-0"
+              aria-label="Dismiss upload error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Video Player Frame with Unreal HUD Styling */}
         <div 
           className="relative rounded-2xl overflow-hidden bg-black border border-zinc-800 shadow-2xl group"
@@ -470,7 +539,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
             {/* HTML5 Video element */}
             <video
               ref={videoRef}
-              src={videoPath}
+              src={activeVideoSrc}
               poster={activeChapter.thumbnail || '/showcase/hero-adhavan.jpg'}
               playsInline
               preload="auto"
@@ -478,7 +547,7 @@ export const CinematicVideoReel = forwardRef<VideoReelRef, CinematicVideoReelPro
               className={`w-full h-full object-contain cursor-pointer ${isNativePlaying ? 'block' : 'hidden'}`}
               onClick={togglePlay}
             >
-              <source src={videoPath} type="video/mp4" />
+              <source src={activeVideoSrc} type="video/mp4" />
               Your browser does not support HTML5 MP4 video playback.
             </video>
 

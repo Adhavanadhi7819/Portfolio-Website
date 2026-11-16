@@ -22,10 +22,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 }) => {
   const initialImg = project?.galleryImages[0] || project?.thumbnail || '';
   const [activeImage, setActiveImage] = useState<string>(initialImg);
+  const [showProjectVideo, setShowProjectVideo] = useState<boolean>(Boolean(project?.videoUrl));
 
   useEffect(() => {
     if (project) {
       setActiveImage(project.galleryImages[0] || project.thumbnail || '');
+      setShowProjectVideo(Boolean(project.videoUrl));
     }
   }, [project]);
 
@@ -88,47 +90,74 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           {/* Main Visual Display */}
           <div className="space-y-2.5">
             <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-black border border-zinc-800">
-              <img
-                src={activeImage || project.thumbnail}
-                alt={project.title}
-                className={`w-full h-full ${activeImgProps.fitClass} transition-all duration-300`}
-                style={activeImgProps.style}
-              />
-              {isOwnerMode && onSaveProject && (
-                <PhotoAdjustOverlay
-                  align={activeAlignConfig}
-                  isOwnerMode={isOwnerMode}
-                  onChange={(nextAlign) => {
-                    const currentKey = activeImage || project.thumbnail;
-                    const updated: ProjectItem = {
-                      ...project,
-                      galleryAligns: {
-                        ...(project.galleryAligns || {}),
-                        [currentKey]: nextAlign
-                      },
-                      ...(currentKey === project.thumbnail ? { thumbnailAlign: nextAlign } : {})
-                    };
-                    onSaveProject(updated);
-                  }}
+              {showProjectVideo && project.videoUrl ? (
+                <video
+                  src={project.videoUrl}
+                  poster={project.thumbnail}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full h-full object-contain bg-black"
                 />
-              )}
-              {project.videoTimestamp !== undefined && (
-                <button
-                  onClick={() => {
-                    onPlayInReel(project.videoTimestamp!);
-                    onClose();
-                  }}
-                  className="absolute bottom-3.5 right-3.5 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-black" />
-                  <span>Play at {formatVideoTime(project.videoTimestamp)}</span>
-                </button>
+              ) : (
+                <>
+                  <img
+                    src={activeImage || project.thumbnail}
+                    alt={project.title}
+                    className={`w-full h-full ${activeImgProps.fitClass} transition-all duration-300`}
+                    style={activeImgProps.style}
+                  />
+                  {isOwnerMode && onSaveProject && (
+                    <PhotoAdjustOverlay
+                      align={activeAlignConfig}
+                      isOwnerMode={isOwnerMode}
+                      onChange={(nextAlign) => {
+                        const currentKey = activeImage || project.thumbnail;
+                        const updated: ProjectItem = {
+                          ...project,
+                          galleryAligns: {
+                            ...(project.galleryAligns || {}),
+                            [currentKey]: nextAlign
+                          },
+                          ...(currentKey === project.thumbnail ? { thumbnailAlign: nextAlign } : {})
+                        };
+                        onSaveProject(updated);
+                      }}
+                    />
+                  )}
+                  {project.videoTimestamp !== undefined && (
+                    <button
+                      onClick={() => {
+                        onPlayInReel(project.videoTimestamp!);
+                        onClose();
+                      }}
+                      className="absolute bottom-3.5 right-3.5 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-black" />
+                      <span>Play at {formatVideoTime(project.videoTimestamp)}</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
-            {/* Gallery Selector thumbnails if multiple images */}
-            {project.galleryImages.length > 1 && (
+            {/* Gallery / Video Switcher */}
+            {(project.videoUrl || project.galleryImages.length > 1) && (
               <div className="flex gap-2 overflow-x-auto pb-1">
+                {project.videoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectVideo(true)}
+                    className={`relative px-3.5 aspect-video rounded-lg overflow-hidden border transition-all cursor-pointer shrink-0 flex flex-col items-center justify-center gap-1 bg-zinc-900 ${
+                      showProjectVideo
+                        ? 'border-amber-500 ring-2 ring-amber-500/40 text-amber-400'
+                        : 'border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span className="text-[10px] font-mono font-bold uppercase">Video</span>
+                  </button>
+                )}
                 {project.galleryImages.map((img, idx) => {
                   const thumbProps = getPhotoAlignImgProps(
                     project.galleryAligns?.[img] || project.thumbnailAlign
@@ -136,9 +165,13 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   return (
                     <button
                       key={idx}
-                      onClick={() => setActiveImage(img)}
+                      type="button"
+                      onClick={() => {
+                        setShowProjectVideo(false);
+                        setActiveImage(img);
+                      }}
                       className={`relative w-24 aspect-video rounded-lg overflow-hidden border transition-all cursor-pointer shrink-0 ${
-                        activeImage === img
+                        !showProjectVideo && activeImage === img
                           ? 'border-amber-500 ring-2 ring-amber-500/40'
                           : 'border-zinc-800 opacity-70 hover:opacity-100'
                       }`}

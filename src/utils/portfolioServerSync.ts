@@ -1,8 +1,10 @@
 import { PortfolioProfile, PortfolioState } from '../types/portfolio';
 import { PUBLISHED_PORTFOLIO_SNAPSHOT } from '../data/publishedPortfolio';
+import { extractLargestVideoFromZipBlob } from './zipClient';
 
 let memoryOwnerToken: string | null = null;
 let knownExpressAvailable: boolean | null = null;
+let knownBlobStorageAvailable: boolean = false;
 
 export interface ServerAuthStatus {
   isAuthenticated: boolean;
@@ -25,6 +27,8 @@ export interface GitHubSyncStatus {
   repo: string;
   branch: string;
   adminPinConfigured: boolean;
+  hasBlobStorage?: boolean;
+  hasResendKey?: boolean;
   isAuthenticated: boolean;
   runtime?: 'express' | 'vercel' | 'node';
   tokenSource?: 'env' | 'preview-file' | 'none';
@@ -113,6 +117,9 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
       } else if (json.runtime === 'vercel') {
         knownExpressAvailable = false;
       }
+      if (typeof json.hasBlobStorage === 'boolean') {
+        knownBlobStorageAvailable = json.hasBlobStorage;
+      }
       return {
         githubConfigured: Boolean(json.githubConfigured),
         canPullFromGitHub: Boolean(json.canPullFromGitHub ?? (json.hasOwner && json.hasRepo)),
@@ -123,6 +130,8 @@ export async function fetchGitHubSyncStatus(): Promise<GitHubSyncStatus> {
         repo: json.repo || '',
         branch: json.branch || 'main',
         adminPinConfigured: Boolean(json.adminPinConfigured),
+        hasBlobStorage: Boolean(json.hasBlobStorage),
+        hasResendKey: Boolean(json.hasResendKey),
         isAuthenticated: Boolean(json.isAuthenticated),
         runtime: json.runtime,
         tokenSource: json.tokenSource || (json.hasToken ? 'env' : 'none')
@@ -979,111 +988,326 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const commaIdx = dataUrl.indexOf(',');
+      resolve(commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '');
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function uploadAssetToServer(
   fileOrBlob: Blob,
   filename: string,
-  mimeType?: string
+  mimeType?: string,
+  onProgress?: (percent: number) => void,
+  options?: { extractVideo?: boolean }
 ): Promise<UploadedAssetResponse> {
   const resolvedMime = mimeType || fileOrBlob.type || 'application/octet-stream';
+  const EXPRESS_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MB keeps every chunk well under Cloud Run / proxy caps
+  const extractHeader: Record<string, string> = options?.extractVideo
+    ? { 'X-Extract-Video': '1' }
+    : {};
 
   if (knownExpressAvailable !== false) {
-    try {
-      const res = await fetch('/api/assets', {
-        method: 'POST',
-        credentials: 'include',
-        headers: buildAuthHeaders({
-          'Content-Type': resolvedMime,
-          'X-Filename': encodeURIComponent(filename)
-        }),
-        body: fileOrBlob
-      });
+    if (fileOrBlob.size > EXPRESS_CHUNK_BYTES) {
+      const totalChunks = Math.ceil(fileOrBlob.size / EXPRESS_CHUNK_BYTES);
+      const uploadId = `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
-          error?: string;
-        };
-        if (res.ok && data.url) {
-          knownExpressAvailable = true;
-          return data as UploadedAssetResponse;
-        }
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * EXPRESS_CHUNK_BYTES;
+        const end = Math.min(fileOrBlob.size, start + EXPRESS_CHUNK_BYTES);
+        const chunkBlob = fileOrBlob.slice(start, end);
+
+        const res = await fetch('/api/assets/chunk', {
+          method: 'POST',
+          credentials: 'include',
+          headers: buildAuthHeaders({
+            'Content-Type': resolvedMime,
+            'X-Filename': encodeURIComponent(filename),
+            'X-Upload-Id': uploadId,
+            'X-Chunk-Index': String(chunkIndex),
+            'X-Total-Chunks': String(totalChunks),
+            ...extractHeader
+          }),
+          body: chunkBlob
+        });
+
+        const contentType = res.headers.get('content-type') || '';
         if (res.status === 401) {
           throw new Error('OWNER_AUTH_REQUIRED');
         }
-        if (res.status !== 404 && res.status !== 405) {
+        if (res.status === 404 || res.status === 405) {
+          knownExpressAvailable = false;
+          break;
+        }
+        if (!contentType.includes('application/json')) {
+          throw new Error(
+            res.status === 413
+              ? 'Upload chunk rejected by proxy size limit. Try a smaller file.'
+              : `Asset chunk upload failed (HTTP ${res.status}).`
+          );
+        }
+
+        const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+          ok?: boolean;
+          error?: string;
+        };
+
+        if (!res.ok) {
           throw new Error(data.error || `Asset upload failed (${res.status})`);
         }
+
+        knownExpressAvailable = true;
+        onProgress?.(Math.round(((chunkIndex + 1) / totalChunks) * 100));
+
+        if (chunkIndex === totalChunks - 1) {
+          if (data.url) {
+            return data as UploadedAssetResponse;
+          }
+          throw new Error('Server did not return uploaded asset URL.');
+        }
       }
-      if (res.status === 404) {
-        knownExpressAvailable = false;
-      }
-    } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message === 'OWNER_AUTH_REQUIRED' || err.message.startsWith('Asset upload failed'))
-      ) {
-        throw err;
+    } else {
+      try {
+        const res = await fetch('/api/assets', {
+          method: 'POST',
+          credentials: 'include',
+          headers: buildAuthHeaders({
+            'Content-Type': resolvedMime,
+            'X-Filename': encodeURIComponent(filename),
+            ...extractHeader
+          }),
+          body: fileOrBlob
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = (await res.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+            error?: string;
+          };
+          if (res.ok && data.url) {
+            knownExpressAvailable = true;
+            onProgress?.(100);
+            return data as UploadedAssetResponse;
+          }
+          if (res.status === 401) {
+            throw new Error('OWNER_AUTH_REQUIRED');
+          }
+          if (res.status !== 404 && res.status !== 405) {
+            throw new Error(data.error || `Asset upload failed (${res.status})`);
+          }
+        } else if (res.status === 401) {
+          throw new Error('OWNER_AUTH_REQUIRED');
+        } else if (res.status === 413) {
+          throw new Error('File exceeds single-request proxy limit. Try uploading again.');
+        } else if (res.status !== 404 && res.status !== 405) {
+          throw new Error(`Asset upload failed (HTTP ${res.status})`);
+        }
+        if (res.status === 404 || res.status === 405) {
+          knownExpressAvailable = false;
+        }
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          (err.message === 'OWNER_AUTH_REQUIRED' ||
+            err.message.startsWith('Asset upload failed') ||
+            err.message.startsWith('File exceeds') ||
+            err.message.includes('ZIP'))
+        ) {
+          throw err;
+        }
       }
     }
   }
 
-  // Vercel Serverless path: commit asset directly to public/uploaded-assets/<fileId> on GitHub
-  // so data.json stays compact and /api/assets/<fileId> resolves immediately across reloads.
-  const MAX_SERVERLESS_UPLOAD_BYTES = Math.floor(3.1 * 1024 * 1024);
-  if (fileOrBlob.size > MAX_SERVERLESS_UPLOAD_BYTES) {
+  // Vercel Serverless Path: uses external Vercel env vars (BLOB_READ_WRITE_TOKEN and/or GITHUB_TOKEN)
+  let targetBlob: Blob = fileOrBlob;
+  let targetFilename = filename;
+  let targetMime = resolvedMime;
+  const isZipInput =
+    Boolean(options?.extractVideo) ||
+    filename.toLowerCase().endsWith('.zip') ||
+    resolvedMime.toLowerCase().includes('zip');
+
+  // Extract ZIP right in the browser so up to 100 MB ZIPs upload smoothly on Vercel without hitting function payload caps
+  if (isZipInput) {
+    const extracted = await extractLargestVideoFromZipBlob(fileOrBlob, (pct) => {
+      onProgress?.(Math.min(20, Math.round(pct * 0.2)));
+    });
+    targetBlob = extracted.file;
+    targetFilename = extracted.originalFilename;
+    targetMime = extracted.mimeType;
+  }
+
+  // 1. Direct Vercel Blob upload when BLOB_READ_WRITE_TOKEN is configured externally in Vercel
+  if (knownBlobStorageAvailable) {
+    try {
+      const { upload } = await import('@vercel/blob/client');
+      const safeName = (targetFilename || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const blobRes = await upload(`uploaded-assets/${Date.now()}-${safeName}`, targetBlob, {
+        access: 'public',
+        handleUploadUrl: '/api/update-portfolio?action=blob-upload',
+        headers: buildAuthHeaders(),
+        contentType: targetMime,
+        multipart: targetBlob.size > 5 * 1024 * 1024,
+        onUploadProgress: (evt) => {
+          onProgress?.(Math.max(20, Math.min(99, Math.round(evt.percentage))));
+        }
+      });
+      onProgress?.(100);
+      return {
+        ok: true,
+        url: blobRes.url,
+        filename: targetFilename,
+        size: targetBlob.size,
+        mimeType: targetMime
+      };
+    } catch (blobErr) {
+      if (blobErr instanceof Error && blobErr.message.includes('OWNER_AUTH_REQUIRED')) {
+        throw blobErr;
+      }
+      // Fall back to GitHub chunked upload if Blob token is absent or failed
+    }
+  }
+
+  // 2. Single-request Vercel upload for assets <= 2.4 MB
+  const MAX_SINGLE_SERVERLESS_BYTES = Math.floor(2.4 * 1024 * 1024);
+  if (targetBlob.size <= MAX_SINGLE_SERVERLESS_BYTES) {
+    const base64Content = await blobToBase64(targetBlob);
+    if (base64Content) {
+      const uploadRes = await fetch('/api/update-portfolio', {
+        method: 'POST',
+        credentials: 'include',
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'upload-asset',
+          filename: targetFilename,
+          mimeType: targetMime,
+          base64Content
+        })
+      });
+
+      if (uploadRes.status === 401) {
+        throw new Error('OWNER_AUTH_REQUIRED');
+      }
+
+      const contentType = uploadRes.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const uploadedJson = (await uploadRes.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+          ok?: boolean;
+          error?: string;
+        };
+        if (uploadRes.ok && uploadedJson.ok && uploadedJson.url) {
+          onProgress?.(100);
+          return {
+            ok: true,
+            url: uploadedJson.url,
+            filename: uploadedJson.filename || targetFilename,
+            size: uploadedJson.size || targetBlob.size,
+            mimeType: uploadedJson.mimeType || targetMime
+          };
+        }
+        if (uploadRes.status >= 400) {
+          throw new Error(uploadedJson.error || `Asset upload failed (${uploadRes.status})`);
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      url: await blobToDataUrl(targetBlob),
+      filename: targetFilename,
+      size: targetBlob.size,
+      mimeType: targetMime
+    };
+  }
+
+  // 3. Stateless 2 MB Chunked Vercel Serverless Upload -> GitHub Git Blobs -> Atomic Commit
+  const VERCEL_MAX_GITHUB_FILE_BYTES = 98 * 1024 * 1024;
+  if (targetBlob.size > VERCEL_MAX_GITHUB_FILE_BYTES) {
     throw new Error(
-      `File (${(fileOrBlob.size / (1024 * 1024)).toFixed(1)} MB) exceeds Vercel serverless upload limit (3.1 MB). Use a smaller compressed file or paste an external video/PDF link.`
+      `Video (${(targetBlob.size / (1024 * 1024)).toFixed(1)} MB) exceeds GitHub's 98 MB single-file limit. Compress below 98 MB or paste an external video URL.`
     );
   }
 
-  const dataUrl = await blobToDataUrl(fileOrBlob);
-  const commaIdx = dataUrl.indexOf(',');
-  const base64Content = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
+  const VERCEL_CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB -> ~2.67 MB base64 JSON, always under Vercel's 4.5 MB limit
+  const totalChunks = Math.ceil(targetBlob.size / VERCEL_CHUNK_BYTES);
+  const chunkShas: string[] = [];
 
-  if (base64Content) {
-    const uploadRes = await fetch('/api/update-portfolio', {
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * VERCEL_CHUNK_BYTES;
+    const end = Math.min(targetBlob.size, start + VERCEL_CHUNK_BYTES);
+    const chunkBase64 = await blobToBase64(targetBlob.slice(start, end));
+
+    const chunkRes = await fetch('/api/update-portfolio', {
       method: 'POST',
       credentials: 'include',
       headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
-        action: 'upload-asset',
-        filename,
-        mimeType: resolvedMime,
-        base64Content
+        action: 'upload-asset-chunk',
+        base64Chunk: chunkBase64
       })
     });
 
-    if (uploadRes.status === 401) {
+    if (chunkRes.status === 401) {
       throw new Error('OWNER_AUTH_REQUIRED');
     }
 
-    const contentType = uploadRes.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const uploadedJson = (await uploadRes.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
-        ok?: boolean;
-        error?: string;
-      };
-      if (uploadRes.ok && uploadedJson.ok && uploadedJson.url) {
-        return {
-          ok: true,
-          url: uploadedJson.url,
-          filename: uploadedJson.filename || filename,
-          size: uploadedJson.size || fileOrBlob.size,
-          mimeType: uploadedJson.mimeType || resolvedMime
-        };
-      }
-      if (uploadRes.status >= 400 && fileOrBlob.size > 350 * 1024) {
-        throw new Error(uploadedJson.error || `Asset upload failed (${uploadRes.status})`);
-      }
+    const chunkCt = chunkRes.headers.get('content-type') || '';
+    if (!chunkCt.includes('application/json')) {
+      throw new Error(`Upload chunk ${i + 1}/${totalChunks} failed (HTTP ${chunkRes.status}).`);
     }
+
+    const chunkData = (await chunkRes.json().catch(() => ({}))) as {
+      ok?: boolean;
+      sha?: string;
+      error?: string;
+    };
+    if (!chunkRes.ok || !chunkData.ok || !chunkData.sha) {
+      throw new Error(chunkData.error || `Failed uploading chunk ${i + 1}/${totalChunks}`);
+    }
+
+    chunkShas.push(chunkData.sha);
+    onProgress?.(20 + Math.round(((i + 1) / totalChunks) * 70));
   }
 
+  const finalRes = await fetch('/api/update-portfolio', {
+    method: 'POST',
+    credentials: 'include',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      action: 'finalize-asset-chunks',
+      chunkShas,
+      filename: targetFilename,
+      mimeType: targetMime
+    })
+  });
+
+  if (finalRes.status === 401) {
+    throw new Error('OWNER_AUTH_REQUIRED');
+  }
+
+  const finalJson = (await finalRes.json().catch(() => ({}))) as Partial<UploadedAssetResponse> & {
+    ok?: boolean;
+    error?: string;
+  };
+  if (!finalRes.ok || !finalJson.ok || !finalJson.url) {
+    throw new Error(finalJson.error || `Failed finalizing uploaded video (HTTP ${finalRes.status}).`);
+  }
+
+  onProgress?.(100);
   return {
     ok: true,
-    url: dataUrl,
-    filename,
-    size: fileOrBlob.size,
-    mimeType: resolvedMime
+    url: finalJson.url,
+    filename: finalJson.filename || targetFilename,
+    size: finalJson.size || targetBlob.size,
+    mimeType: finalJson.mimeType || targetMime
   };
 }
 
@@ -1165,6 +1389,35 @@ export async function submitContactMessage(payload: {
       }
     }
   }
+
+  // On Vercel serverless, deliver through /api/update-portfolio?action=contact first so external RESEND_API_KEY env var works
+  try {
+    const vercelRes = await fetch('/api/update-portfolio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'contact', ...payload, recipientEmail })
+    });
+    const vercelCt = vercelRes.headers.get('content-type') || '';
+    if (vercelCt.includes('application/json')) {
+      const vercelJson = (await vercelRes.json().catch(() => null)) as {
+        ok?: boolean;
+        id?: string;
+        recipientEmail?: string;
+        deliveryStatus?: 'sent' | 'activation_pending' | 'stored_only';
+        deliveryNote?: string;
+        error?: string;
+      } | null;
+      if (vercelRes.ok && vercelJson?.ok) {
+        return {
+          ok: true,
+          id: vercelJson.id || '',
+          recipientEmail: vercelJson.recipientEmail || recipientEmail,
+          deliveryStatus: vercelJson.deliveryStatus || 'sent',
+          deliveryNote: vercelJson.deliveryNote || ''
+        };
+      }
+    }
+  } catch {}
 
   const relayRes = await fetch(
     `https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`,

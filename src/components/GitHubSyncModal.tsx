@@ -57,27 +57,22 @@ const VERCEL_ENV_VARS = [
   {
     name: 'GITHUB_TOKEN',
     required: true,
-    desc: 'Server-only GitHub Personal Access Token with Contents: Read and Write permission (do NOT use VITE_GITHUB_TOKEN).'
+    desc: 'Configured externally in Vercel (Production & Preview) for server-side GitHub commits of data.json and uploaded media.'
   },
   {
-    name: 'GITHUB_OWNER',
+    name: 'APP_URL',
     required: false,
-    desc: 'GitHub username or org owning the repo. Auto-detected from VERCEL_GIT_REPO_OWNER when Vercel System Env Vars are enabled.'
+    desc: 'Configured externally in Vercel with your live deployment URL.'
   },
   {
-    name: 'GITHUB_REPO',
+    name: 'GEMINI_API_KEY',
     required: false,
-    desc: 'Repository name containing data.json. Auto-detected from VERCEL_GIT_REPO_SLUG when Vercel System Env Vars are enabled.'
+    desc: 'Configured externally in Vercel Environment Variables.'
   },
   {
-    name: 'ADMIN_PIN',
-    required: false,
-    desc: 'Secret Admin PIN validated server-side to unlock Owner Edit Mode and authorize GitHub commits (defaults to 906 if unset).'
-  },
-  {
-    name: 'GITHUB_BRANCH',
-    required: false,
-    desc: 'Target branch to commit data.json updates to. Auto-detected from VERCEL_GIT_COMMIT_REF or defaults to main.'
+    name: 'System Environment Variables',
+    required: true,
+    desc: 'Enabled in Vercel so repository owner (Adhavanadhi7819), repo (Portfolio-Website), and branch (main) auto-detect automatically.'
   }
 ];
 
@@ -427,7 +422,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border ${
                         feedback?.type === 'error'
                           ? 'bg-red-950/50 border-red-500/40 text-red-300'
-                          : githubStatus.githubConfigured
+                          : githubStatus.githubConfigured || !isVercelRuntime
                           ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
                           : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
                       }`}
@@ -442,10 +437,15 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                           <CheckCircle2 className="w-3 h-3" />
                           <span>Connected &amp; Synced</span>
                         </>
+                      ) : !isVercelRuntime ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Vercel Env Allocated</span>
+                        </>
                       ) : (
                         <>
                           <CloudDownload className="w-3 h-3" />
-                          <span>Pull Ready · Connect Token to Push</span>
+                          <span>Pull Ready</span>
                         </>
                       )}
                     </span>
@@ -490,7 +490,7 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={
-                          githubStatus.hasToken
+                          githubStatus.hasToken || !isVercelRuntime
                             ? 'text-emerald-400 font-semibold'
                             : 'text-amber-400 font-semibold'
                         }
@@ -498,8 +498,10 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                         {githubStatus.hasToken
                           ? githubStatus.tokenSource === 'preview-file'
                             ? 'Connected in Preview Server'
-                            : 'Configured in Server Env'
-                          : 'Not Set in Preview Env'}
+                            : 'Configured in Vercel Env'
+                          : isVercelRuntime
+                          ? 'Missing in Vercel Env'
+                          : 'Allocated Externally in Vercel'}
                       </span>
                       {!isVercelRuntime && githubStatus.tokenSource === 'preview-file' && (
                         <button
@@ -524,72 +526,70 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
                   </div>
                 </div>
 
-                {/* Inline Preview Token Connect Form (only when missing in local/AI Studio preview) */}
-                {!githubStatus.hasToken && !isVercelRuntime && (
-                  <div className="p-3 rounded-xl bg-zinc-950/80 border border-amber-500/30 space-y-2.5">
-                    {!showTokenConnect ? (
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                        <span className="text-zinc-300">
-                          Vercel already has <code className="text-amber-300">GITHUB_TOKEN</code>. Connect a token here if you also want to push directly from AI Studio Preview.
+                {/* Optional local preview token form (only expanded when user explicitly clicks) */}
+                {!githubStatus.hasToken && !isVercelRuntime && showTokenConnect && (
+                  <div className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-2.5">
+                    <form onSubmit={handleConnectPreviewToken} className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-mono font-bold uppercase text-amber-400">
+                          Optional Preview Push Override
                         </span>
                         <button
                           type="button"
-                          onClick={() => setShowTokenConnect(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 font-mono font-bold uppercase text-[10px] transition-colors cursor-pointer shrink-0"
+                          onClick={() => setShowTokenConnect(false)}
+                          className="text-[11px] text-zinc-400 hover:text-white cursor-pointer"
                         >
-                          <KeyRound className="w-3 h-3" />
-                          <span>Connect Preview Token</span>
+                          Cancel
                         </button>
                       </div>
-                    ) : (
-                      <form onSubmit={handleConnectPreviewToken} className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-mono font-bold uppercase text-amber-400">
-                            Server-Side Preview GitHub Token
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setShowTokenConnect(false)}
-                            className="text-[11px] text-zinc-400 hover:text-white cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            value={previewOwnerInput}
-                            onChange={(e) => setPreviewOwnerInput(e.target.value)}
-                            placeholder="Owner (Adhavanadhi7819)"
-                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
-                          />
-                          <input
-                            type="text"
-                            value={previewRepoInput}
-                            onChange={(e) => setPreviewRepoInput(e.target.value)}
-                            placeholder="Repo (Portfolio-Website)"
-                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="password"
-                            value={previewTokenInput}
-                            onChange={(e) => setPreviewTokenInput(e.target.value)}
-                            placeholder="github_pat_... (stored strictly server-side, never in browser)"
-                            className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                            required
-                          />
-                          <button
-                            type="submit"
-                            disabled={isSavingToken}
-                            className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
-                          >
-                            {isSavingToken ? 'Verifying...' : 'Save'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={previewOwnerInput}
+                          onChange={(e) => setPreviewOwnerInput(e.target.value)}
+                          placeholder="Owner (Adhavanadhi7819)"
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <input
+                          type="text"
+                          value={previewRepoInput}
+                          onChange={(e) => setPreviewRepoInput(e.target.value)}
+                          placeholder="Repo (Portfolio-Website)"
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          value={previewTokenInput}
+                          onChange={(e) => setPreviewTokenInput(e.target.value)}
+                          placeholder="github_pat_... (stored strictly server-side)"
+                          className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                          required
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSavingToken}
+                          className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingToken ? 'Verifying...' : 'Save'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {!githubStatus.hasToken && !isVercelRuntime && !showTokenConnect && (
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-400 pt-0.5">
+                    <span>Environment variables are managed externally in Vercel.</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenConnect(true)}
+                      className="inline-flex items-center gap-1 text-zinc-300 hover:text-amber-300 font-mono text-[10px] underline cursor-pointer shrink-0"
+                    >
+                      <KeyRound className="w-3 h-3" />
+                      <span>Preview Push Override</span>
+                    </button>
                   </div>
                 )}
 
@@ -707,10 +707,10 @@ export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({
               <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Vercel Environment Variables</span>
+                  <span>External Vercel Environment Variables</span>
                 </div>
                 <p className="text-xs text-zinc-300 leading-relaxed">
-                  In Vercel under <strong className="text-white">Settings → Environment Variables</strong>, keep only server-side variables (never <code className="text-red-300">VITE_GITHUB_TOKEN</code>). With <strong className="text-white">System Environment Variables</strong> enabled, owner/repo/branch are auto-detected.
+                  All deployment variables (<code className="text-amber-300">GITHUB_TOKEN</code>, <code className="text-amber-300">APP_URL</code>, <code className="text-amber-300">GEMINI_API_KEY</code>) and <strong className="text-white">System Environment Variables</strong> are managed externally in Vercel Settings. Repository owner, repo, and branch resolve automatically.
                 </p>
               </div>
 

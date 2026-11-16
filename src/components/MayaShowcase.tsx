@@ -53,7 +53,7 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
 }) => {
   const currentModels = models && models.length > 0 ? models : MAYA_MODELS;
   const [selectedModelId, setSelectedModelId] = useState(currentModels[0]?.id || '');
-  const [viewMode, setViewMode] = useState<'textured' | 'wireframe' | 'clay'>('textured');
+  const [viewMode, setViewMode] = useState<'textured' | 'wireframe' | 'clay' | 'video'>('textured');
 
   const selectedModel = currentModels.find(m => m.id === selectedModelId) || currentModels[0];
   const { fitClass: modelFitClass, style: modelAlignStyle } = getPhotoAlignImgProps(
@@ -140,26 +140,37 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
             
             <div className="relative aspect-[16/10] rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
               
-              {/* Asset Image with simulated render shader modes */}
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={`${selectedModel.id}-${viewMode}`}
-                  src={selectedModel.thumbnail}
-                  alt={selectedModel.title}
-                  initial={{ opacity: 0.4 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0.4 }}
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                  className={`w-full h-full ${modelFitClass} transition-all duration-300 ${
-                    viewMode === 'wireframe'
-                      ? 'filter contrast-200 invert hue-rotate-180 brightness-90'
-                      : viewMode === 'clay'
-                      ? 'filter grayscale contrast-125 brightness-110'
-                      : 'filter brightness-100'
-                  }`}
-                  style={modelAlignStyle}
+              {/* Asset Image / Video with simulated render shader modes */}
+              {viewMode === 'video' && selectedModel.videoUrl ? (
+                <video
+                  src={selectedModel.videoUrl}
+                  poster={selectedModel.thumbnail}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full h-full object-contain bg-black"
                 />
-              </AnimatePresence>
+              ) : (
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={`${selectedModel.id}-${viewMode}`}
+                    src={selectedModel.thumbnail}
+                    alt={selectedModel.title}
+                    initial={{ opacity: 0.4 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0.4 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    className={`w-full h-full ${modelFitClass} transition-all duration-300 ${
+                      viewMode === 'wireframe'
+                        ? 'filter contrast-200 invert hue-rotate-180 brightness-90'
+                        : viewMode === 'clay'
+                        ? 'filter grayscale contrast-125 brightness-110'
+                        : 'filter brightness-100'
+                    }`}
+                    style={modelAlignStyle}
+                  />
+                </AnimatePresence>
+              )}
 
               {/* Viewport Top Bar */}
               <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-20 flex-wrap">
@@ -199,11 +210,35 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
                         className="!static"
                         defaultFallbackUrl="/showcase/maya-models.jpg"
                       />
+                      <MediaUploadOverlay
+                        currentUrl={selectedModel.videoUrl}
+                        mediaType="video"
+                        isOwnerMode={isOwnerMode}
+                        onMediaUploaded={(newVideoUrl) => {
+                          setViewMode('video');
+                          if (onSaveModel) {
+                            onSaveModel({ ...selectedModel, videoUrl: newVideoUrl });
+                          } else if (onEditModel) {
+                            onEditModel({ ...selectedModel, videoUrl: newVideoUrl });
+                          }
+                        }}
+                        label="Video"
+                        position="top-right"
+                        className="!static"
+                      />
                     </>
                   )}
 
                   {/* Shader mode switcher */}
                   <div className="flex items-center gap-1 bg-black/80 backdrop-blur-md p-1 rounded-lg border border-zinc-700 text-[10px] font-mono">
+                    {selectedModel.videoUrl && (
+                      <button
+                        onClick={() => setViewMode('video')}
+                        className={`px-2 py-0.5 rounded cursor-pointer ${viewMode === 'video' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Video
+                      </button>
+                    )}
                     <button
                       onClick={() => setViewMode('textured')}
                       className={`px-2 py-0.5 rounded cursor-pointer ${viewMode === 'textured' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
@@ -245,7 +280,10 @@ export const MayaShowcase: React.FC<MayaShowcaseProps> = ({
               {currentModels.map((model) => (
                 <button
                   key={model.id}
-                  onClick={() => setSelectedModelId(model.id)}
+                  onClick={() => {
+                    setSelectedModelId(model.id);
+                    setViewMode(model.videoUrl ? 'video' : 'textured');
+                  }}
                   className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                     selectedModel.id === model.id
                       ? 'bg-zinc-800/90 border-amber-500 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/10'

@@ -107,12 +107,43 @@ export async function uploadImageAsset(
   return uploaded.url;
 }
 
+export const MAX_VIDEO_ZIP_BYTES = 100 * 1024 * 1024; // 100 MB
+export const VIDEO_FILE_ACCEPT =
+  'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v,.zip,application/zip,application/x-zip-compressed';
+
+export function isZipFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  const type = (file.type || '').toLowerCase();
+  return (
+    name.endsWith('.zip') ||
+    type === 'application/zip' ||
+    type === 'application/x-zip-compressed' ||
+    type === 'multipart/x-zip'
+  );
+}
+
 /**
- * Uploads a video file (MP4, WebM, MOV) to the persistent server asset store.
+ * Uploads a video file (MP4, WebM, MOV, M4V) or a ZIP archive containing a video (up to 100 MB).
  * Returns a permanent `/api/assets/...` streaming URL accessible across all devices.
  */
-export async function uploadVideoAsset(file: File): Promise<string> {
-  const uploaded = await uploadAssetToServer(file, file.name, file.type || 'video/mp4');
+export async function uploadVideoAsset(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  const zipArchive = isZipFile(file);
+  if (zipArchive && file.size > MAX_VIDEO_ZIP_BYTES) {
+    throw new Error(
+      `ZIP archive (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+    );
+  }
+
+  const uploaded = await uploadAssetToServer(
+    file,
+    file.name,
+    zipArchive ? file.type || 'application/zip' : file.type || 'video/mp4',
+    onProgress,
+    zipArchive ? { extractVideo: true } : undefined
+  );
   return uploaded.url;
 }
 

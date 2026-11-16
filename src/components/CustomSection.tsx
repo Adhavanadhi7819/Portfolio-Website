@@ -24,7 +24,7 @@ import { SectionControls } from './SectionControls';
 import { InlineEdit } from './InlineEdit';
 import { PhotoAdjustOverlay, getPhotoAlignImgProps } from './PhotoAdjustOverlay';
 import { MediaUploadOverlay } from './MediaUploadOverlay';
-import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
+import { uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 interface CustomSectionProps {
   section: PortfolioSectionConfig;
@@ -104,6 +104,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [urlPromptType, setUrlPromptType] = useState<'image' | 'video' | null>(null);
   const [urlPromptValue, setUrlPromptValue] = useState('');
   const [urlPromptTitle, setUrlPromptTitle] = useState('');
@@ -125,6 +126,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
   ) => {
     if (!file) return;
     setIsUploadingMedia(true);
+    setUploadError(null);
     try {
       const url =
         type === 'image' ? await uploadImageAsset(file) : await uploadVideoAsset(file);
@@ -136,6 +138,10 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
         caption: type === 'video' ? 'Uploaded showcase video' : 'Uploaded showcase image'
       };
       handleUpdateField('mediaItems', [...mediaItems, nextBlock]);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : 'Media upload failed. Please try again.'
+      );
     } finally {
       setIsUploadingMedia(false);
     }
@@ -286,7 +292,7 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
               <input
                 ref={videoInputRef}
                 type="file"
-                accept="video/mp4,video/webm,video/quicktime"
+                accept={VIDEO_FILE_ACCEPT}
                 onChange={(e) => {
                   handleUploadMediaFile(e.target.files?.[0], 'video');
                   e.target.value = '';
@@ -341,6 +347,20 @@ export const CustomSection: React.FC<CustomSectionProps> = ({
             </div>
           )}
         </div>
+
+        {isOwnerMode && uploadError && (
+          <div className="mb-4 px-3.5 py-2.5 rounded-xl bg-red-950/70 border border-red-700/60 text-red-200 text-xs font-mono flex items-center justify-between gap-3">
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              className="p-1 rounded hover:bg-red-900/60 text-red-300 hover:text-white cursor-pointer shrink-0"
+              aria-label="Dismiss upload error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Inline URL Modal for Adding Photo/Video Link */}
         {urlPromptType && (

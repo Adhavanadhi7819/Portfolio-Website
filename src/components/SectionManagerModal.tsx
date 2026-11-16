@@ -21,7 +21,7 @@ import {
 import { PortfolioSectionConfig, SectionTargetTab, PhotoAlignConfig } from '../types/portfolio';
 import { getSectionTargetTab } from '../utils/portfolioLogic';
 import { PhotoAlignInlineControl, DEFAULT_PHOTO_ALIGN } from './PhotoAdjustOverlay';
-import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
+import { uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 interface SectionManagerModalProps {
   isOpen: boolean;
@@ -271,6 +271,7 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
   const [initialPhotoAlign, setInitialPhotoAlign] = useState<PhotoAlignConfig>(DEFAULT_PHOTO_ALIGN);
   const [initialVideoUrl, setInitialVideoUrl] = useState('');
   const [isUploadingInitial, setIsUploadingInitial] = useState(false);
+  const [initialMediaError, setInitialMediaError] = useState<string | null>(null);
 
   const photoUploadRef = useRef<HTMLInputElement>(null);
   const videoUploadRef = useRef<HTMLInputElement>(null);
@@ -295,11 +296,16 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
   ) => {
     if (!file) return;
     setIsUploadingInitial(true);
+    setInitialMediaError(null);
     try {
       const url =
         kind === 'image' ? await uploadImageAsset(file) : await uploadVideoAsset(file);
       if (kind === 'image') setInitialPhotoUrl(url);
       else setInitialVideoUrl(url);
+    } catch (err) {
+      setInitialMediaError(
+        err instanceof Error ? err.message : 'Media upload failed. Please try again.'
+      );
     } finally {
       setIsUploadingInitial(false);
     }
@@ -766,7 +772,7 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                      <span>Video URL or Upload (MP4/YouTube)</span>
+                      <span>Video URL / Upload (MP4/ZIP ≤100MB)</span>
                       <button
                         type="button"
                         onClick={() => videoUploadRef.current?.click()}
@@ -780,10 +786,11 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
                     <input
                       ref={videoUploadRef}
                       type="file"
-                      accept="video/mp4,video/webm,video/quicktime"
-                      onChange={(e) =>
-                        handleUploadInitialMedia(e.target.files?.[0], 'video')
-                      }
+                      accept={VIDEO_FILE_ACCEPT}
+                      onChange={(e) => {
+                        handleUploadInitialMedia(e.target.files?.[0], 'video');
+                        e.target.value = '';
+                      }}
                       className="hidden"
                     />
                     <input
@@ -795,6 +802,19 @@ export const SectionManagerModal: React.FC<SectionManagerModalProps> = ({
                     />
                   </div>
                 </div>
+                {initialMediaError && (
+                  <div className="px-3 py-2 rounded-lg bg-red-950/70 border border-red-700/60 text-red-200 text-xs font-mono flex items-center justify-between gap-2">
+                    <span>{initialMediaError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setInitialMediaError(null)}
+                      className="text-red-300 hover:text-white cursor-pointer shrink-0"
+                      aria-label="Dismiss error"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 {initialPhotoUrl.trim() && (
                   <PhotoAlignInlineControl
                     imageUrl={initialPhotoUrl.trim()}

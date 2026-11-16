@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Upload, Video, Link, Check, X, RefreshCw } from 'lucide-react';
-import { uploadImageAsset, uploadVideoAsset } from '../utils/fileHelpers';
+import { uploadImageAsset, uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 interface MediaUploadOverlayProps {
   currentUrl?: string;
@@ -27,6 +27,7 @@ export const MediaUploadOverlay: React.FC<MediaUploadOverlayProps> = ({
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const [urlInput, setUrlInput] = useState(currentUrl || '');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOwnerMode) return null;
@@ -37,23 +38,26 @@ export const MediaUploadOverlay: React.FC<MediaUploadOverlayProps> = ({
 
     try {
       setIsUploading(true);
+      setUploadProgress(0);
       setErrorMessage(null);
       if (mediaType === 'image') {
         const assetUrl = await uploadImageAsset(file);
         onMediaUploaded(assetUrl);
       } else {
-        const assetUrl = await uploadVideoAsset(file);
+        const assetUrl = await uploadVideoAsset(file, (pct) => setUploadProgress(pct));
         onMediaUploaded(assetUrl);
       }
     } catch (err) {
-      console.error('Failed to upload media file:', err);
       const msg =
         err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
           ? 'Session expired. Unlock Owner Mode with 2FA to upload files.'
+          : err instanceof Error && err.message
+          ? err.message
           : `Could not upload this ${mediaType} file. Please try again.`;
       setErrorMessage(msg);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -88,7 +92,7 @@ export const MediaUploadOverlay: React.FC<MediaUploadOverlayProps> = ({
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept={mediaType === 'video' ? 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov' : 'image/png,image/jpeg,image/webp,image/gif'}
+        accept={mediaType === 'video' ? VIDEO_FILE_ACCEPT : 'image/png,image/jpeg,image/webp,image/gif'}
         className="hidden"
       />
 
@@ -111,7 +115,11 @@ export const MediaUploadOverlay: React.FC<MediaUploadOverlayProps> = ({
           ) : (
             <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
           )}
-          <span>{isUploading ? 'Uploading...' : label}</span>
+          <span>
+            {isUploading
+              ? `Uploading ${uploadProgress > 0 ? `${uploadProgress}%` : '...'}`
+              : label}
+          </span>
         </button>
 
         <button

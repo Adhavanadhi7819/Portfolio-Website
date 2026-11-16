@@ -1,8 +1,12 @@
 /// <reference types="node" />
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+import { put } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } from './zipVideo';
 
 const ADMIN_SESSION_COOKIE = 'adhavan_admin_session';
 const TOTP_PAIRED_COOKIE = 'adhavan_totp_paired';
@@ -19,6 +23,8 @@ export interface GitHubConfigStatus {
   repo: string;
   branch: string;
   adminPinConfigured: boolean;
+  hasBlobStorage?: boolean;
+  hasResendKey?: boolean;
   tokenSource?: 'env' | 'preview-file' | 'none';
 }
 
@@ -69,7 +75,7 @@ function readServerEnv(): {
   branch: string;
   adminPin: string;
 } {
-  const envToken = (process.env.GITHUB_TOKEN || '').trim();
+  const envToken = (process.env.GITHUB_TOKEN || process.env.VITE_GITHUB_TOKEN || '').trim();
   const previewCfg = !envToken ? readLocalPreviewGitHubConfig() : null;
   const previewToken = (previewCfg?.token || '').trim();
   const token = envToken || previewToken;
@@ -117,6 +123,8 @@ export function getGitHubConfigStatus(): GitHubConfigStatus {
     repo: env.repo,
     branch: env.branch,
     adminPinConfigured: Boolean(process.env.ADMIN_PIN && process.env.ADMIN_PIN.trim()),
+    hasBlobStorage: Boolean(process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN.trim()),
+    hasResendKey: Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()),
     tokenSource: env.tokenSource
   };
 }
@@ -771,6 +779,162 @@ export async function commitGitHubAssetFile(params: {
   return { uploaded: true, path: repoPath };
 }
 
+async function createGitHubBlob(base64Content: string): Promise<string> {
+  const { token, owner, repo } = readServerEnv();
+  if (!token || !owner || !repo) {
+    throw new Error('GitHub sync is not configured (missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO).');
+  }
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/blobs`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...buildGitHubHeaders(token),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      content: base64Content,
+      encoding: 'base64'
+    })
+  });
+  const json = (await res.json().catch(() => ({}))) as { sha?: string; message?: string };
+  if (!res.ok || !json.sha) {
+    throw new Error(json.message || `Failed creating GitHub blob (HTTP ${res.status})`);
+  }
+  return json.sha;
+}
+
+async function fetchGitHubBlobBuffer(blobSha: string): Promise<Buffer> {
+  const { token, owner, repo } = readServerEnv();
+  if (!token || !owner || !repo) {
+    throw new Error('GitHub sync is not configured.');
+  }
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/git/blobs/${encodeURIComponent(blobSha)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: buildGitHubNoCacheHeaders(token),
+    cache: 'no-store'
+  });
+  const json = (await res.json().catch(() => ({}))) as { content?: string; message?: string };
+  if (!res.ok || typeof json.content !== 'string') {
+    throw new Error(json.message || `Failed reading staged chunk blob ${blobSha.slice(0, 7)}`);
+  }
+  return Buffer.from(json.content.replace(/\n/g, ''), 'base64');
+}
+
+async function commitGitHubAssetFileViaGitData(params: {
+  fileId: string;
+  buffer: Buffer;
+  commitMessage?: string;
+}): Promise<{ uploaded: boolean; path: string }> {
+  const { token, owner, repo, branch } = readServerEnv();
+  const repoPath = `public/uploaded-assets/${params.fileId}`;
+  if (!token || !owner || !repo) {
+    throw new Error('GitHub sync is not configured (missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPO).');
+  }
+
+  const contentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo
+  )}/contents/${repoPath}`;
+  const checkRes = await fetch(`${contentsUrl}?ref=${encodeURIComponent(branch)}&_t=${Date.now()}`, {
+    method: 'GET',
+    headers: buildGitHubNoCacheHeaders(token),
+    cache: 'no-store'
+  });
+  if (checkRes.ok) {
+    return { uploaded: false, path: repoPath };
+  }
+
+  // Create Git Blob once, then link into branch tree (handles large files cleanly + fast 422 retry)
+  const blobSha = await createGitHubBlob(params.buffer.toString('base64'));
+  const baseApi = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const refUrl = `${baseApi}/git/ref/heads/${encodeURIComponent(branch)}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const refRes = await fetch(`${refUrl}?_t=${Date.now()}`, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    const refJson = (await refRes.json().catch(() => ({}))) as {
+      object?: { sha?: string };
+      message?: string;
+    };
+    const headSha = refJson.object?.sha;
+    if (!refRes.ok || !headSha) {
+      throw new Error(refJson.message || `Failed locating branch ${branch}`);
+    }
+
+    const commitRes = await fetch(`${baseApi}/git/commits/${headSha}`, {
+      method: 'GET',
+      headers: buildGitHubNoCacheHeaders(token),
+      cache: 'no-store'
+    });
+    const commitJson = (await commitRes.json().catch(() => ({}))) as {
+      tree?: { sha?: string };
+      message?: string;
+    };
+    const baseTreeSha = commitJson.tree?.sha;
+    if (!commitRes.ok || !baseTreeSha) {
+      throw new Error(commitJson.message || 'Failed reading base Git tree');
+    }
+
+    const treeRes = await fetch(`${baseApi}/git/trees`, {
+      method: 'POST',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: [
+          {
+            path: repoPath,
+            mode: '100644',
+            type: 'blob',
+            sha: blobSha
+          }
+        ]
+      })
+    });
+    const treeJson = (await treeRes.json().catch(() => ({}))) as { sha?: string; message?: string };
+    if (!treeRes.ok || !treeJson.sha) {
+      throw new Error(treeJson.message || 'Failed creating Git tree for uploaded asset');
+    }
+
+    const newCommitRes = await fetch(`${baseApi}/git/commits`, {
+      method: 'POST',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: params.commitMessage || `chore(assets): upload ${params.fileId}`,
+        tree: treeJson.sha,
+        parents: [headSha]
+      })
+    });
+    const newCommitJson = (await newCommitRes.json().catch(() => ({}))) as {
+      sha?: string;
+      message?: string;
+    };
+    if (!newCommitRes.ok || !newCommitJson.sha) {
+      throw new Error(newCommitJson.message || 'Failed creating Git commit for uploaded asset');
+    }
+
+    const updateRefRes = await fetch(`${baseApi}/git/refs/heads/${encodeURIComponent(branch)}`, {
+      method: 'PATCH',
+      headers: { ...buildGitHubHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sha: newCommitJson.sha, force: false })
+    });
+    if (updateRefRes.ok) {
+      return { uploaded: true, path: repoPath };
+    }
+    if ((updateRefRes.status === 422 || updateRefRes.status === 409) && attempt === 0) {
+      continue;
+    }
+    const errJson = (await updateRefRes.json().catch(() => ({}))) as { message?: string };
+    throw new Error(errJson.message || `Failed updating branch ref (HTTP ${updateRefRes.status})`);
+  }
+
+  return { uploaded: true, path: repoPath };
+}
+
 export function extractReferencedAssetIds(value: unknown, out = new Set<string>()): Set<string> {
   if (typeof value === 'string') {
     const match = /^\/(?:api\/assets|uploaded-assets)\/([a-f0-9]{16,64}\.[a-z0-9]{1,8})$/i.exec(
@@ -791,11 +955,35 @@ export function extractReferencedAssetIds(value: unknown, out = new Set<string>(
   return out;
 }
 
+const MAX_GITHUB_REST_ASSET_BYTES = 45 * 1024 * 1024;
+
+function getLocalAssetSize(fileId: string): number | null {
+  const candidates = [
+    path.resolve(process.cwd(), 'portfolio-data', 'assets', fileId),
+    path.resolve(process.cwd(), 'public', 'uploaded-assets', fileId)
+  ];
+  for (const p of candidates) {
+    try {
+      const stat = fs.statSync(p);
+      if (stat.isFile()) return stat.size;
+    } catch {}
+  }
+  return null;
+}
+
 export async function ensureGitHubAssetsSynced(value: unknown): Promise<void> {
   const { token, owner, repo } = readServerEnv();
   if (!token || !owner || !repo) return;
   const assetIds = extractReferencedAssetIds(value);
   for (const fileId of assetIds) {
+    const assetSize = getLocalAssetSize(fileId);
+    if (assetSize === null) continue;
+    if (assetSize > MAX_GITHUB_REST_ASSET_BYTES) {
+      console.warn(
+        `Skipping GitHub REST upload for large asset ${fileId} (${(assetSize / (1024 * 1024)).toFixed(1)} MB > 45 MB limit).`
+      );
+      continue;
+    }
     const localBuf = readLocalAssetIfPresent(fileId);
     if (!localBuf) continue;
     await commitGitHubAssetFile({ fileId, buffer: localBuf }).catch((err) => {
@@ -1228,10 +1416,48 @@ export async function handleUpdatePortfolioRequest(
       }
       const ext = path.extname(fileId).toLowerCase();
       const mimeType = ASSET_EXT_TO_MIME[ext] || 'application/octet-stream';
-      res.statusCode = 200;
+      const totalLength = assetBuffer.length;
+      const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : '';
+
       res.setHeader('Content-Type', mimeType);
+      res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Disposition', `inline; filename="${fileId}"`);
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+      const VERCEL_MAX_RANGE_CHUNK_BYTES = 3 * 1024 * 1024; // Stay under Vercel's 4.5 MB response payload cap
+
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+        if (match) {
+          const start = match[1] ? Number(match[1]) : 0;
+          const requestedEnd = match[2] ? Math.min(Number(match[2]), totalLength - 1) : totalLength - 1;
+          const end =
+            runtimeMode === 'vercel'
+              ? Math.min(requestedEnd, start + VERCEL_MAX_RANGE_CHUNK_BYTES - 1)
+              : requestedEnd;
+          if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end && end < totalLength) {
+            const slice = assetBuffer.subarray(start, end + 1);
+            res.statusCode = 206;
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength}`);
+            res.setHeader('Content-Length', String(slice.length));
+            res.end(slice);
+            return;
+          }
+        }
+      }
+
+      if (runtimeMode === 'vercel' && totalLength > VERCEL_MAX_RANGE_CHUNK_BYTES) {
+        const end = VERCEL_MAX_RANGE_CHUNK_BYTES - 1;
+        const slice = assetBuffer.subarray(0, end + 1);
+        res.statusCode = 206;
+        res.setHeader('Content-Range', `bytes 0-${end}/${totalLength}`);
+        res.setHeader('Content-Length', String(slice.length));
+        res.end(slice);
+        return;
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Content-Length', String(totalLength));
       res.end(assetBuffer);
       return;
     }
@@ -1371,7 +1597,166 @@ export async function handleUpdatePortfolioRequest(
     return;
   }
 
-  const action = typeof body.action === 'string' ? body.action : '';
+  const action =
+    (typeof body.action === 'string' && body.action.trim()) ||
+    getQueryParam(req, 'action');
+
+  if (action === 'blob-upload') {
+    const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+    if (!blobToken) {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Vercel Blob (BLOB_READ_WRITE_TOKEN) is not configured in Vercel Environment Variables.'
+      });
+      return;
+    }
+
+    const uploadBody = body as unknown as HandleUploadBody;
+    const isCompletedWebhook = uploadBody?.type === 'blob.upload-completed';
+    if (!isCompletedWebhook && !isAuthenticated) {
+      sendJson(res, 401, {
+        ok: false,
+        error: 'Admin authorization required before minting Vercel Blob upload token.'
+      });
+      return;
+    }
+
+    try {
+      const jsonResponse = await handleUpload({
+        token: blobToken,
+        body: uploadBody,
+        request: req,
+        onBeforeGenerateToken: async () => ({
+          allowedContentTypes: [
+            'image/*',
+            'video/*',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/octet-stream',
+            'model/gltf-binary',
+            'model/gltf+json'
+          ],
+          maximumSizeInBytes: 500 * 1024 * 1024,
+          addRandomSuffix: true
+        }),
+        onUploadCompleted: async () => {
+          // Blob URL is stored in data.json by the Owner UI upon save
+        }
+      });
+      sendJson(res, 200, jsonResponse);
+    } catch (err) {
+      sendJson(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Vercel Blob token exchange failed.'
+      });
+    }
+    return;
+  }
+
+  if (action === 'contact') {
+    const senderName = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';
+    const senderEmail = typeof body.email === 'string' ? body.email.trim().slice(0, 160) : '';
+    const projectType = typeof body.projectType === 'string' ? body.projectType.trim().slice(0, 140) : 'Portfolio Inquiry';
+    const messageText = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : '';
+    const recipientEmail =
+      (typeof body.recipientEmail === 'string' && body.recipientEmail.trim()) || 'prabuprabu906@gmail.com';
+
+    if (!senderName || !senderEmail || !messageText) {
+      sendJson(res, 400, { ok: false, error: 'Name, email, and message are required.' });
+      return;
+    }
+
+    const resendKey = (process.env.RESEND_API_KEY || '').trim();
+    if (resendKey) {
+      try {
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: process.env.RESEND_FROM_EMAIL || 'Portfolio Contact <onboarding@resend.dev>',
+            to: [recipientEmail],
+            reply_to: senderEmail,
+            subject: `Portfolio Inquiry (${projectType}) — from ${senderName}`,
+            text: `New message from your portfolio:\n\nName: ${senderName}\nEmail: ${senderEmail}\nFocus: ${projectType}\n\nMessage:\n${messageText}`
+          })
+        });
+        if (emailRes.ok) {
+          sendJson(res, 200, {
+            ok: true,
+            id: `resend_${Date.now()}`,
+            recipientEmail,
+            deliveryStatus: 'sent',
+            deliveryNote: `Delivered via Resend to ${recipientEmail}`
+          });
+          return;
+        }
+      } catch {}
+    }
+
+    const configuredAppUrl = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+    const originHost = String(req.headers['x-forwarded-host'] || req.headers.host || 'hey-adhavan.vercel.app');
+    const originBase = configuredAppUrl || `https://${originHost}`;
+    try {
+      const relayRes = await fetch(
+        `https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Origin: originBase,
+            Referer: `${originBase}/`
+          },
+          body: JSON.stringify({
+            name: senderName,
+            email: senderEmail,
+            _replyto: senderEmail,
+            _subject: `Portfolio Inquiry (${projectType}) — from ${senderName}`,
+            Project_Focus: projectType,
+            message: messageText,
+            _template: 'table',
+            _captcha: 'false'
+          })
+        }
+      );
+      const relayData = (await relayRes.json().catch(() => ({}))) as {
+        success?: boolean | string;
+        message?: string;
+      };
+      if (relayRes.ok && (relayData.success === true || relayData.success === 'true')) {
+        sendJson(res, 200, {
+          ok: true,
+          id: `relay_${Date.now()}`,
+          recipientEmail,
+          deliveryStatus: 'sent',
+          deliveryNote: `Email forwarded to ${recipientEmail}`
+        });
+        return;
+      }
+      if (String(relayData.message || '').toLowerCase().includes('activat')) {
+        sendJson(res, 200, {
+          ok: true,
+          id: `relay_${Date.now()}`,
+          recipientEmail,
+          deliveryStatus: 'activation_pending',
+          deliveryNote: `One-time activation email sent to ${recipientEmail}. Click "Activate Form" in your inbox to enable forwarding.`
+        });
+        return;
+      }
+    } catch {}
+
+    sendJson(res, 502, {
+      ok: false,
+      error: 'Email delivery service unavailable right now. Please try again shortly.'
+    });
+    return;
+  }
 
   const activeTotpSecret = resolveOwnerTotpSecret(
     options.totpSecret || readLocalAuthStoreMeta().secret
@@ -1449,45 +1834,73 @@ export async function handleUpdatePortfolioRequest(
     const recoveryCode = crypto.randomInt(100000, 1000000).toString();
     const codeHash = crypto.createHash('sha256').update(recoveryCode).digest('hex');
     const challengeToken = createRecoveryChallengeToken(codeHash, Date.now() + 10 * 60 * 1000);
-    const originUrl = `https://${String(req.headers['x-forwarded-host'] || req.headers.host || 'hey-adhavan.vercel.app')}`;
+    const configuredAppUrl = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+    const originUrl =
+      configuredAppUrl ||
+      `https://${String(req.headers['x-forwarded-host'] || req.headers.host || 'hey-adhavan.vercel.app')}`;
 
     let deliveryStatus: 'sent' | 'activation_pending' | 'stored_only' = 'stored_only';
     let deliveryNote = `Recovery code requested for ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
 
-    try {
-      const relayRes = await fetch(
-        `https://formsubmit.co/ajax/${encodeURIComponent(OWNER_TOTP_ACCOUNT)}`,
-        {
+    const resendKey = (process.env.RESEND_API_KEY || '').trim();
+    if (resendKey) {
+      try {
+        const resendRes = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            Referer: originUrl,
-            Origin: originUrl
+            Authorization: `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            name: 'Portfolio 2FA Recovery',
-            email: OWNER_TOTP_ACCOUNT,
-            _replyto: OWNER_TOTP_ACCOUNT,
-            _subject: 'Owner Mode Recovery Code',
-            message: `Your one-time Owner Mode recovery code is: ${recoveryCode}\n\nThis code expires in 10 minutes.`,
-            _template: 'table',
-            _captcha: 'false'
+            from: process.env.RESEND_FROM_EMAIL || 'Portfolio Security <onboarding@resend.dev>',
+            to: [OWNER_TOTP_ACCOUNT],
+            subject: 'Owner Mode Recovery Code',
+            text: `Your one-time Owner Mode recovery code is: ${recoveryCode}\n\nThis code expires in 10 minutes.`
           })
+        });
+        if (resendRes.ok) {
+          deliveryStatus = 'sent';
+          deliveryNote = `6-digit recovery code sent via Resend to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
         }
-      );
-      const relayData = (await relayRes.json().catch(() => ({}))) as {
-        success?: boolean | string;
-        message?: string;
-      };
-      if (relayRes.ok && (relayData.success === true || relayData.success === 'true')) {
-        deliveryStatus = 'sent';
-        deliveryNote = `6-digit recovery code sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
-      } else if (String(relayData.message || '').toLowerCase().includes('activat')) {
-        deliveryStatus = 'activation_pending';
-        deliveryNote = `Activation email sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}. Activate FormSubmit in your inbox once to receive recovery emails.`;
-      }
-    } catch {}
+      } catch {}
+    }
+
+    if (deliveryStatus !== 'sent') {
+      try {
+        const relayRes = await fetch(
+          `https://formsubmit.co/ajax/${encodeURIComponent(OWNER_TOTP_ACCOUNT)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Referer: originUrl,
+              Origin: originUrl
+            },
+            body: JSON.stringify({
+              name: 'Portfolio 2FA Recovery',
+              email: OWNER_TOTP_ACCOUNT,
+              _replyto: OWNER_TOTP_ACCOUNT,
+              _subject: 'Owner Mode Recovery Code',
+              message: `Your one-time Owner Mode recovery code is: ${recoveryCode}\n\nThis code expires in 10 minutes.`,
+              _template: 'table',
+              _captcha: 'false'
+            })
+          }
+        );
+        const relayData = (await relayRes.json().catch(() => ({}))) as {
+          success?: boolean | string;
+          message?: string;
+        };
+        if (relayRes.ok && (relayData.success === true || relayData.success === 'true')) {
+          deliveryStatus = 'sent';
+          deliveryNote = `6-digit recovery code sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}.`;
+        } else if (String(relayData.message || '').toLowerCase().includes('activat')) {
+          deliveryStatus = 'activation_pending';
+          deliveryNote = `Activation email sent to ${maskOwnerEmail(OWNER_TOTP_ACCOUNT)}. Activate FormSubmit in your inbox once to receive recovery emails.`;
+        }
+      } catch {}
+    }
 
     sendJson(res, 200, {
       ok: true,
@@ -1698,6 +2111,149 @@ export async function handleUpdatePortfolioRequest(
     return;
   }
 
+  if (action === 'upload-asset-chunk') {
+    const base64Chunk = typeof body.base64Chunk === 'string' ? body.base64Chunk.trim() : '';
+    if (!base64Chunk) {
+      sendJson(res, 400, { ok: false, error: 'Missing base64 chunk data.' });
+      return;
+    }
+    if (!status.githubConfigured) {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'GITHUB_TOKEN is not configured in Vercel Environment Variables for chunked asset staging.'
+      });
+      return;
+    }
+    try {
+      const sha = await createGitHubBlob(base64Chunk);
+      sendJson(res, 200, { ok: true, sha });
+    } catch (err) {
+      sendJson(res, 502, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Failed uploading chunk to GitHub.'
+      });
+    }
+    return;
+  }
+
+  if (action === 'finalize-asset-chunks') {
+    const rawShas = Array.isArray(body.chunkShas) ? body.chunkShas : [];
+    const chunkShas = rawShas.filter((s): s is string => typeof s === 'string' && /^[a-f0-9]{40}$/i.test(s));
+    const rawFilename = typeof body.filename === 'string' ? body.filename.trim() : 'upload.bin';
+    const rawMime =
+      typeof body.mimeType === 'string' && body.mimeType.trim()
+        ? body.mimeType.trim()
+        : 'application/octet-stream';
+    const extractVideo = Boolean(body.extractVideo);
+
+    if (chunkShas.length === 0 || chunkShas.length !== rawShas.length) {
+      sendJson(res, 400, { ok: false, error: 'Invalid chunk SHA list.' });
+      return;
+    }
+
+    try {
+      const buffers: Buffer[] = new Array(chunkShas.length);
+      const CONCURRENCY = 6;
+      for (let i = 0; i < chunkShas.length; i += CONCURRENCY) {
+        const batch = chunkShas.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.all(batch.map((sha) => fetchGitHubBlobBuffer(sha)));
+        for (let j = 0; j < batchResults.length; j++) {
+          buffers[i + j] = batchResults[j];
+        }
+      }
+
+      let finalBuffer = Buffer.concat(buffers);
+      let finalFilename = rawFilename || 'upload.bin';
+      let finalMime = rawMime;
+
+      const isZipPayload =
+        extractVideo ||
+        finalFilename.toLowerCase().endsWith('.zip') ||
+        finalMime.toLowerCase().includes('zip');
+
+      if (isZipPayload) {
+        if (finalBuffer.length > MAX_VIDEO_ZIP_BYTES) {
+          sendJson(res, 400, {
+            ok: false,
+            error: `ZIP archive (${(finalBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+          });
+          return;
+        }
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vercel-zip-'));
+        const tmpZip = path.join(tmpDir, 'archive.zip');
+        try {
+          fs.writeFileSync(tmpZip, finalBuffer);
+          const extracted = await extractLargestVideoFromZip(tmpZip, tmpDir);
+          finalBuffer = fs.readFileSync(extracted.extractedPath);
+          finalFilename = extracted.originalFilename;
+          finalMime = extracted.mimeType;
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+
+      if (finalBuffer.length === 0) {
+        sendJson(res, 400, { ok: false, error: 'Assembled file is empty.' });
+        return;
+      }
+
+      const hash = crypto.createHash('sha256').update(finalBuffer).digest('hex').slice(0, 32);
+      const ext = resolveAssetExtension(finalMime, finalFilename);
+      const fileId = `${hash}${ext}`;
+
+      const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+      if (blobToken) {
+        const blobResult = await put(`uploaded-assets/${fileId}`, finalBuffer, {
+          access: 'public',
+          token: blobToken,
+          contentType: finalMime,
+          addRandomSuffix: false
+        });
+        sendJson(res, 201, {
+          ok: true,
+          url: blobResult.url,
+          filename: finalFilename,
+          size: finalBuffer.length,
+          mimeType: finalMime
+        });
+        return;
+      }
+
+      if (finalBuffer.length > 98 * 1024 * 1024) {
+        sendJson(res, 400, {
+          ok: false,
+          error: `Video (${(finalBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds GitHub's 98 MB single-file cap. Compress below 98 MB or paste an external video URL.`
+        });
+        return;
+      }
+
+      writeLocalAssetIfWritable(fileId, finalBuffer);
+      await commitGitHubAssetFileViaGitData({
+        fileId,
+        buffer: finalBuffer,
+        commitMessage: `chore(assets): add ${finalFilename || fileId} via Owner Mode`
+      });
+
+      sendJson(res, 201, {
+        ok: true,
+        url: `/api/assets/${fileId}`,
+        staticUrl: `/uploaded-assets/${fileId}`,
+        filename: finalFilename || fileId,
+        size: finalBuffer.length,
+        mimeType: finalMime
+      });
+    } catch (err) {
+      sendJson(res, 502, {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Failed assembling and saving uploaded video on Vercel.'
+      });
+    }
+    return;
+  }
+
   if (action === 'upload-asset') {
     const base64Content = typeof body.base64Content === 'string' ? body.base64Content.trim() : '';
     const filename = typeof body.filename === 'string' ? body.filename.trim() : 'upload.bin';
@@ -1711,15 +2267,64 @@ export async function handleUpdatePortfolioRequest(
       return;
     }
 
-    const buffer = Buffer.from(base64Content.replace(/\s+/g, ''), 'base64');
+    let buffer = Buffer.from(base64Content.replace(/\s+/g, ''), 'base64');
     if (buffer.length === 0) {
       sendJson(res, 400, { ok: false, error: 'Empty asset file.' });
       return;
     }
 
+    let finalFilename = filename || 'upload.bin';
+    let finalMime = mimeType;
+    const extractVideo = Boolean(body.extractVideo);
+    if (
+      extractVideo ||
+      finalFilename.toLowerCase().endsWith('.zip') ||
+      finalMime.toLowerCase().includes('zip')
+    ) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vercel-zip-'));
+      const tmpZip = path.join(tmpDir, 'archive.zip');
+      try {
+        fs.writeFileSync(tmpZip, buffer);
+        const extracted = await extractLargestVideoFromZip(tmpZip, tmpDir);
+        buffer = fs.readFileSync(extracted.extractedPath);
+        finalFilename = extracted.originalFilename;
+        finalMime = extracted.mimeType;
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+
     const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 32);
-    const ext = resolveAssetExtension(mimeType, filename);
+    const ext = resolveAssetExtension(finalMime, finalFilename);
     const fileId = `${hash}${ext}`;
+
+    const blobToken = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+    if (blobToken) {
+      try {
+        const blobResult = await put(`uploaded-assets/${fileId}`, buffer, {
+          access: 'public',
+          token: blobToken,
+          contentType: finalMime,
+          addRandomSuffix: false
+        });
+        sendJson(res, 201, {
+          ok: true,
+          url: blobResult.url,
+          filename: finalFilename || fileId,
+          size: buffer.length,
+          mimeType: finalMime
+        });
+        return;
+      } catch (err) {
+        if (!status.githubConfigured) {
+          sendJson(res, 502, {
+            ok: false,
+            error: err instanceof Error ? err.message : 'Vercel Blob upload failed.'
+          });
+          return;
+        }
+      }
+    }
 
     writeLocalAssetIfWritable(fileId, buffer);
 
@@ -1728,7 +2333,7 @@ export async function handleUpdatePortfolioRequest(
         await commitGitHubAssetFile({
           fileId,
           buffer,
-          commitMessage: `chore(assets): add ${filename || fileId} via Owner Mode`
+          commitMessage: `chore(assets): add ${finalFilename || fileId} via Owner Mode`
         });
       } catch (err) {
         sendJson(res, 502, {
@@ -1746,9 +2351,9 @@ export async function handleUpdatePortfolioRequest(
       ok: true,
       url: `/api/assets/${fileId}`,
       staticUrl: `/uploaded-assets/${fileId}`,
-      filename: filename || fileId,
+      filename: finalFilename || fileId,
       size: buffer.length,
-      mimeType
+      mimeType: finalMime
     });
     return;
   }

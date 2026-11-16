@@ -23,6 +23,7 @@ export interface VideoChapter {
   endTime: number;
   thumbnail: string;
   thumbnailAlign?: PhotoAlignConfig;
+  videoUrl?: string;
   category: ProjectCategory;
   description: string;
 }
@@ -40,6 +41,7 @@ export interface ProjectItem {
   thumbnailAlign?: PhotoAlignConfig;
   galleryImages: string[];
   galleryAligns?: Record<string, PhotoAlignConfig>;
+  videoUrl?: string;
   videoTimestamp?: number; // seconds into video reel
   isFlagship?: boolean;
   conceptNotes?: {
@@ -56,6 +58,7 @@ export interface MayaModelItem {
   description: string;
   thumbnail: string;
   thumbnailAlign?: PhotoAlignConfig;
+  videoUrl?: string;
   software: string;
   details: string[];
   specs: {

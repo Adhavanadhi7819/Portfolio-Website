@@ -18,6 +18,7 @@ import {
   resolveCanonicalPairingStatus,
   syncAuthenticatorPairedState
 } from './api/update-portfolio';
+import { extractLargestVideoFromZip, MAX_VIDEO_ZIP_BYTES } from './api/zipVideo';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -471,6 +472,55 @@ function saveBufferAsAsset(
   };
 }
 
+async function finalizeStreamedAssetFile(
+  tempFilePath: string,
+  mimeType: string,
+  originalFilename?: string
+): Promise<{ url: string; fileId: string; size: number; mimeType: string; filename: string }> {
+  const stat = fs.statSync(tempFilePath);
+  const hash = await new Promise<string>((resolve, reject) => {
+    const hasher = crypto.createHash('sha256');
+    const stream = fs.createReadStream(tempFilePath);
+    stream.on('data', (chunk) => hasher.update(chunk));
+    stream.on('end', () => resolve(hasher.digest('hex').slice(0, 32)));
+    stream.on('error', reject);
+  });
+
+  const ext = sanitizeExtension(mimeType, originalFilename);
+  const fileId = `${hash}${ext}`;
+  const assetPath = path.join(ASSETS_DIR, fileId);
+  const metaPath = path.join(ASSETS_DIR, `${fileId}.json`);
+  const cleanMime = (mimeType || EXT_TO_MIME[ext] || 'application/octet-stream')
+    .split(';')[0]
+    .trim();
+  const safeName = (originalFilename || `asset${ext}`).replace(/["\r\n/\\]/g, '_');
+
+  if (!fs.existsSync(assetPath)) {
+    fs.renameSync(tempFilePath, assetPath);
+  } else {
+    try {
+      fs.unlinkSync(tempFilePath);
+    } catch {}
+  }
+
+  if (!fs.existsSync(metaPath)) {
+    const meta: AssetMeta = {
+      mimeType: cleanMime,
+      originalFilename: safeName,
+      size: stat.size
+    };
+    writeAtomic(metaPath, JSON.stringify(meta));
+  }
+
+  return {
+    url: `/api/assets/${fileId}`,
+    fileId,
+    size: stat.size,
+    mimeType: cleanMime,
+    filename: safeName
+  };
+}
+
 function dehydrateDataUrls(value: unknown, keyHint?: string): unknown {
   if (typeof value === 'string') {
     if (value.startsWith('data:')) {
@@ -590,6 +640,12 @@ function buildStaticBundleForDeploy(record: StoredPortfolioFile): {
   for (const fileId of referencedFiles) {
     const srcPath = resolveExistingAssetPath(fileId);
     if (!srcPath) continue;
+    try {
+      // Avoid duplicating very large (>45MB) media files into public/uploaded-assets (keeps Vite builds fast)
+      if (fs.statSync(srcPath).size > 45 * 1024 * 1024) continue;
+    } catch {
+      continue;
+    }
     const destPath = path.join(STATIC_ASSETS_DIR, fileId);
     let needsCopy = !fs.existsSync(destPath);
     if (!needsCopy) {
@@ -1361,10 +1417,129 @@ async function startServer(): Promise<void> {
 
   // --- Asset Upload & Retrieval Endpoints ---
   app.post(
+    '/api/assets/chunk',
+    requireOwnerAuth,
+    express.raw({ type: '*/*', limit: '16mb' }),
+    async (req: Request, res: Response) => {
+      const uploadId = String(req.headers['x-upload-id'] || '').trim();
+      if (!/^[a-zA-Z0-9_-]{8,64}$/.test(uploadId)) {
+        res.status(400).json({ ok: false, error: 'Invalid upload session ID.' });
+        return;
+      }
+      const chunkIndex = Number(req.headers['x-chunk-index']);
+      const totalChunks = Number(req.headers['x-total-chunks']);
+      if (
+        !Number.isInteger(chunkIndex) ||
+        !Number.isInteger(totalChunks) ||
+        chunkIndex < 0 ||
+        totalChunks < 1 ||
+        totalChunks > 512 ||
+        chunkIndex >= totalChunks
+      ) {
+        res.status(400).json({ ok: false, error: 'Invalid chunk index parameters.' });
+        return;
+      }
+
+      const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (bodyBuffer.length === 0) {
+        res.status(400).json({ ok: false, error: 'Empty chunk payload.' });
+        return;
+      }
+
+      const tempPartPath = path.join(ASSETS_DIR, `.upload-${uploadId}.part`);
+      const extractVideoHeader = String(req.headers['x-extract-video'] || '').trim() === '1';
+      const rawFilename = String(req.headers['x-filename'] || 'upload.bin');
+      let decodedFilename = rawFilename;
+      try {
+        decodedFilename = decodeURIComponent(rawFilename);
+      } catch {
+        decodedFilename = rawFilename;
+      }
+      const mimeType = String(req.headers['content-type'] || 'application/octet-stream');
+      const isZipUpload =
+        extractVideoHeader ||
+        decodedFilename.toLowerCase().endsWith('.zip') ||
+        mimeType.toLowerCase().includes('zip');
+
+      try {
+        if (chunkIndex === 0) {
+          fs.writeFileSync(tempPartPath, bodyBuffer);
+        } else {
+          if (!fs.existsSync(tempPartPath)) {
+            res.status(400).json({ ok: false, error: 'Upload session expired or missing.' });
+            return;
+          }
+          fs.appendFileSync(tempPartPath, bodyBuffer);
+        }
+
+        if (isZipUpload) {
+          const currentSize = fs.statSync(tempPartPath).size;
+          if (currentSize > MAX_VIDEO_ZIP_BYTES) {
+            try {
+              fs.unlinkSync(tempPartPath);
+            } catch {}
+            res.status(400).json({
+              ok: false,
+              error: `ZIP archive (${(currentSize / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+            });
+            return;
+          }
+        }
+
+        if (chunkIndex < totalChunks - 1) {
+          res.status(200).json({ ok: true, chunkIndex, received: bodyBuffer.length });
+          return;
+        }
+
+        if (isZipUpload) {
+          const extracted = await extractLargestVideoFromZip(tempPartPath, ASSETS_DIR);
+          try {
+            if (fs.existsSync(tempPartPath)) fs.unlinkSync(tempPartPath);
+          } catch {}
+          const saved = await finalizeStreamedAssetFile(
+            extracted.extractedPath,
+            extracted.mimeType,
+            extracted.originalFilename
+          );
+          res.status(201).json({
+            ok: true,
+            url: saved.url,
+            filename: saved.filename,
+            size: saved.size,
+            mimeType: saved.mimeType,
+            extractedFromZip: decodedFilename
+          });
+          return;
+        }
+
+        const saved = await finalizeStreamedAssetFile(tempPartPath, mimeType, decodedFilename);
+        res.status(201).json({
+          ok: true,
+          url: saved.url,
+          filename: saved.filename,
+          size: saved.size,
+          mimeType: saved.mimeType
+        });
+      } catch (err) {
+        try {
+          if (fs.existsSync(tempPartPath)) fs.unlinkSync(tempPartPath);
+        } catch {}
+        const msg = err instanceof Error ? err.message : 'Failed assembling uploaded file.';
+        const statusCode =
+          msg.includes('ZIP') || msg.includes('video file') || msg.includes('empty') ? 400 : 500;
+        res.status(statusCode).json({
+          ok: false,
+          error: msg
+        });
+      }
+    }
+  );
+
+  app.post(
     '/api/assets',
     requireOwnerAuth,
-    express.raw({ type: '*/*', limit: '100mb' }),
-    (req: Request, res: Response) => {
+    express.raw({ type: '*/*', limit: '25mb' }),
+    async (req: Request, res: Response) => {
       const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (bodyBuffer.length === 0) {
         res.status(400).json({ ok: false, error: 'Empty file upload.' });
@@ -1379,6 +1554,54 @@ async function startServer(): Promise<void> {
         decodedFilename = rawFilename;
       }
       const mimeType = String(req.headers['content-type'] || 'application/octet-stream');
+      const extractVideoHeader = String(req.headers['x-extract-video'] || '').trim() === '1';
+      const isZipUpload =
+        extractVideoHeader ||
+        decodedFilename.toLowerCase().endsWith('.zip') ||
+        mimeType.toLowerCase().includes('zip');
+
+      if (isZipUpload) {
+        if (bodyBuffer.length > MAX_VIDEO_ZIP_BYTES) {
+          res.status(400).json({
+            ok: false,
+            error: `ZIP archive (${(bodyBuffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB ZIP upload limit.`
+          });
+          return;
+        }
+        const tempZipPath = path.join(
+          ASSETS_DIR,
+          `.upload-single-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.zip`
+        );
+        try {
+          fs.writeFileSync(tempZipPath, bodyBuffer);
+          const extracted = await extractLargestVideoFromZip(tempZipPath, ASSETS_DIR);
+          try {
+            if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
+          } catch {}
+          const saved = await finalizeStreamedAssetFile(
+            extracted.extractedPath,
+            extracted.mimeType,
+            extracted.originalFilename
+          );
+          res.status(201).json({
+            ok: true,
+            url: saved.url,
+            filename: saved.filename,
+            size: saved.size,
+            mimeType: saved.mimeType,
+            extractedFromZip: decodedFilename
+          });
+        } catch (err) {
+          try {
+            if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
+          } catch {}
+          res.status(400).json({
+            ok: false,
+            error: err instanceof Error ? err.message : 'Could not extract video from ZIP archive.'
+          });
+        }
+        return;
+      }
 
       const saved = saveBufferAsAsset(bodyBuffer, mimeType, decodedFilename);
       res.status(201).json({

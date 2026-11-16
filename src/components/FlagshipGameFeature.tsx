@@ -17,7 +17,7 @@ import {
 import { ProjectItem, DesignerInfo, SectionTargetTab } from '../types/portfolio';
 import { InlineEdit } from './InlineEdit';
 import { SectionControls } from './SectionControls';
-import { uploadVideoAsset } from '../utils/fileHelpers';
+import { uploadVideoAsset, VIDEO_FILE_ACCEPT } from '../utils/fileHelpers';
 
 interface FlagshipGameFeatureProps {
   flagshipProject?: ProjectItem;
@@ -70,6 +70,9 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
   );
   const [videoUrlDraft, setVideoUrlDraft] = useState(designerInfo?.flagshipVideoUrl || '');
   const [linkSavedToast, setLinkSavedToast] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     setGameUrlDraft(designerInfo?.flagshipGameUrl || '');
@@ -102,14 +105,26 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
   };
 
   const handleBuildVideoUpload = async (file: File) => {
+    setIsUploadingVideo(true);
+    setVideoUploadProgress(0);
+    setVideoUploadError(null);
     try {
-      const videoUrl = await uploadVideoAsset(file);
+      const videoUrl = await uploadVideoAsset(file, (pct) => setVideoUploadProgress(pct));
       setVideoUrlDraft(videoUrl);
       onUpdateDesignerInfo?.({ flagshipVideoUrl: videoUrl });
       setLinkSavedToast(true);
       setTimeout(() => setLinkSavedToast(false), 2500);
     } catch (err) {
-      console.error('Gameplay video upload failed:', err);
+      const msg =
+        err instanceof Error && err.message === 'OWNER_AUTH_REQUIRED'
+          ? 'Session expired. Unlock Owner Mode with 2FA to upload videos.'
+          : err instanceof Error && err.message
+          ? err.message
+          : 'Could not upload gameplay video. Try again or paste a hosted video URL.';
+      setVideoUploadError(msg);
+    } finally {
+      setIsUploadingVideo(false);
+      setVideoUploadProgress(0);
     }
   };
 
@@ -260,11 +275,18 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
 
                 <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap">
                   <Upload className="w-3.5 h-3.5" />
-                  <span>{hasBuildVideo ? 'Replace Video' : 'Upload Video'}</span>
+                  <span>
+                    {isUploadingVideo
+                      ? `Uploading ${videoUploadProgress > 0 ? `${videoUploadProgress}%` : '...'}`
+                      : hasBuildVideo
+                      ? 'Replace Video'
+                      : 'Upload Video'}
+                  </span>
                   <input
                     type="file"
-                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                    accept={VIDEO_FILE_ACCEPT}
                     className="hidden"
+                    disabled={isUploadingVideo}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) handleBuildVideoUpload(file);
@@ -288,6 +310,18 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                 )}
               </div>
             </form>
+            {videoUploadError && (
+              <div className="p-2.5 rounded-xl bg-red-950/90 border border-red-500/50 text-red-200 text-xs flex items-center justify-between gap-2">
+                <span>{videoUploadError}</span>
+                <button
+                  type="button"
+                  onClick={() => setVideoUploadError(null)}
+                  className="text-red-200 hover:text-white cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -323,7 +357,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                         <span>Replace Video</span>
                         <input
                           type="file"
-                          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                          accept={VIDEO_FILE_ACCEPT}
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
@@ -353,7 +387,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                       Upload Recorded Gameplay Video
                     </h3>
                     <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-justify [text-align-last:center] hyphens-auto">
-                      Drag &amp; drop or choose your recorded gameplay build video (MP4, WebM, MOV)
+                      Drag &amp; drop or choose your recorded gameplay build video (MP4, WebM, MOV, or ZIP up to 100 MB)
                       to showcase directly here.
                     </p>
                   </div>
@@ -362,7 +396,7 @@ export const FlagshipGameFeature: React.FC<FlagshipGameFeatureProps> = ({
                     <span>Choose Gameplay Video</span>
                     <input
                       type="file"
-                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      accept={VIDEO_FILE_ACCEPT}
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];

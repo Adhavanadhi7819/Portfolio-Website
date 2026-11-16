@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 40,
-  "updatedAt": "2026-11-15T19:13:14.802Z",
+  "version": 42,
+  "updatedAt": "2026-11-16T13:19:57.180Z",
   "activePortfolioId": "default_portfolio",
   "portfolios": [
     {
@@ -9,7 +9,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-15T19:13:12.604Z",
+      "updatedAt": "2026-11-16T13:19:55.990Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -437,6 +437,12 @@
             "startTime": 0,
             "endTime": 10,
             "thumbnail": "/showcase/hero-adhavan.jpg",
+            "thumbnailAlign": {
+              "x": 53,
+              "y": 26,
+              "zoom": 1.3,
+              "fit": "cover"
+            },
             "category": "all",
             "description": "Overview of Adhavan’s design philosophy, Unreal Engine focus, and 3D character work."
           },
@@ -475,7 +481,7 @@
             "title": "Car Speedrun & Rigging (AE86)",
             "subtitle": "Urban Drift & Dynamic Sequencer",
             "startTime": 65,
-            "endTime": 89,
+            "endTime": 120,
             "thumbnail": "/showcase/ae86-drift.jpg",
             "category": "vehicle-rigging",
             "description": "Initial D style Toyota AE86 Trueno drifting through city streets with speed line camera shakes, tire physics, and dynamic chase sequence."

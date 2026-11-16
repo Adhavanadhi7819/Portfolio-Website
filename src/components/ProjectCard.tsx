@@ -86,6 +86,21 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                     className="!static"
                     defaultFallbackUrl="/showcase/gas-station-night.jpg"
                   />
+                  <MediaUploadOverlay
+                    currentUrl={project.videoUrl}
+                    mediaType="video"
+                    isOwnerMode={isOwnerMode}
+                    onMediaUploaded={(newVideoUrl) => {
+                      if (onSaveProject) {
+                        onSaveProject({ ...project, videoUrl: newVideoUrl });
+                      } else if (onEdit) {
+                        onEdit({ ...project, videoUrl: newVideoUrl });
+                      }
+                    }}
+                    label="Video"
+                    position="top-right"
+                    className="!static"
+                  />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -127,7 +142,19 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 </>
               )}
 
-              {project.videoTimestamp !== undefined && (
+              {project.videoUrl ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenModal(project);
+                  }}
+                  className="px-2 py-0.5 rounded-md bg-black/75 hover:bg-amber-500 hover:text-black backdrop-blur-md text-[10px] font-mono text-amber-300 border border-amber-500/40 hover:border-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Watch uploaded project video"
+                >
+                  <Play className="w-2.5 h-2.5 fill-current" />
+                  <span>Video</span>
+                </button>
+              ) : project.videoTimestamp !== undefined && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -189,11 +216,19 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           <ArrowUpRight className="w-3.5 h-3.5 text-amber-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
         </button>
 
-        {project.videoTimestamp !== undefined && (
+        {(project.videoUrl || project.videoTimestamp !== undefined) && (
           <button
-            onClick={() => onPlayInReel?.(project.videoTimestamp!)}
+            onClick={() =>
+              project.videoUrl
+                ? onOpenModal(project)
+                : onPlayInReel?.(project.videoTimestamp!)
+            }
             className="p-1.5 rounded-lg bg-zinc-800/70 hover:bg-amber-500 hover:text-black text-amber-400 border border-zinc-700/60 transition-all cursor-pointer"
-            aria-label={`Play ${project.title} in video showreel`}
+            aria-label={
+              project.videoUrl
+                ? `Watch ${project.title} video`
+                : `Play ${project.title} in video showreel`
+            }
           >
             <Play className="w-3.5 h-3.5 fill-current" />
           </button>
