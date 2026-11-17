@@ -1,7 +1,7 @@
 {
   "initialized": true,
-  "version": 53,
-  "updatedAt": "2026-11-17T17:38:33.962Z",
+  "version": 54,
+  "updatedAt": "2026-11-17T17:38:35.816Z",
   "activePortfolioId": "default_portfolio",
   "authenticatorPaired": true,
   "portfolios": [
@@ -10,7 +10,7 @@
       "name": "ADHAVAN — Game Designer | 3D Artist",
       "subtitle": "Unreal Engine gameplay, level layout, and 3D art",
       "createdAt": "2026-11-14T16:53:51.000Z",
-      "updatedAt": "2026-11-17T17:38:32.942Z",
+      "updatedAt": "2026-11-17T17:38:35.123Z",
       "state": {
         "designerInfo": {
           "name": "ADHAVAN",
@@ -411,14 +411,14 @@
           "outroText": "",
           "backgroundConfig": {
             "enabled": true,
-            "voidInnerHex": "#0e0a1a",
-            "voidOuterHex": "#03050a",
+            "voidInnerHex": "#061418",
+            "voidOuterHex": "#020509",
             "paletteHexes": [
-              "#c0a9df",
-              "#876cae",
-              "#2563eb",
+              "#10b981",
               "#00f0ff",
-              "#c026d3"
+              "#0ea5e9",
+              "#2563eb",
+              "#34d399"
             ],
             "colorCycleEnabled": true,
             "cycleSpeed": 1,
